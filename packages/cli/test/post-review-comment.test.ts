@@ -252,3 +252,58 @@ require('node:module').syncBuiltinESMExports();
     expect(existsSync(join(dir, "attempts")) ? readFileSync(join(dir, "attempts"), "utf8") : undefined).toBe(attempts);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+it.each(["chunk-write", "head-assertion", "pending-save", "success-save", "failure-save"])("N1 reports known state despite %s failure and preserves durable retry lock", failure => {
+  const dir = mkdtempSync(join(tmpdir(), "partial-crash-"));
+  try {
+    writeFileSync(join(dir, "body"), "X".repeat(200000));
+    writeFileSync(join(dir, "model"), "gpt-5.5");
+    writeFileSync(join(dir, "gh"), `#!/bin/sh\nprintf '%s\\n' "$5" >> '${dir}/attempts'\n${failure === "failure-save" ? 'case "$5" in *.2) exit 7;; esac' : ''}\nexit 0\n`);
+    chmodSync(join(dir, "gh"), 0o755);
+    writeFileSync(join(dir, "interrupt.cjs"), `
+const fs = require('node:fs'), cp = require('node:child_process');
+const write = fs.writeFileSync, spawn = cp.spawnSync;
+const failure = ${JSON.stringify(failure)};
+fs.writeFileSync = function(path, data, ...args) {
+  const p = String(path);
+  let trip = failure === 'chunk-write' && p.endsWith('comment.2');
+  if (p.includes('receipt.json')) {
+    const state = JSON.parse(data);
+    trip ||= failure === 'pending-save' && state.pending === 2;
+    trip ||= failure === 'success-save' && state.successful.length === 2;
+    trip ||= failure === 'failure-save' && state.status === 'failed';
+  }
+  if (trip) { write(path, '{'); throw new Error('injected ' + failure); }
+  return write(path, data, ...args);
+};
+cp.spawnSync = function(command, args, ...rest) {
+  if (failure === 'head-assertion' && command === 'head' && args[1].endsWith('comment.2'))
+    return {status: 1, stdout: ''};
+  return spawn(command, args, ...rest);
+};
+require('node:module').syncBuiltinESMExports();
+`);
+    const invoke = (interrupt = false) => spawnSync(process.execPath,
+      [...(interrupt ? ["--require", join(dir, "interrupt.cjs")] : []), helper, "372", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")],
+      { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const first = invoke(true);
+    expect(first.status).toBe(2);
+    expect(first.stderr).toContain(failure === "head-assertion" ? "canonical first-line assertion failed" : `injected ${failure}`);
+    const successful = failure === "success-save" ? [1, 2] : [1];
+    expect(first.stderr).toContain(`partial post: ${successful.length}/4; successful chunk indices ${JSON.stringify(successful)}`);
+    const receiptPath = join(dir, "comment.receipt.json");
+    expect(first.stderr).toContain(`receipt ${receiptPath}`);
+    const known = JSON.parse(first.stderr.split("in-memory receipt (durable receipt may lag): ")[1]!.split("\n")[0]!);
+    expect(known).toMatchObject({ successful, total: 4, pending: ["pending-save", "failure-save"].includes(failure) ? 2 : null });
+    const saved = readFileSync(receiptPath, "utf8");
+    expect(JSON.parse(saved)).toMatchObject({ successful: [1], pending: ["success-save", "failure-save"].includes(failure) ? 2 : null, status: "posting" });
+    const attempts = readFileSync(join(dir, "attempts"), "utf8");
+    expect(attempts.trim().split("\n")).toHaveLength(["success-save", "failure-save"].includes(failure) ? 2 : 1);
+    const retry = invoke();
+    expect(retry.status).toBe(2);
+    expect(retry.stderr).toContain("refusing rerun; reconcile prior attempt");
+    expect(retry.stderr).toContain(saved.trim());
+    expect(readFileSync(receiptPath, "utf8")).toBe(saved);
+    expect(readFileSync(join(dir, "attempts"), "utf8")).toBe(attempts);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

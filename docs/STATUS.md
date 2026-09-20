@@ -2,6 +2,18 @@
 
 ## Review-posting helper residuals (#379, #380)
 
+PR #389 repair round 1 (N1 only): every posting-loop exception now reports successful
+chunk indices, the durable receipt path and the known in-memory JSON receipt, even
+when an atomic save fails. The durable receipt remains conservative and retry-locked.
+Five fresh fail-first crash probes cover chunk-2 body write, heading assertion,
+pending save, known-success save and failed-post save; each pins the durable receipt
+and verifies a retry makes no additional post. All five failed on the old helper;
+removing exception reporting/success recording or moving pending assignment past save
+also fails these probes. The probes necessarily cover part of N2's current-state gap,
+but #392 remains a nonblocking follow-up; N3/#390 and N4/#391 are unchanged.
+Repair proof and OLD..NEW handoff are appended to the PR body; independent delta
+review, blocker-ledger closure and landing remain conductor-owned.
+
 The helper records successful indices and uncertain pending chunks in OUT/*.receipt.json,
 reports partial publication on stderr, and refuses retries with the existing receipt.
 Atomic replacement retains the last parseable receipt if saving is interrupted.

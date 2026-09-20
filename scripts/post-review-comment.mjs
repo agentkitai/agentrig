@@ -61,30 +61,41 @@ try {
     }
   };
   writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
-  for (const [index, piece] of pieces.entries()) {
-    const path = pieces.length === 1 ? outputFile : `${outputFile}.${index + 1}`;
-    const marker = pieces.length === 1 ? "" : `(${index + 1}/${pieces.length})\n\n`;
-    const comment = `${heading}\n\n${marker}${piece}`;
-    if (comment.length > 60000) throw new Error("review comment exceeds limit");
-    writeFileSync(path, comment);
-    // Assert the exact first line of EVERY emitted body immediately before posting.
-    const first = spawnSync("head", ["-1", path], { encoding: "utf8" });
-    if (first.status !== 0 || first.stdout !== `${heading}\n`) throw new Error("canonical first-line assertion failed");
-    receipt.pending = index + 1;
-    save();
-    const posted = spawnSync("gh", ["pr", "comment", pr, "--body-file", path], { stdio: "inherit" });
-    if (posted.error || posted.status !== 0) {
-      receipt.status = "failed";
+  // Reporting must not depend on another successful filesystem write. The
+  // durable lock can conservatively lag a known gh result when save() fails.
+  const reportPartial = () => {
+    console.error(`partial post: ${receipt.successful.length}/${receipt.total}; successful chunk indices ${JSON.stringify(receipt.successful)}; receipt ${receiptPath}; failed/uncertain chunk ${receipt.pending}; refusing automatic retry`);
+    console.error(`in-memory receipt (durable receipt may lag): ${JSON.stringify(receipt)}`);
+  };
+  try {
+    for (const [index, piece] of pieces.entries()) {
+      const path = pieces.length === 1 ? outputFile : `${outputFile}.${index + 1}`;
+      const marker = pieces.length === 1 ? "" : `(${index + 1}/${pieces.length})\n\n`;
+      const comment = `${heading}\n\n${marker}${piece}`;
+      if (comment.length > 60000) throw new Error("review comment exceeds limit");
+      writeFileSync(path, comment);
+      // Assert the exact first line of EVERY emitted body immediately before posting.
+      const first = spawnSync("head", ["-1", path], { encoding: "utf8" });
+      if (first.status !== 0 || first.stdout !== `${heading}\n`) throw new Error("canonical first-line assertion failed");
+      receipt.pending = index + 1;
       save();
-      console.error(`partial post: ${receipt.successful.length}/${receipt.total}; successful chunk indices ${JSON.stringify(receipt.successful)}; receipt ${receiptPath}; failed/uncertain chunk ${receipt.pending}; refusing automatic retry`);
-      if (posted.error) console.error(posted.error.message);
-      process.exitCode = posted.status || 2;
-      break;
+      const posted = spawnSync("gh", ["pr", "comment", pr, "--body-file", path], { stdio: "inherit" });
+      if (posted.error || posted.status !== 0) {
+        receipt.status = "failed";
+        save();
+        reportPartial();
+        if (posted.error) console.error(posted.error.message);
+        process.exitCode = posted.status || 2;
+        break;
+      }
+      receipt.successful.push(index + 1);
+      receipt.pending = null;
+      receipt.status = receipt.successful.length === receipt.total ? "complete" : "posting";
+      save();
     }
-    receipt.successful.push(index + 1);
-    receipt.pending = null;
-    receipt.status = receipt.successful.length === receipt.total ? "complete" : "posting";
-    save();
+  } catch (error) {
+    reportPartial();
+    throw error;
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
