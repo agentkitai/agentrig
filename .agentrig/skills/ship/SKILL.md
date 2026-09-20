@@ -83,6 +83,8 @@ for a worktree; remove the owned proof TMPDIR separately.
 Follow topic §2 step 4's conductor trio and shipping policy §3: the independently run,
 same-head conductor checks supply the Codex trio evidence in the initial comment provenance.
 
+Extraction happens exactly once in the posting gate; the helper preserves the validated body,
+including any verdict/provenance prefix before `Full review comments:`.
 Codex posting extracts the final findings/verdict block after the last standalone `codex`
 marker (or final `Full review comments:` block), never the transcript. If the CLI format
 lacks either marker, save only its final

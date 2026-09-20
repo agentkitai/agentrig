@@ -8,6 +8,11 @@ verdicts. Claude extraction remains pinned to JSON `result`. Dogfood network-fre
 fetch injection and macOS realpath fixture guidance is restored and pinned. Exact-head checks
 and fail-first/mutation evidence are recorded in the PR.
 
+PR #412 repair round 1 (F1 only): Codex extraction happens once in the posting gate;
+the helper preserves verdict/provenance before `Full review comments:`. Actual
+topic-gate-to-helper regression fails on the old head; double-extraction mutant
+is killed and the restored helper preserves the complete validated body.
+
 ## Declared project checks (#395)
 
 Project config now validates ordered named checks, required bootstrap, optional preflight and

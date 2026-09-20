@@ -14,12 +14,8 @@ try {
   const model = readFileSync(modelFile, "utf8").trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(model)) throw new Error("empty or invalid model file");
   if (![head, main].every(sha => sha.length === 40 && /^[a-fA-F0-9]{40}$/.test(sha))) throw new Error("HEAD and MAIN must be unquoted 40-hex SHAs");
-  let raw = readFileSync(bodyFile, "utf8");
-  if (reviewer === "Codex") {
-    const markers = [...raw.matchAll(/^codex\r?$/gmu)];
-    const last = markers.at(-1) ?? [...raw.matchAll(/^Full review comments:\r?$/gmu)].at(-1);
-    if (last) raw = raw.slice(last.index + last[0].length).replace(/^\r?\n/u, "");
-  }
+  // BODY_FILE is already extracted and validated by the posting gate; preserve it verbatim.
+  const raw = readFileSync(bodyFile, "utf8");
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");
   const echoPhrases = [
     "Never merge, never approve-and-merge, never push to the PR branch.",

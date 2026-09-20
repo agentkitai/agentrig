@@ -388,9 +388,9 @@ it("R410 refuses unexplained large verdict before posting", () => {
 });
 it("R410 extracts final Codex answer rather than transcript echo", () => {
   const verdict = "Findings: none\nVERDICT: PASS\nProbed receipts and killed gate mutants.\n";
-  const result = run(`exec\ncat review/SKILL.md\n${echoPhrases.join("\n")}\nthinking\nanalysis\ncodex\n${verdict}`);
+  const result = topicCodexPost(`exec\ncat review/SKILL.md\n${echoPhrases.join("\n")}\nthinking\nanalysis\ncodex\n${verdict}`);
   expect(result.status, result.stderr).toBe(0);
-  expect(result.posted).toBe(`${heading}\n\n${verdict}`);
+  expect(result.posted).toBe(`${heading}\n\n${verdict}\nConductor proof\n`);
 });
 it("R411 pins network-free fixture guidance in dogfood proof section", () => {
   const skill = readFileSync(new URL("../../../.agentrig/skills/dogfood/SKILL.md", import.meta.url), "utf8");
@@ -413,19 +413,57 @@ it.each([
   expect(readFileSync(helper, "utf8")).toBe(source);
   expect(run(body).args).toBeUndefined();
 });
-it("kills/restores V3 final Codex extraction removed", () => {
-  const source = readFileSync(helper, "utf8");
-  const body = `${echoPhrases[0]}\ncodex\nVERDICT: PASS\n`;
-  expect(run(body).status).toBe(0);
-  expect(source).toContain('if (reviewer === "Codex")');
-  expect(run(body, undefined, undefined, undefined, source.replace('if (reviewer === "Codex")', 'if (false)')).status).toBe(2);
-  expect(readFileSync(helper, "utf8")).toBe(source);
-  expect(run(body).status).toBe(0);
+it("kills/restores F1 double-extraction mutant after the actual topic gate", () => {
+  const original = readFileSync(helper, "utf8");
+  const mutant = original.replace('  const raw = readFileSync(bodyFile, "utf8");', `  let raw = readFileSync(bodyFile, "utf8");
+  const last = [...raw.matchAll(/^Full review comments:\\r?$/gmu)].at(-1);
+  if (last) raw = raw.slice(last.index + last[0].length).replace(/^\\r?\\n/u, "");`);
+  expect(mutant).not.toBe(original);
+  const result = topicCodexPost(codexTranscript, mutant);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).not.toContain(codexPrefix);
+  expect(readFileSync(helper, "utf8")).toBe(original);
+  const restored = topicCodexPost(codexTranscript);
+  expect(restored.status, restored.stderr).toBe(0);
+  expect(restored.posted).toBe(`${heading}\n\n${codexVerdict}\nConductor proof\n`);
 });
 
 it("R410 extracts final Full review comments block without an agent marker", () => {
   const verdict = "- [P2] Concrete defect with file/line evidence.\n";
-  const result = run(`${echoPhrases[0]}\nFull review comments:\nold block\nFull review comments:\n${verdict}`);
+  const result = topicCodexPost(`${echoPhrases[0]}\nFull review comments:\nold block\nFull review comments:\n${verdict}`);
   expect(result.status, result.stderr).toBe(0);
-  expect(result.posted).toBe(`${heading}\n\n${verdict}`);
+  expect(result.posted).toBe(`${heading}\n\n${verdict}\nConductor proof\n`);
+});
+
+function topicCodexPost(transcript: string, source?: string) {
+  const dir = mkdtempSync(join(tmpdir(), "codex-preservation-"));
+  try {
+    const text = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
+    const marker = "# Codex posting gate\n";
+    let snippet = text.slice(text.indexOf(marker) + marker.length).split("```")[0]!
+      .replaceAll("<OUT>", dir).replaceAll("<WT>", fileURLToPath(new URL("../../../", import.meta.url)))
+      .replace("mjs NN", "mjs 372").replaceAll('"HEAD"', `"${head}"`).replaceAll('"MAIN"', `"${main}"`);
+    if (source !== undefined) {
+      writeFileSync(join(dir, "helper.mjs"), source);
+      snippet = snippet.replace("scripts/post-review-comment.mjs", `"${join(dir, "helper.mjs")}"`);
+    }
+    writeFileSync(join(dir, "codex.md"), transcript);
+    writeFileSync(join(dir, "codex-model.txt"), "gpt-5.5");
+    writeFileSync(join(dir, "codex-trio.md"), "Conductor proof\n");
+    writeFileSync(join(dir, "gh"), `#!/bin/sh\ncat "$5" > '${dir}/posted'\n`);
+    chmodSync(join(dir, "gh"), 0o755);
+    const result = spawnSync("/bin/sh", ["-c", snippet], {
+      cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+    });
+    return { status: result.status, stderr: result.stderr,
+      posted: existsSync(join(dir, "posted")) ? readFileSync(join(dir, "posted"), "utf8") : undefined };
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+const codexPrefix = `VERDICT FINDINGS\nReviewed head ${head}\nProbed receipts; gate mutants killed.\n\n`;
+const codexVerdict = `${codexPrefix}Full review comments:\n- [P2] Concrete defect with file/line evidence.\n`;
+const codexTranscript = `exec\n${echoPhrases[0]}\ncodex\n${codexVerdict}`;
+it("F1 actual topic gate and helper preserve the complete validated Codex verdict", () => {
+  const result = topicCodexPost(codexTranscript);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).toBe(`${heading}\n\n${codexVerdict}\nConductor proof\n`);
 });

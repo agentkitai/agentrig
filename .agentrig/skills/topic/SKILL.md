@@ -310,7 +310,9 @@ For each recorded row, in order:
      each `gh pr comment NN --body-file` call. Nonzero means stop; no manual posting fallback.
      The heading suffix `head HEAD — merged with origin/main MAIN — full` uses full SHAs,
      never literal placeholders. Keep these stale SHA/verdict gates before invoking the helper.
-     Codex posting extracts the final findings/verdict block after the last standalone `codex`
+     Extraction happens exactly once in the posting gate; the helper preserves the validated body,
+including any verdict/provenance prefix before `Full review comments:`.
+Codex posting extracts the final findings/verdict block after the last standalone `codex`
 marker (or final `Full review comments:` block), never the transcript. If the CLI format
 lacks either marker, save only its final
 findings/verdict block to `codex.md`; do not copy the transcript. Claude's body comes only
