@@ -284,7 +284,7 @@ For each recorded row, in order:
      never literal placeholders. Keep these stale SHA/verdict gates before invoking the helper.
      ```sh
 # Claude posting gate
-node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || c.length>40 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/claude.md" "HEAD" > "<OUT>/claude-validated.md" || exit 2
+node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/claude.md" "HEAD" > "<OUT>/claude-validated.md" || exit 2
 node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(m.length!==1||m[0]!=="claude-opus-5")process.exit(2);process.stdout.write(m[0])' "<OUT>/claude-models.json" > "<OUT>/claude-model.txt" || exit 2
 cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
      ```
@@ -293,7 +293,7 @@ cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude
      edit the validator source or guess the model from the verdict:
      ```sh
 # Codex posting gate
-node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || c.length>40 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/codex.md" "HEAD" > "<OUT>/codex-validated.md" || exit 2
+node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/codex.md" "HEAD" > "<OUT>/codex-validated.md" || exit 2
 [ -s "<OUT>/codex-trio.md" ] || exit 2
 cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
      ```
@@ -410,6 +410,15 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   defect issues and mechanical-delta evidence for the lander.
 
 ## 4. Conditional land and continue
+
+Before invoking land in this session or spawning a land child, read `gh pr view NN --json body`.
+Fetch linked review comments too (for example `gh api repos/OWNER/REPO/issues/comments/ID`);
+verify both initial canonical headings in the actual comments, including the pinned Claude model,
+reviewed head and main provenance. Verify `## Review disposition` contains dispositions for every
+finding from both initial reviews and every focused review, and `## Residuals` has issue links or
+explicit `none`. Verify all blocker closures and delta coverage through current head. Missing
+headings, comments, dispositions or residual records halt BEFORE land-child spawning; a URL alone
+or a private summary is not verification. Persist edits then read back again if anything changes.
 
 - After the initial pair and all required delta coverage have resolved blocking findings,
   independently confirm CI is green on

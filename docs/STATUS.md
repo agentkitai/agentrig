@@ -1,5 +1,32 @@
 # Status
 
+## Review-gate residuals (#384–#387)
+
+PR #394 repair round 2/3 (F1 only, arbiter session `6c087e6b`): instruction rows now
+start at their owning headings, and every ship/topic fixer read-back requirement must
+precede the fixer spawn within §3. Whole-gate EOF/after-spawn and individual requirement
+relocations cover fixer read-back; land's receipt relocation is tested in memory without
+editing the land skill. A delta-phrase section-boundary probe also kills removal of the
+section bound (F2 proof, not a separate dispatched blocker). Existing land gate protections
+remain intact. Fail-first: 21 failed / 138 passed; repaired focused suite: 159 passed;
+section-bound removal: 2 failed / 157 passed. Full trio and exact OLD..NEW handoff belong
+to the PR body; independent delta review and closure remain conductor-owned. Deferred
+#397/#398 and other advisories are unchanged; no runtime or roadmap advancement.
+
+PR #394 repair round 1/3 (C1): every M-land-persistence phrase is now checked inside
+ship/topic's anchor-before-spawn window, shared with the placement checks. Named
+`M-land-placement ship split-paragraph mutant` and `M-land-placement topic split-paragraph mutant`
+leave the opening/final sentinel before spawn but move the middle requirements after
+spawn: fail-first was 2 failed / 135 passed; the repaired focused suite passes all 137.
+Existing deletion, relocation, lazy-continuation, and grammar controls are preserved.
+Both topic validators also receive the agreed double-space-only normalization. C1
+remains pending independent closure; no other advisory repair or roadmap advancement.
+
+- Topic §4 repeats ship §3’s full pre-land body/comment persistence gate before land-child dispatch: canonical model/head/main headings, all initial/focused dispositions, residuals, blocker closure and current-head delta coverage; missing evidence halts before spawn.
+- Removed both redundant `c.length>40 ||` topic guards. Length rejection is pinned by the `{7,}` → `{7,40}` grammar-reversion probe, not a claimed length-guard mutation kill.
+- Instruction assertions stop at the next section heading; ship/topic placement probes reject EOF relocation, after-spawn relocation and lazy-list continuation. Ship’s gate now starts a standalone paragraph.
+- Fail-first focused run: 22 failed / 113 passed; fixed run: 135 passed, including named deletion, relocation and isolated grammar mutants. Full build/test/typecheck verification belongs to the task PR; independent review and landing remain conductor-owned. No runtime or roadmap advancement.
+
 ## Review-posting helper residuals (#379, #380)
 
 PR #389 repair round 1 (N1 only): every posting-loop exception now reports successful
