@@ -200,7 +200,7 @@ For each recorded row, in order:
      Record this exact ref as conductor-owned before launching jobs; never reuse/delete an unowned ref.
      Cleanup removes that recorded ref only after joining jobs. Focused passes instead create and record
      their unique `BASE` and remove only that owned ref. These refs pin the prompt's comparison base:
-     `codex exec` consumes the assembled prompt/artifact protocol, not dedicated `codex review` mode;
+     the CLI exec adapter consumes the assembled prompt/artifact protocol, not dedicated review mode;
      neither mode implicitly creates or owns this conductor ref. Keep an OUT
      directory outside all trees; never write review artifacts inside either tree. Create one independent TMPDIR outside Git ancestry per job.
      For nonempty steps the conductor runs declared bootstrap and optional preflight separately
