@@ -95,6 +95,14 @@ for a worktree; remove the owned proof TMPDIR separately.
 
 ## 2. Review, independently
 
+`<REPO>` is the absolute path to a clean adapter checkout at the exact PR head, not the author tree or stale main checkout.
+Prepare it using `topic` §2 step 4's **Adapter checkout boundary**: record its literal path,
+HEAD and successful declared-build receipt (including `packages/cli/dist/config.js` and
+`provider.js`) before running helpers. The retained conductor-proof tree may supply it;
+keep it until all adapter/helper jobs join. Empty declared checks authorize no build;
+if required dist is unavailable, halt rather than run undeclared checks. Every `<REPO>`
+helper example below uses this same recorded checkout, never another worktree's output.
+
 Never review in this session. Prepare exactly as `topic` §2 step 4 prescribes.
 Resolve declared reviewer slots at the actual PR head and follow topic §2 step 4's preparation,
 independent conductor proof, adapter launch, validation, posting and cleanup sequence exactly.

@@ -178,9 +178,14 @@ Record `declared checks: none`; landing still needs exact-head CI plus human mer
 Do not claim local green or waive missing CI. For nonempty steps, bootstrap, optional preflight,
 and each named step run in order, stopping on nonzero, recording name, command, exit code,
 UTC start/end, counts (or N/A), head and runner. The independent conductor supplies GREEN
-same-head receipts **before** launching the review pair. Reviewers inspect code and targeted
-mutants, not a duplicate full suite. The operative sections in dogfood/topic/review/arbiter
-supersede shipping policy §3's reviewer-trio rule; ship/land and shipping policy are unchanged.
+same-head receipts **before** launching declared reviewer slots. Reviewers inspect code and
+targeted mutants, not a duplicate full suite. Resolve both checks and slots at the exact PR
+head; `topic` §2 step 4 and [shipping policy §1](SHIPPING-WORKFLOW.md#1-ci-and-review-are-independent-tracks)
+define the common preparation. PRs record the resolved bootstrap, optional preflight and
+ordered named checks (or `declared checks: none`), with exits, times and counts, plus results
+for each declared reviewer slot. Zero reviewer slots require `External review: none declared`:
+no reviewer worktrees or jobs, but declared checks, exact-head CI and human merge authorization
+still gate landing. One slot runs once; two slots run independently in parallel.
 
 `packages/cli/test/project-checks.test.ts` executes a tiny generated external fixture using
 this resolver in the test itself. There is no CLI workflow runner.
@@ -193,14 +198,20 @@ CRLF (and lone CR) to LF before substring/regex contracts run. Non-skill linked
 documents are read unchanged. The enforcement instruction-contract test scans
 both test trees for direct filesystem skill reads, including generic wrappers.
 
-`.gitattributes` pins `.agentrig/skills/**` to `text eol=lf` to make normal checkouts
+`.gitattributes` pins `.agentrig/skills/**/*.md` to `text eol=lf` to make normal checkouts
 consistent. This is defense in depth, not a substitute for loader normalization:
-external copies and existing checkouts may still contain CRLF.
+external copies and existing checkouts may still contain CRLF. Windows editors must support LF
+for repository skill Markdown; CRLF-only Windows tooling should operate on an external copy,
+not rewrite the tracked files. Non-Markdown assets keep normal Git/editor line-ending policy.
+Only repository skills paths are normalized: generated SKILL.md fixtures retain raw-byte
+reads/assertions so line-ending-only rewrites remain observable.
 
 Before every push touching instruction-contract or skill-text tests, copy the
 **entire** `.agentrig/skills` tree beneath the proof `TMPDIR` outside Git ancestry,
 normalize LF then convert text to CRLF, and set `AGENTRIG_TEST_SKILLS_ROOT` to that
 copy when rerunning every touched instruction-contract/skill-text test file. The
-loader uses the override without checkout fallback. Record start/end timestamps,
+loader treats a present-empty override as an error and validates that every repository skills
+file exists in the override tree before reading. Missing or incomplete overrides fail closed
+without checkout fallback. Record start/end timestamps,
 exact commands, exits and test counts beside the declared-check trio in the PR.
 Remove only the owned proof copy after the pushed handoff is recorded.

@@ -219,8 +219,7 @@ For each recorded row, in order:
      UTC start/end, counts, worktree and TMPDIR in `<OUT>/checks.md`. Empty steps receive an explicit
      none receipt. Restore tracked/index state, join jobs and recheck current PR head before launch.
      A head change invalidates this proof; re-prepare and re-prove. Supply receipts to every slot.
-   - **Adapter checkout boundary.** `<REPO>` is an absolute path to a clean checkout at the exact
-     PR HEAD containing these helper sources and, for nonempty declared checks, the successful
+   - **Adapter checkout boundary.** `<REPO>` is an absolute path to a clean checkout at the exact PR head containing these helper sources and, for nonempty declared checks, the successful
      declared build output at that same head (`packages/cli/dist/config.js` and `provider.js`).
      Resolve and record its literal path, HEAD and build receipt before launch; an existing
      conductor-proof tree may supply it while retained until all adapter jobs join. Never use

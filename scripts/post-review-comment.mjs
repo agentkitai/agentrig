@@ -40,6 +40,11 @@ try {
   else {
     for (let start = 0; start < payload.length;) {
       let end = Math.min(start + capacity, payload.length);
+      // Prefer complete lines so finding headings survive per-comment indexing.
+      if (end < payload.length) {
+        const newline = payload.lastIndexOf("\n", end - 1);
+        if (newline >= start) end = newline + 1;
+      }
       // Never split a surrogate pair; UTF-16 length is a conservative character bound.
       if (end < payload.length && /[\uD800-\uDBFF]/.test(payload[end - 1])) end--;
       pieces.push(payload.slice(start, end));
