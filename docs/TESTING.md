@@ -129,7 +129,14 @@ The shipping skills consume **project data**, not a built-in JavaScript workflow
 `checks` in the repository's `.agentrig/config.json`. `profiles.<name>.checks` replaces the
 whole base declaration (including the ordered steps). This uses the existing strict zod
 config boundary; duplicate step names, unknown fields, blank commands/names and unsupported
-parser identifiers are rejected. Names need not be build/test/typecheck.
+parser identifiers are rejected. Names need not be build/test/typecheck. `bootstrap` and
+`preflight` are reserved step names after trimming, even if preflight is absent. At most 64
+steps are allowed; names are limited to 256 UTF-16 code units, commands (including bootstrap
+and preflight) to 4096 before trimming. Fields are single-line: C0/C1 controls (including tabs,
+newlines and ESC), Unicode line/paragraph separators and bidi formatting U+202A–202E,
+U+2066–2069 are rejected before trimming. Ordinary shell quotes/operators remain allowed;
+this is receipt/display hygiene, not shell safety or authorization. Checks are file declaration
+metadata only: normal resolved runtime/evaluation settings never carry them.
 
 AgentRig's worked example (also committed as its project config):
 
@@ -160,7 +167,7 @@ from `packages/cli/dist/project-checks.js` after building AgentRig (source:
 The explicit root may be any repository, including outside this monorepo. This only reads and
 validates that project's config; it does not search home config, infer commands, spawn a shell,
 or implement a workflow. A missing declaration returns undefined (stop/request declaration),
-not an empty success. Invalid profiles/config reject. The returned object is declaration data,
+not an empty success. A missing file returns undefined even with a selected profile; an existing file with an unknown profile rejects. Invalid config rejects. The returned object is declaration data,
 not permission to execute it: display source/root, selected profile and commands and retain
 normal project trust, permission prompts and sandbox checks.
 

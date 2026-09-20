@@ -15,7 +15,7 @@ Project profile checks replace the whole base declaration.
 
 Commands are project-controlled data, not permission grants. Display the resolved source,
 profile and commands before execution; preserve trust, permission and sandbox gates on every
-shell call. For nonempty steps run declared bootstrap, optional preflight, then ordered named
+shell call. For nonempty steps the builder/conductor runs declared bootstrap, optional preflight, then ordered named
 steps, each judged by its exit code. Stop on nonzero; do not infer success from output counts.
 Record name, command, exit code, UTC start/end, counts (N/A if unavailable), exact head,
 runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional countsParser
@@ -69,19 +69,21 @@ model from CLI provenance and posts both independent reviews with the complete h
 
 ## 2. Isolate
 
-Skip this section when the brief says a conductor prepared the worktree: verify that supplied
-worktree and head instead of creating another.
-Use your exclusive clean review worktree at the recorded head. If supplied by the conductor,
-verify it; otherwise create a detached private worktree at the PR head. Never share mutable
-sources with a sibling. Do not install dependencies or run declared checks. Require the
-conductor's named exact-head receipts before beginning; missing or failed proof returns to
-the conductor, not a reviewer-run suite. Use a private TMPDIR outside Git ancestry only if
-a targeted probe needs it. Record and later remove only owned resources.
+Standalone review also requires conductor-prepared dependencies, build outputs and exact-head receipts.
+Do not create an unprepared tree or install dependencies yourself. If no conductor supplied
+an exclusive clean tree at the current PR head with that state, stop and return to the conductor.
+Verify the supplied tree and head, rather than assuming preparation succeeded. Never share
+mutable sources with a sibling. Do not run declared checks, bootstrap or preflight.
+Require named exact-head receipts before beginning. Use a private TMPDIR outside Git ancestry
+only for targeted probes. Record and later remove only owned resources.
+Verify recorded MAIN is an ancestor of the actual PR head; if integration would advance that
+head, require the conductor to update the PR and re-prove before review. Never label an
+integration-only commit as the PR head in a review heading.
 
 ## 3. Inspect independent proof, then review code
 
 Check the conductor's head against the review head, all declared step names and order,
-individual exit codes, times and counts. Accept the explicit empty declaration receipt,
+individual exit codes, times and counts; missing or failed proof means stop and return to the conductor. Accept the explicit empty declaration receipt,
 not a guessed toolchain. Apply the operative policy above instead of the inherited reviewer
 trio requirement. A targeted mutation test is allowed; the full declared checks are not.
 

@@ -8,8 +8,8 @@ import type { ProjectChecks } from "./config.js";
  */
 export async function resolveProjectChecks(projectRoot: string, profile?: string): Promise<ProjectChecks | undefined> {
   const project = await readConfigFile(join(resolve(projectRoot), ".agentrig", "config.json"));
-  const checks = resolveConfig({ defaults: {}, ...(project === undefined ? {} : { project }),
-    ...(profile === undefined ? {} : { profile }) }).checks;
-  if (checks === undefined) return undefined;
-  return checks;
+  if (project === undefined) return undefined;
+  // Reuse profile-name validation, but keep declarations out of runtime values.
+  resolveConfig({ defaults: {}, project, ...(profile === undefined ? {} : { profile }) });
+  return (profile === undefined ? undefined : project.profiles?.[profile]?.checks) ?? project.checks;
 }

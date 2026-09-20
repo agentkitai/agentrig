@@ -15,7 +15,7 @@ Project profile checks replace the whole base declaration.
 
 Commands are project-controlled data, not permission grants. Display the resolved source,
 profile and commands before execution; preserve trust, permission and sandbox gates on every
-shell call. For nonempty steps run declared bootstrap, optional preflight, then ordered named
+shell call. For nonempty steps the builder/conductor runs declared bootstrap, optional preflight, then ordered named
 steps, each judged by its exit code. Stop on nonzero; do not infer success from output counts.
 Record name, command, exit code, UTC start/end, counts (N/A if unavailable), exact head,
 runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional countsParser
@@ -183,18 +183,19 @@ For each recorded row, in order:
      `git -C "$WT"` sees it); assert
      `[ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD" ] || stop the pass (the worktree is not at the
      PR head)` (remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before stopping), and record
-     `MAIN=$(git rev-parse origin/main)`. Then `git -C "$WT" merge --no-edit origin/main` (a
-     conflict is a finding for §3 — record which files and stop the pass; remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root,
-     `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before stopping). A pass that stopped before both reviews completed is not a
-     pass: the pass after a conflict-stopped one is a full pass on the new head, never a delta.
-     `WT` belongs exclusively to Claude. Create Codex's independent tree at the same resulting
-     commit: `REVHEAD=$(git -C "$WT" rev-parse HEAD)`; `CODEX_WT=$(mktemp -d)`;
+     `MAIN=$(git rev-parse origin/main)`. Require `git merge-base --is-ancestor "$MAIN" "$HEAD"`.
+     If main integration would advance HEAD, stop: update the PR branch and re-prove its new head before review.
+     Conflicts are findings for §3, never permission to review an integration-only commit as PR HEAD.
+     Remove recorded owned scratch resources before returning for repair. A conflict-stopped pass
+     is not complete; restart the incomplete full pair on the new PR head.
+     `WT` belongs exclusively to Claude. Set `REVHEAD=$HEAD`; REVHEAD must equal the current PR HEAD.
+     Create Codex's independent tree at that exact commit: `CODEX_WT=$(mktemp -d)`;
      `echo "$CODEX_WT" "$REVHEAD"`; `git worktree add --detach "$CODEX_WT" "$REVHEAD"`.
      Assert both trees have the same HEAD and are clean before launching either reviewer.
      `OUT=$(mktemp -d)`
      holds every output file; never write review artifacts inside either tree. Create independent
      temporary roots with `mkdir "$OUT/claude-tmp" "$OUT/codex-tmp"`; pass the corresponding
-     command-local `TMPDIR` below. Record these paths and the post-merge review SHA BEFORE
+     command-local `TMPDIR` below. Record these paths and the actual PR review SHA BEFORE
      installing dependencies. The conductor executes bootstrap and preflight in separate calls, each with `timeoutMs` at least 600000; empty declarations execute neither. Reviewers do not bootstrap or preflight. Record all paths
      and REVHEAD before any conductor execution; keep reviewer trees read-only except
      restored targeted mutation probes. Dependency preparation belongs to the conductor.
@@ -208,8 +209,7 @@ For each recorded row, in order:
      preflight and ordered named steps under the operative policy. Require GREEN before
      launching either job below; for empty steps record the explicit none receipt. Record
      each name, command, exit code, UTC start/end and counts in `<OUT>/codex-trio.md` (legacy
-     artifact name only). Verify restored tracked/index state and unchanged head. If REVHEAD
-     differs from PR HEAD, prove both, labeling integration separately. Supply the receipts
+     artifact name only). Verify restored tracked/index state and unchanged head. Require REVHEAD equals current PR HEAD; otherwise stop and re-prepare/re-prove. Supply the receipts
      to Claude's brief and Codex's review context before launch; never builder reasoning.
      Focused reviews use the same pre-launch conductor gate at NEW.
      Record conductor paths, including any retry, before executing in its tree. Before cleanup
@@ -222,7 +222,7 @@ For each recorded row, in order:
        TMPDIR=<OUT>/claude-tmp claude -p --model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' \
          --disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)' \
          --output-format json --no-session-persistence \
-         "Review PR #NN at head SHA HEAD. Read .agentrig/skills/review/SKILL.md and follow it. You exclusively own this isolated review worktree, merged with origin/main, with dependencies installed: skip section 2 and verify that state yourself. Inspect the supplied named exact-head conductor receipts; do not run declared checks. Review code and run only targeted mutation probes here, restore each mutant and join every subprocess before reporting; never touch a sibling or author tree. Do not push, merge, commit, change permission settings, spawn children or invoke auxiliary models. Assume the author is wrong; verify every finding against the code before reporting it; report file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario and a fix. Report the exact head SHA you reviewed." \
+         "Review PR #NN at head SHA REVHEAD. Read .agentrig/skills/review/SKILL.md and follow it. You exclusively own this isolated review worktree, at the actual PR head containing recorded origin/main, with dependencies installed: skip section 2 and verify that state yourself. Inspect the supplied named exact-head conductor receipts; do not run declared checks. Review code and run only targeted mutation probes here, restore each mutant and join every subprocess before reporting; never touch a sibling or author tree. Do not push, merge, commit, change permission settings, spawn children or invoke auxiliary models. Assume the author is wrong; verify every finding against the code before reporting it; report file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario and a fix. Report the exact head SHA you reviewed." \
          < /dev/null > "<OUT>/claude.json"
      ```
      The `env -u` list matters when this session was itself launched from inside Claude Code
@@ -269,7 +269,7 @@ For each recorded row, in order:
      Require exit zero before composing a comment. Retain stderr as provenance and record the
      validated model with the job receipt. Join jobs and clean owned trees before halting.
    - **Provenance.** Join both jobs and their subprocesses, then confirm both reviewer trees have
-     the recorded `<REVHEAD>` (post-merge on a full pass; NEW on a delta) and clean tracked/index state. Any unrestored mutant, changed
+     the recorded `<REVHEAD>` (actual PR HEAD on a full pass; NEW on a delta) and clean tracked/index state. Any unrestored mutant, changed
      HEAD or unfinished writer invalidates that review; record it explicitly and use the existing
      dead-job retry rule, never clean away the evidence and count the pass. The conductor owns
      cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,
@@ -325,7 +325,7 @@ cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.
      repo-relative. Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line
      and the same scenario), and sort the union under step 5. Claude's review must also name
      `HEAD` as the SHA it reviewed; Codex echoes no SHA and needs none, because the worktree was
-     asserted to be at `HEAD` (before the merge on a full pass).
+     asserted to be at `HEAD` (the actual reviewed PR head on a full pass).
 5. Record every child session id from its tool result and restate it in your own reply text in that same turn. Bind each verdict to
    its recorded SHA and apply shipping policy §2 to the combined findings. Distinguish verified
    defects from optional suggestions: optional polish is advisory, not a new acceptance criterion or repair

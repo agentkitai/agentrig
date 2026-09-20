@@ -11,7 +11,11 @@ skills override the inherited reviewer-trio rule: independent conductor proof pr
 launch, reviewers inspect code/targeted mutants without rerunning full checks. Tests cover
 Python/Rust/Go, invalid declarations, profile replacement, policy wording and an external
 fixture executed by the test. Counts parsing is a caller metadata hint, not a new parser or
-workflow engine. No roadmap row is advanced by this issue-only change.
+workflow engine. Repair coverage separates declaration metadata from runtime/evaluation values,
+reserves receipt identities, bounds single-line fields/step counts, and distinguishes absent files
+from unknown profiles in existing files. Review preparation requires conductor-owned prepared
+state and proof on the actual PR head, not an integration-only SHA; flow-specific assertions and
+independent validation mutants guard these gates. No roadmap row is advanced by this issue-only change.
 
 ## Windows evalset hook budget (#405)
 
