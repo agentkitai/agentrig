@@ -40,9 +40,11 @@ it("pins the repository root in the shared config and inherits it into the Windo
 it("bounds Windows file parallelism and integration time without changing coverage or shared defaults", () => {
   expect(windows.test!.maxWorkers).toBe(2);
   expect(windows.test!.testTimeout).toBe(30_000);
+  expect(windows.test!.hookTimeout).toBe(30_000);
   expect(windows.test!.include).toEqual(windowsCoverage);
   expect(base.test!.maxWorkers).toBeUndefined();
   expect(base.test!.testTimeout).toBeUndefined();
+  expect(base.test!.hookTimeout).toBeUndefined();
 });
 
 it("registers the shared setup that guards project session stores", () => {
