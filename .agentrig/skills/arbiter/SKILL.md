@@ -5,8 +5,8 @@ description: Judge one proposed deviation from a contract (roadmap row, issue, t
 
 ## Operative declared-checks policy (issue #395)
 
-This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
-ship/land check instructions for this task. Workflow decisions stay in skills, never core or
+This policy implements shipping policy §3's declared reviewer slots and check ordering rule
+and supersedes conflicting inherited ship/land check instructions for this task. Workflow decisions stay in skills, never core or
 a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
 selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
 (or inspect that documented JSON boundary); see docs/TESTING.md. Missing declaration is not

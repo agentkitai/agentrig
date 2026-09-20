@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { readSkillText } from "../../../test/skill-text.js";
 
+import { preservedReviews } from "./preserved-review-455.js";
+
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const head = "a".repeat(40), main = "b".repeat(40);
 const skills = ["topic", "ship"];
@@ -27,7 +29,7 @@ describe.each(skills)("%s actual posting shell", skill => {
     expect(text).toContain("REVIEW_LARGE_BODY_LEDGER");
     expect(text).toContain("40 KiB");
   });
-  it.each(["pass", "echo", "stale", "markerless-stale", "codex-tail", "codex-blank-lf", "codex-blank-crlf", "claude-json", "quote"])("executes real helpers: %s", mode => {
+  it.each(["pass", "echo", "stale", "markerless-stale", "codex-tail", "codex-blank-lf", "codex-blank-crlf", "claude-json", "quote", "preserved-first", "preserved-retry", "first-sha-wrong", "tolerated-stale", "tolerated-extra-stale"])("executes real helpers: %s", mode => {
     expect(start, "posting block must use shared helper").toBeGreaterThan(0);
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "verdict-gates-")));
     try {
@@ -45,6 +47,10 @@ describe.each(skills)("%s actual posting shell", skill => {
         body = `OpenAI Codex\nuser\nInstructions\ncodex\n\n \t\n${body}codex\nTail evidence.\n`.replaceAll("\n", eol);
       }
       if (mode === "quote") body += "### LOW: Contract mismatch\nscripts/post-review-comment.mjs:30 fix the gate. Contract says:\n> A pass verdict lists what you probed and which mutants you ran\n";
+      if (mode.startsWith("preserved-")) body = preservedReviews[mode === "preserved-first" ? 0 : 1]!.replaceAll("a45dc1f93db4a581371d0b94f0e7e518347fd890", head);
+      if (mode === "first-sha-wrong") body = `Status commit ${head}\nReviewed head: ${head}\nVERDICT: PASS\n`;
+      if (mode === "tolerated-stale") body = `Reviewed head ${"c".repeat(40)}\nVERDICT: PASS\n`;
+      if (mode === "tolerated-extra-stale") body = `Reviewed head ${head}\nVERDICT: PASS\nReviewed at ${"c".repeat(40)}\n`;
       writeFileSync(join(dir, "codex.md"), body);
       const claude = `Reviewed head: ${head}\nVERDICT: PASS\nProbed the gate.\n`;
       writeFileSync(join(dir, "claude.md"), mode === "claude-json" ? JSON.stringify({type:"result",subtype:"success",modelUsage:{"claude-opus-5":{}},result:claude,is_error:false}) : claude);
@@ -55,12 +61,16 @@ describe.each(skills)("%s actual posting shell", skill => {
       for (const name of ["codex", "claude"]) writeFileSync(join(dir, `${name}.provenance.json`), "{}");
       const script = [["codex", "Codex", "codex-cli"], ["claude", "Claude Code", "claude-cli"]].map(([prefix, slot, adapter]) => template.replaceAll("<REPO>", root).replaceAll("<WT>", dir).replaceAll("<OUT>", dir).replaceAll("<PREFIX>", join(dir, prefix!)).replaceAll("<SLOT>", slot!).replaceAll("<ADAPTER>", adapter!).replaceAll('"HEAD"', JSON.stringify(head)).replaceAll('"MAIN"', JSON.stringify(main)).replace(".mjs NN ", ".mjs 1 ")).join("\n");
       const result = spawnSync("/bin/sh", ["-ec", script], {cwd:dir,encoding:"utf8",env:{...process.env,PATH:`${dir}:${process.env.PATH}`,OUT:dir,HEAD:head,MAIN:main,PR:"1"}});
-      if (["echo", "stale", "markerless-stale"].includes(mode)) {
+      if (["echo", "stale", "markerless-stale", "first-sha-wrong", "tolerated-stale", "tolerated-extra-stale"].includes(mode)) {
         expect(result.status).not.toBe(0);
         expect(() => readFileSync(join(dir, "gh.log"))).toThrow();
       } else {
         expect(result.status, result.stderr).toBe(0);
         expect(readFileSync(join(dir, "gh.log"), "utf8").trim().split("\n")).toHaveLength(2);
+        if (mode.startsWith("preserved-")) {
+          const provenance = JSON.parse(readFileSync(join(dir, "codex.verdict.md.provenance.json"), "utf8"));
+          expect(provenance.headExtraction.tolerances).toEqual([mode === "preserved-first" ? "missing-head-colon" : "leading-cleanup-status"]);
+        }
         if (mode === "codex-tail") expect(readFileSync(join(dir, "codex.comment.md"), "utf8")).toContain("codex\nTail evidence.");
         if (mode.startsWith("codex-blank-")) {
           const extracted = readFileSync(join(dir, "codex.verdict.md"), "utf8");
