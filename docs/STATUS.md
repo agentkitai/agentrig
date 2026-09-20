@@ -2,6 +2,17 @@
 
 ## Review-gate residuals (#384–#387)
 
+PR #394 repair round 2/3 (F1 only, arbiter session `6c087e6b`): instruction rows now
+start at their owning headings, and every ship/topic fixer read-back requirement must
+precede the fixer spawn within §3. Whole-gate EOF/after-spawn and individual requirement
+relocations cover fixer read-back; land's receipt relocation is tested in memory without
+editing the land skill. A delta-phrase section-boundary probe also kills removal of the
+section bound (F2 proof, not a separate dispatched blocker). Existing land gate protections
+remain intact. Fail-first: 21 failed / 138 passed; repaired focused suite: 159 passed;
+section-bound removal: 2 failed / 157 passed. Full trio and exact OLD..NEW handoff belong
+to the PR body; independent delta review and closure remain conductor-owned. Deferred
+#397/#398 and other advisories are unchanged; no runtime or roadmap advancement.
+
 PR #394 repair round 1/3 (C1): every M-land-persistence phrase is now checked inside
 ship/topic's anchor-before-spawn window, shared with the placement checks. Named
 `M-land-placement ship split-paragraph mutant` and `M-land-placement topic split-paragraph mutant`

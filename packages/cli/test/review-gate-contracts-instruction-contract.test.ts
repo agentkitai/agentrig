@@ -6,14 +6,14 @@ import { expect, it } from "vitest";
 const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const skill = (name: string) => `.agentrig/skills/${name}/SKILL.md`;
 const checks: Array<[string, string, string, string[]]> = [
- ["M-lander-fixer-receipt",skill("land"),"For every dispatched fixer",["quote `Repair round: N/3`", "ledger blocker IDs", "`gh pr view NN --json body` read-back receipt BEFORE", "Reject a missing quote", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "match that line against the round, OLD and assigned blockers", "counter repaired by the fixer afterwards cannot retroactively satisfy it"]],
- ["M-claim-documentation",skill("topic"),"Bounded claim grammar",["Reject 41-or-more hex tokens", "stale `head_sha:`", "stale `Reviewed at`", "fails closed on a prior `reviewed commit <stale>` discussion mention"]],
+ ["M-lander-fixer-receipt",skill("land"),"## 1.",["quote `Repair round: N/3`", "ledger blocker IDs", "`gh pr view NN --json body` read-back receipt BEFORE", "Reject a missing quote", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "match that line against the round, OLD and assigned blockers", "counter repaired by the fixer afterwards cannot retroactively satisfy it"]],
+ ["M-claim-documentation",skill("topic"),"## 2.",["Reject 41-or-more hex tokens", "stale `head_sha:`", "stale `Reviewed at`", "fails closed on a prior `reviewed commit <stale>` discussion mention"]],
  ["M-mechanical-closure", "docs/SHIPPING-WORKFLOW.md", "## 3.",["it cannot replace independent focused review to close a blocker"]],
  ...["topic", "ship", "land"].map(name => ["M-model-heading", skill(name), "## Initial full review heading contract", ["initial heading model must equal `claude-opus-5`", "missing required initial review, not a receipt"]] as [string,string,string,string[]]),
- ["M-topic-pin",skill("topic"),"4. Run the",["claude -p --model claude-opus-5"]],
+ ["M-topic-pin",skill("topic"),"## 2.",["claude -p --model claude-opus-5"]],
  ["M-ship-pin",skill("ship"),"## 2.",["`--model claude-opus-5` verbatim", "`claude -p --model claude-opus-5`"]],
  ...[skill("topic"),"docs/SHIPPING-WORKFLOW.md"].map(path => ["M-delta-closure",path,"## 3.", ['git rev-parse --verify "$OLD^{commit}"','git rev-parse --verify "$NEW^{commit}"','[ "$OLD" != "$NEW" ]','git merge-base --is-ancestor "$OLD" "$NEW"',"fixer delta plus independent focused review","ledger rebuttal quoting a reproducible command and its result","arbiter verdict","prohibit re-prompting the raising reviewer under the","conductor’s contract reading as closure"]] as [string,string,string,string[]]),
- ...["topic","ship"].map(name => ["M-fixer-readback",skill(name),"Before calling a fixer",["Read back `gh pr view NN --json body` BEFORE spawning", "Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim", "Dispatch only ledger-blocking findings", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "Require edit success and read back the receipt", "Record any reclassification in the ledger first with its rationale", "Nonblocking defects go to residual issues; advisory"]] as [string,string,string,string[]]),
+ ...["topic","ship"].map(name => ["M-fixer-readback",skill(name),"## 3.",["Read back `gh pr view NN --json body` BEFORE spawning", "Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim", "Dispatch only ledger-blocking findings", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "Require edit success and read back the receipt", "Record any reclassification in the ledger first with its rationale", "Nonblocking defects go to residual issues; advisory"]] as [string,string,string,string[]]),
  ...["ship", "topic"].map(name => ["M-land-persistence",skill(name),"Before invoking land",["`gh pr view NN --json body`","Fetch linked review comments too","verify both initial canonical headings", "dispositions for every", "`## Residuals` has issue links or", "explicit `none`", "halt BEFORE land-child spawning", "including the pinned Claude model", "reviewed head and main provenance", "every focused review", "Verify all blocker closures and delta coverage through current head", "Persist edits then read back again if anything changes"]] as [string,string,string,string[]]),
 ];
 // Preserve section boundaries before normalizing whitespace for phrase comparisons.
@@ -24,8 +24,13 @@ const sectionFrom = (s: string, start: string) => {
  const next = tail.search(/\n## /);
  return next < 0 ? tail : tail.slice(0, next);
 };
-for (const [id,path,start,phrases] of checks) {
- const check = (s: string) => { const part=(id === "M-land-persistence" ? landWindow(s, path === skill("ship") ? "ship" : "topic") : sectionFrom(s,start)).replace(/\s+/g," "); for(const phrase of phrases) expect(part).toContain(phrase); };
+const checkRow = (s: string, [id,path,start,phrases]: typeof checks[number]) => {
+ const part=(id === "M-land-persistence" ? landWindow(s, path === skill("ship") ? "ship" : "topic") : id === "M-fixer-readback" ? fixerWindow(s, path) : sectionFrom(s,start)).replace(/\s+/g," ");
+ for(const phrase of phrases) expect(part).toContain(phrase);
+};
+for (const row of checks) {
+ const [id,path,,phrases] = row;
+ const check = (s: string) => checkRow(s, row);
  it(`${id} ${path}`,()=>check(read(path)));
  for (const phrase of phrases) it(`${id} deletion mutant: ${path} ${phrase}`,()=>{
   const s=read(path); check(s);
@@ -33,6 +38,15 @@ for (const [id,path,start,phrases] of checks) {
   expect(()=>check(s.replace(pattern,"REMOVED"))).toThrow();
  });
 }
+// Pin the owning section first; a relocated prose anchor must never drag its window with it.
+const fixerWindow = (s: string, path: string) => {
+ const section = sectionFrom(s, "## 3.");
+ const start = section.indexOf("Before calling a fixer");
+ expect(start).toBeGreaterThanOrEqual(0);
+ const spawn = section.indexOf(path === skill("ship") ? "- Spawn the fixer" : "- **Fix** with one subagent");
+ expect(spawn).toBeGreaterThan(start);
+ return section.slice(start, spawn);
+};
 // All persistence requirements must execute before dispatch, not merely in the same section.
 const landWindow = (s: string, name: string) => {
  const section = sectionFrom(s, name === "ship" ? "## 3." : "## 4.");
@@ -69,6 +83,36 @@ for (const name of ["ship", "topic"]) {
   expect(() => landGate(mutant, name)).toThrow();
  });
 }
+// Relocations preserve the requirements verbatim: presence alone must not satisfy a gate.
+for (const row of checks.filter(([id]) => ["M-fixer-readback", "M-lander-fixer-receipt"].includes(id))) {
+ const [id, path, , phrases] = row;
+ const anchor = id === "M-fixer-readback" ? "Before calling a fixer" : "For every dispatched fixer";
+ const end = id === "M-fixer-readback" ? "Only then call the fixer described below, carrying that persisted ledger and counter." : "a receipt added after dispatch cannot retroactively authorize that dispatch.";
+ for (const location of id === "M-fixer-readback" ? ["EOF", "after-spawn"] : ["EOF"]) {
+  it(`${id} ${path} whole gate relocated ${location}`, () => {
+   const s = read(path); checkRow(s, row);
+   const gate = s.slice(s.indexOf(anchor), s.indexOf(end) + end.length);
+   const without = s.replace(gate, "");
+   const next = path === skill("ship") ? "## 4. Budget" : "- **Cover the delta**";
+   const mutant = location === "EOF" ? `${without}\n\n${gate}` : without.replace(next, `${gate}\n\n${next}`);
+   expect(() => checkRow(mutant, row)).toThrow();
+  });
+ }
+ if (id === "M-fixer-readback") for (const phrase of phrases) it(`${id} ${path} split gate moves requirement after spawn: ${phrase}`, () => {
+  const s = read(path); checkRow(s, row);
+  const pattern = new RegExp(phrase.split(/\s+/).map(word => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"), "g");
+  const next = path === skill("ship") ? "## 4. Budget" : "- **Cover the delta**";
+  const mutant = s.replace(pattern, "REMOVED").replace(next, `${phrase}\n\n${next}`);
+  expect(() => checkRow(mutant, row)).toThrow();
+ });
+}
+it("M-section-boundary rejects a delta requirement moved to the next section", () => {
+ const row = checks.find(([id, path]) => id === "M-delta-closure" && path === skill("topic"))!;
+ const s = read(row[1]); checkRow(s, row);
+ const phrase = row[3][0]!;
+ const mutant = s.replace(phrase, "REMOVED").replace("## 4. Conditional land and continue", `## 4. Conditional land and continue\n\n${phrase}`);
+ expect(() => checkRow(mutant, row)).toThrow();
+});
 it("C4 removes redundant length guards from both topic validators", () => {
  expect(read(skill("topic"))).not.toContain("c.length>40 ||");
 });
