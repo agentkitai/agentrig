@@ -79,7 +79,7 @@ export async function main(args) {
     const argv = adapter.template.map(value => value.replace("{model}", binding.model).replace("{lastMessage}", `${prefix}.last`));
     launch = [adapter.command, ...argv];
     const env = { ...process.env };
-    for (const key of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID"]) delete env[key];
+    for (const key of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_BRIDGE_SESSION_ID", "CLAUDE_PID"]) delete env[key];
     const run = spawnSync(adapter.command, argv, { cwd, input: prompt, encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024, timeout: 30 * 60 * 1000 });
     writeFileSync(`${prefix}.stdout`, run.stdout ?? "");
     writeFileSync(`${prefix}.stderr`, run.stderr ?? "");

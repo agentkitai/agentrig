@@ -62,13 +62,13 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ reviewers: { custom: { adapter, model: "pinned" } } }));
     const prompt = join(dir, "prompt"); writeFileSync(prompt, "source bundle; checks green");
-    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
+    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", CLAUDE_CODE_CHILD_SESSION: "child", CLAUDE_CODE_MESSAGING_SOCKET: "/parent/socket", CLAUDE_CODE_MESSAGING_TOKEN: "parent-token", CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge", CLAUDE_PID: "12345", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
     const prefix = join(dir, "out");
     const run = invoke(prefix);
     expect(run.status, run.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "argv"), "utf8"))).toEqual(cliAdapters[adapter].template.map((value: string) => value.replace("{model}", "pinned").replace("{lastMessage}", `${prefix}.last`)));
     const childEnv = JSON.parse(readFileSync(join(dir, "env"), "utf8"));
-    for (const name of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID"]) expect(childEnv).not.toHaveProperty(name);
+    for (const name of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_BRIDGE_SESSION_ID", "CLAUDE_PID"]) expect(childEnv).not.toHaveProperty(name);
     expect(childEnv).toMatchObject({ PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" });
     const provenance = JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"));
     expect(provenance).toMatchObject({ slot: "custom", adapter, model: "pinned", modelSource: cliAdapters[adapter].modelSource, cwd: dir, exit: 0 });
