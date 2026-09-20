@@ -231,9 +231,8 @@ For each recorded row, in order:
      `action: kill` it. A dead job (killed, non-zero exit, or an empty `<OUT>/codex.md`, or an
      empty `<OUT>/claude.md` after the extraction step below — `bash_job` showing no output is
      normal because the jobs write to files) is retried ONCE on the same head; both reviewers dead
-     on the same head halts the train (remove both reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** first). A pass with
-     one surviving review is not a pass — halt with the surviving review posted (remove both reviewer trees, any conductor-trio tree and conductor-trio temporary root,
-     `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** first); the train never lands on one reviewer.
+     on the same head halts the train (post any surviving review and persist verdicts, provenance, proof results and failure receipts in the PR; then remove both reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup**; only then halt the train). A pass with
+     one surviving review is not a pass — halt with the surviving review posted (post any surviving review and persist verdicts, provenance, proof results and failure receipts in the PR; then remove both reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup**; only then halt the train); the train never lands on one reviewer.
    - **Assert the model and extract the Claude review:**
      ```
      node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const m=Object.keys(r.modelUsage??{});if(m.length!==1||m[0]!=="claude-opus-5"){console.error("claude review ran on "+(m.join(",")||"unknown")+", not claude-opus-5");process.exit(2)}process.stdout.write(String(r.result??""))' "<OUT>/claude.json" > "<OUT>/claude.md"
@@ -256,23 +255,25 @@ For each recorded row, in order:
      including BOTH reviewer trees, any conductor-trio tree and conductor-trio temporary root, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`. Before posting, re-read the PR head (`gh pr view NN --json headRefOid`): if
      it no longer equals `HEAD`, retain the verdict for the recorded SHA but do not call the new
      head reviewed. Join/clean up, then classify and cover the uncovered delta under shipping
-     policy §3; never silently certify a different head or restart both reviews by default. Compose each comment body
+     policy §3; never silently certify a different head or restart both reviews by default. Before initial posting, validate every reviewed SHA claim against current `HEAD`, including any stripped heading SHA. Reject stale claims and empty or heading-only verdicts; halt without posting on validation failure. Claude still must explicitly claim its own HEAD below; Codex proof cannot substitute for verdict text. Compose each comment body
      with the canonical heading as its FIRST LINE, not a prefix check. Strip leading blanks
      and duplicate leading external-review headings from the reviewer body; retain the verdict.
      Replace HEAD and MAIN with the recorded full SHAs before executing these posting snippets.
      Assert the exact first line with `head -1` BEFORE either `gh pr comment` call:
      ```sh
 CLAUDE_HEADING="## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full"
-{ echo "$CLAUDE_HEADING"; echo; node -e 'const fs=require("fs");let s=fs.readFileSync(process.argv[1],"utf8").replace(/^\s*\n/,"");while(/^## External review[^\n]*(?:\n|$)/.test(s)){s=s.replace(/^## External review[^\n]*(?:\n|$)/,"").replace(/^\s*\n/,"")}process.stdout.write(s)' "<OUT>/claude.md"; } > "<OUT>/claude-comment.md"
+node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claims=[...s.matchAll(/\b(?:head(?:\s+SHA)?|reviewed(?:\s+(?:SHA|commit))?)\s*[:=]?\s*`?([0-9a-f]{7,40}|HEAD)\b/gi)]; if(claims.some(m=>m[1].toLowerCase()!==expected.toLowerCase())) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/claude.md" "HEAD" > "<OUT>/claude-validated.md" || exit 2
+{ echo "$CLAUDE_HEADING"; echo; node -e 'const fs=require("fs");let s=fs.readFileSync(process.argv[1],"utf8").replace(/^\s*\n/,"");while(/^## External review[^\n]*(?:\n|$)/.test(s)){s=s.replace(/^## External review[^\n]*(?:\n|$)/,"").replace(/^\s*\n/,"")}process.stdout.write(s)' "<OUT>/claude-validated.md"; } > "<OUT>/claude-comment.md"
 [ "$(head -1 "<OUT>/claude-comment.md")" = "$CLAUDE_HEADING" ] || exit 2
      ```
      For Codex, in the posting call read the validated model file (never infer the model from
      the verdict text). Replace HEAD and MAIN below with the same recorded full SHAs:
      ```
 CODEX_MODEL=$(cat "<OUT>/codex-model.txt")
+node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claims=[...s.matchAll(/\b(?:head(?:\s+SHA)?|reviewed(?:\s+(?:SHA|commit))?)\s*[:=]?\s*`?([0-9a-f]{7,40}|HEAD)\b/gi)]; if(claims.some(m=>m[1].toLowerCase()!==expected.toLowerCase())) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/codex.md" "HEAD" > "<OUT>/codex-validated.md" || exit 2
 [ -n "$CODEX_MODEL" ] || exit 2
 [ -s "<OUT>/codex-trio.md" ] || exit 2
-{ echo "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full"; echo; node -e 'const fs=require("fs");let s=fs.readFileSync(process.argv[1],"utf8").replace(/^\s*\n/,"");while(/^## External review[^\n]*(?:\n|$)/.test(s)){s=s.replace(/^## External review[^\n]*(?:\n|$)/,"").replace(/^\s*\n/,"")}process.stdout.write(s)' "<OUT>/codex.md"; echo; cat "<OUT>/codex-trio.md"; } > "<OUT>/codex-comment.md"
+{ echo "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full"; echo; node -e 'const fs=require("fs");let s=fs.readFileSync(process.argv[1],"utf8").replace(/^\s*\n/,"");while(/^## External review[^\n]*(?:\n|$)/.test(s)){s=s.replace(/^## External review[^\n]*(?:\n|$)/,"").replace(/^\s*\n/,"")}process.stdout.write(s)' "<OUT>/codex-validated.md"; echo; cat "<OUT>/codex-trio.md"; } > "<OUT>/codex-comment.md"
 [ "$(head -1 "<OUT>/codex-comment.md")" = "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full" ] || exit 2
      ```
      The conductor posts both independently obtained verdicts, not either isolated reviewer:

@@ -1,5 +1,16 @@
 # Status
 
+## Skill wording follow-ups (#367, #368, #369)
+
+Instruction-only follow-up to PR #366: ship/dogfood now explicitly share topic's
+conductor-trio cleanup resource mapping; both topic dead-review halt paths locally
+require posting surviving review/persisting evidence before scratch deletion. Initial
+review composition validates reviewed SHA claims (including stripped headings) and
+rejects empty/heading-only verdicts before normalization, preserving the canonical
+heading. Shared deletion mutations and executable stale/empty-body probes pin these
+contracts. No runtime or roadmap changes.
+
+
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
 ## Review and cleanup skill wording sweep (#341, #342, #348, #349, #351, #365)
