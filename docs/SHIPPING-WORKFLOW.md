@@ -179,3 +179,29 @@ deltas, deferred defects/issues and advisory disposition, exact-head and post-me
 CI links, and child session IDs. Record review/CI start and finish times so overlap
 and round count can be checked rather than claimed. Do not claim a workflow speedup
 from instruction tests alone; a subsequent live shipment must establish that.
+
+## Reviewer adapter and finding identity details
+
+The conductor owns shared review-base refs and removes them only after all consuming jobs join
+and restored state and publication are verified. Reviewers never create or delete shared refs;
+a standalone reviewer owns only its unique private ref. CLI slots use the declared adapter
+templates. The codex-cli adapter intentionally uses `codex exec`, not the dedicated `codex review`
+subcommand: exec accepts the full skill prompt, exact model pin, explicit sandbox and last-message
+output contract. This is not permission to change tool allowances or run project checks.
+API review configs with top-level `config.dailyCap` are rejected before construction because the adapter has no
+spend ledger; select an explicitly uncapped review config or CLI slot, never strip the configured cap.
+
+Finding identity is the verbatim Markdown finding heading plus source comment URL/anchor. Run
+`node <REPO>/scripts/review-finding-index.mjs <comment-URL>` on each posted review to produce a
+small index from the live GitHub body (not a conductor summary). The ledger, pre-dispatch receipt
+and fixer task retain that exact pair for every assigned finding. Conductor rationale stays
+separate. Before dispatch, before fixer edits and before landing fetch the live comments and
+compare all three copies; absent/edited/mismatched identity halts, never silently relabels a fix.
+
+### Repair ledger and comparison-ref invariants
+
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch all source comments live and compare exact bytes even when no fixer is dispatched; landing checks every row, not only assigned IDs.
+
+Initial review preparation creates `git branch "review-base-NN" "$MAIN"` (NN is the PR number), refusing an existing ref, and records ownership; cleanup removes exactly that recorded ref after jobs join. Focused preparation/cleanup uses its recorded unique `BASE` instead. Neither `codex exec` nor dedicated `codex review` mode creates or owns these refs implicitly. The exec adapter uses the assembled prompt/artifact protocol, not dedicated review mode.
+
+The API adapter refuses top-level `config.dailyCap` before provider invocation because it has no spend ledger; choose an explicitly uncapped review config or a CLI slot, never silently strip the cap. Finding indexing supports plain `F<n> — SEVERITY` and `[P<n>]` lines in addition to ATX headings. Recognizable unsupported findings fail closed rather than silently disappearing; fenced and quoted examples remain excluded.

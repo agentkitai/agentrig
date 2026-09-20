@@ -23,7 +23,7 @@ it("accepts named CLI bindings and absent declaration", () => {
   expect(parse({})).not.toHaveProperty("reviewers");
 });
 const read = (p: string) => readFileSync(new URL(`../../../${p}`, import.meta.url), "utf8");
-for (const skill of ["topic", "ship", "review", "land", "dogfood"]) {
+for (const skill of ["topic", "ship", "review", "land", "dogfood", "arbiter"]) {
   it(`${skill} uses declared slots and no vendor literals`, () => {
     const text = read(`.agentrig/skills/${skill}/SKILL.md`);
     expect(text).not.toMatch(/claude|codex|opus|gpt-\d/i);
@@ -93,4 +93,7 @@ it("standalone dogfood delegates the entire slot lifecycle without fixed launch/
   const flow = text.split("## 8.")[1]!.split("## 9.")[0]!;
   for (const phrase of ["Zero slots", "One slot", "Two slots", "API", "topic §2 step 4", "validated", "Review scratch cleanup"]) expect(flow).toContain(phrase);
   expect(text).not.toMatch(/review pair|initial pair|both reviews|both trees|CODEX_WT|conductor-trio/);
+});
+it("M-raw-prototype-key: rejects own __proto__ before record normalization", () => {
+  expect(() => parseConfigText("fixture", '{"reviewers":{"__proto__":{"adapter":"codex-cli","model":"pin"}}}')).toThrow(/invalid reviewer slot name/);
 });

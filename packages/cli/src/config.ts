@@ -278,6 +278,12 @@ export function parseConfigText(path: string, text: string): ConfigFile {
     );
   }
 
+  // z.record omits __proto__; validate this own key before normalization can erase it.
+  if (raw !== null && typeof raw === "object" && "reviewers" in raw &&
+      raw.reviewers !== null && typeof raw.reviewers === "object" &&
+      Object.hasOwn(raw.reviewers, "__proto__")) {
+    throw new Error(`invalid config ${path} at reviewers.__proto__: invalid reviewer slot name`);
+  }
   const parsed = ConfigFileSchema.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];

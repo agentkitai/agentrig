@@ -64,7 +64,7 @@ for (const skill of ["ship", "topic"]) {
 }
 
 // Canonical composition/posting and #365 regressions live in post-review-comment.test.ts.
-const validator = (_reviewer: string) => section(read("topic"), "# Slot posting gate\n", "\n");
+const validator = () => section(read("topic"), "# Slot posting gate\n", "\n");
 
 // #368: enforce order in each local halt path, not by a distant delegation.
 for (const start of ["Persist-before-delete on incomplete review:"]) {
@@ -93,7 +93,7 @@ it("D1 slot lead-in prescribes only targeted shell substitution", () => {
   expect(lead).toContain("never edit the validator source");
 });
 it("D1 substitution touches only shell paths and expected head", () => {
-  const source = validator("codex");
+  const source = validator();
   const targeted = source.replaceAll("<PREFIX>", "/tmp/owned/codex").replace('"HEAD" >', `"${"a".repeat(40)}" >`);
   expect(targeted.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
 });

@@ -27,14 +27,53 @@ Record `declared checks: none`; land fallback is exact-head CI plus human merge 
 not a fabricated local pass. Missing CI or authorization cannot be waved through.
 
 The independent conductor runs declared checks on the exact review head and must be
-GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
+GREEN BEFORE launching any declared reviewer (and before a focused delta reviewer). Give declared
 reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
 contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
 They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
-For empty steps give reviewers the explicit none receipt. Keep the two independent code
+For empty steps give reviewers the explicit none receipt. Keep all declared independent code
 reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
 
 
+
+## Initial full review heading contract
+
+Resolve the project's declared reviewer slots from `.agentrig/config.json` at the PR head,
+not home config or runtime provider defaults. Missing `reviewers` or `{}` means zero slots.
+Config declares 0, 1 or 2 named slots, each with an adapter id and a pinned model; no check capability flag.
+Validate config before dispatch with `parseConfigText`; never replace project pins from local preferences.
+Use `scripts/reviewer-adapters.mjs` for CLI command templates, model extraction and failed/empty-run detection.
+An `api:<name>` adapter references the existing `providers.<name>` entry, whose model must equal
+the slot's pinned model; it duplicates no endpoints, credentials or routing. See shipping policy §3.
+
+Each declared slot's initial comment must start with:
+`## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Substitute the slot name, asserted model, full reviewed PR head SHA and full origin/main SHA.
+The initial heading model must equal the slot's pinned model. A different model makes this a
+missing required initial review, not a receipt. Require the complete heading, not just a prefix
+or SHA in the body. Post with `scripts/post-review-comment.mjs` using the slot name and the
+reviewed config path; never compose an alternate heading inline. Persist per-adapter provenance
+(launch/provider entry, model assertion source, start/end, exit, head/main and worktree) with the verdict.
+Never infer the asserted model from reviewer prose. Truncation, failed runs, ambiguous assertion,
+empty output or pin mismatch are not completed reviews. Retry once with fresh artifacts, then halt.
+
+For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.
+
+This is the code-review gate the arbiter must preserve, not an instruction to launch code
+reviewers from arbitration. Return only the arbiter verdict; never fabricate a reviewer receipt.
+
+With zero slots skip external reviews and record `External review: none declared` in the ledger:
+builder → declared checks → exact-head CI → land, subject to authorization and all other gates.
+With zero slots use the author’s named check receipts; no conductor-review preparation is required.
+With one slot launch only it; that same slot is the focused-delta reviewer. With two slots launch
+both independently and use one independent focused-delta reviewer for material repairs.
+Land requires only declared headings, and compares each asserted model against that slot's pin.
+Reviewers share no context with the builder and should differ by vendor or at least model.
+The independent conductor's same-head declared checks must be GREEN BEFORE launching any reviewer;
+pass named receipts as inputs, never builder reasoning. For empty steps pass the explicit none receipt.
+Reviewers judge code only; reviewers do NOT run checks, bootstrap or preflight. Optional reviewer-owned
+probes are evidence for a finding, not a substitute for conductor proof. Hosted CI overlaps reviews
+and is required only at landing. Changed heads invalidate prior same-head check receipts.
 
 # Arbiter flow — a second agent decides whether a change to the contract stands
 

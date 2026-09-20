@@ -13,7 +13,8 @@ function run(body: string, program = source) {
     return spawnSync(process.execPath, ["-e", program, input, head], { env: { ...process.env, GIT_TRACE2_EVENT: "0" } }).status;
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
-for (const slot of ["Claude Code", "Codex"]) {
+{
+  const slot = "shared slot gate";
   it.each(["Reviewed head <SHA>", "Reviewed head prose", "head HEAD", "head OLD", "head NEW", 'Quoted "Reviewed head <SHA>" and "Reviewed head prose"', `head ${"a".repeat(41)}`, `head ${stale}z`, "reviewed abcdef", "headSHAdeadbeef", "head SHAdeadbeef", "revieweddeadbeef", `inline \`Reviewed head ${stale}\``, `\`\`Reviewed head ${stale} and \`nested\` \`\``, `\`\`\`text\nReviewed head ${stale}\n\`\`\``, `~~~text\nReviewed head ${stale}\n~~~`])(`${slot} ignores nonclaims/code: %s`, text => {
     expect(run(first + text + "\nVERDICT: PASS")).toBe(0);
   });
@@ -59,4 +60,14 @@ it("kills deletion of the prompt requirement even while the posting gate retains
   const mutant = topic.replace(firstLineInstruction, "Report the exact head SHA you reviewed");
   expect(mutant).not.toBe(topic);
   expect(() => checkPromptPropagation(mutant)).toThrow();
+});
+it("M-cross-paragraph-mask: unmatched inline opener cannot hide stale claim in second paragraph", () => {
+  expect(run(first + `Unmatched inline \` opener\n\nReviewed head: ${stale}\nclosing \`\nVERDICT: PASS`)).toBe(2);
+  expect(run(first + `valid \`multiline\nReviewed head: ${stale}\`\nPASS`)).toBe(0);
+});
+it("M-focused-first-line: focused dispatch explicitly carries the own first-line claim", () => {
+  const check = (text: string) => expect(text.split("- **Cover the delta**")[1]!.split("- **Converge:**")[0]!.replace(/\s+/g, " ")).toContain(firstLineInstruction);
+  check(topic);
+  const section = topic.indexOf("- **Cover the delta**");
+  expect(() => check(topic.slice(0, section) + topic.slice(section).replace(firstLineInstruction, "REMOVED"))).toThrow();
 });

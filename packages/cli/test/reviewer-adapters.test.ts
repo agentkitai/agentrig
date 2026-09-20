@@ -1,3 +1,4 @@
+import { parseConfigText } from "../src/config.js";
 import { expect, it } from "vitest";
 // @ts-expect-error skill-side ESM adapter, intentionally outside the compiled CLI
 import { cliAdapters, validateResult, runApi } from "../../../scripts/reviewer-adapters.mjs";
@@ -81,4 +82,10 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     expect(existsSync(`${failed}.provenance.json`)).toBe(false);
     expect(readFileSync(`${failed}.stdout`, "utf8")).toBe("partial");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+it("M-cap-bypass: capped API entries fail before provider construction with an actionable diagnostic", async () => {
+  let constructed = false;
+  const config = parseConfigText("fixture", JSON.stringify({ dailyCap: "5", providers: { capped: { provider: "openai", model: "pinned" } } }));
+  await expect(runApi(config, { adapter: "api:capped", model: "pinned" }, "bundle", () => { constructed = true; throw new Error("factory reached"); })).rejects.toThrow(/dailyCap.*not supported.*uncapped/i);
+  expect(constructed).toBe(false);
 });

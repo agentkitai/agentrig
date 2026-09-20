@@ -1,5 +1,14 @@
 # Status
 
+## PR #429 repair round 1 — assigned C1/C2/C3/C7
+
+API reviewer cap refusal checks schema-valid top-level `config.dailyCap` before provider construction.
+Live finding indexing includes Codex plain `F<n> — SEVERITY` and priority headings and refuses recognizable omissions while retaining fence/quote and identity guards.
+Every review-disposition row (including deferred/advisory) requires live verbatim heading plus anchor independently of fixer dispatch.
+Topic initial preparation explicitly creates/records its owned `review-base-NN`; focused `BASE` and cleanup ownership remain symmetric, independent of Codex exec vs dedicated review mode.
+Fail-first regressions cover each assigned blocker; named deletion/reversion mutants and exact-head declared-check receipts are recorded in the PR body. Other findings remain deferred/advisory, not repaired here.
+
+
 ## SHA-claim validator false positive (#424)
 
 The shared topic initial-review posting gate for Claude Code and Codex requires the
@@ -21,6 +30,20 @@ line `Reviewed head: <actual review SHA>` with the full reviewed SHA, before any
 heading or formatting. Fail-first instruction coverage pins propagation before
 adapter dispatch and rejects deletion. The first-line validator is unchanged; C2
 remains deferred to #426.
+
+## Reviewer-slot residuals (#415–422, #426–427) — implemented, pending review
+
+- Arbiter now preserves declared zero/one/two slots and same-head check receipts. Topic defines
+  the exact-head built adapter checkout and explicitly repeats the first-line claim in focused
+  dispatch; inline SHA masking cannot cross blank paragraphs.
+- Raw reviewer `__proto__` is rejected before zod normalization. API dailyCap fails explicitly
+  before provider construction rather than bypassing accounting. Removed obsolete test
+  ternaries/duplicate validator runs and corrected review grammar/base-ref ownership.
+- Ship/topic ledger, receipt and fixer tasks retain verbatim finding headings and comment
+  anchors; dispatch, fixer precondition and land fetch live comments and halt on mismatch.
+  A live-comment finding-index helper preserves headings, including PR #414's numbered form.
+- Explicit issue-batch follow-up, not a newly assigned ROADMAP row. No event schema changes.
+  Fail-first tests, named mutants and exact-head declared-check receipts are in the PR body.
 
 ## Declared reviewer slots (#396)
 

@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+// @ts-expect-error standalone ESM review helper
+import { findingIndex } from "../../../scripts/review-finding-index.mjs";
+const url = "https://github.com/agentkitai/agentrig/pull/414#issuecomment-5749759933";
+describe("live posted finding index", () => {
+  it("M-paraphrased-heading: retains exact heading bytes and source comment anchor", () => {
+    expect(findingIndex(url, { html_url: url, body: "## External review — slot\n### HIGH: Preserve `Exact`  heading\nText\n### LOW: Second\n" })).toEqual([
+      { comment: url, heading: "### HIGH: Preserve `Exact`  heading" },
+      { comment: url, heading: "### LOW: Second" },
+    ]);
+  });
+  it("M-quoted-finding: ignores fenced or quoted examples, not real findings", () => {
+    expect(findingIndex(url, { html_url: url, body: "```md\n### HIGH: Fake\n```\n> ### LOW: Quote\n### MEDIUM: Real" })).toEqual([{ comment: url, heading: "### MEDIUM: Real" }]);
+  });
+  it("M-legacy-numbered-heading: indexes the posted PR 414 heading form verbatim", () => {
+    const heading = "### F7 — MEDIUM — a `__proto__` slot name silently becomes zero slots instead of being rejected";
+    expect(findingIndex(url, { html_url: url, body: heading })).toEqual([{ comment: url, heading }]);
+  });
+  it("M-comment-mismatch: refuses a mismatched live comment", () => {
+    expect(() => findingIndex(url, { html_url: url + "0", body: "### HIGH: Title" })).toThrow(/identity/);
+    expect(() => findingIndex(url, { html_url: url, body: null })).toThrow(/body/);
+    expect(() => findingIndex("https://evil.example/" , { html_url: url, body: "" })).toThrow(/URL/);
+  });
+});
+
+it("M-non-ATX-omission: indexes the live PR414 Codex finding and priority forms", () => {
+  const headings = [
+    "F1 — HIGH, blocking — Standalone `dogfood` still hard-codes the old two-reviewer flow, so valid declared-slot configs fail or are ignored.",
+    "[P1] Preserve this exact priority title",
+    "### [P2] Preserve ATX priority too",
+  ];
+  const codexUrl = "https://github.com/agentkitai/agentrig/pull/414#issuecomment-5749760055";
+  expect(findingIndex(codexUrl, { html_url: codexUrl, body: "**Findings**\n\n" + headings.join("\n\n") })).toEqual(headings.map(heading => ({ comment: codexUrl, heading })));
+});
+it("M-recognizable-omission: refuses unsupported recognizable findings even after a valid finding", () => {
+  for (const body of ["F2: HIGH — unsupported numbered finding", "[P4] Unknown priority", "### HIGH: indexed\nF2: LOW — omitted"]) {
+    expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+  }
+});
+it("clean verdict and fenced/quoted non-ATX examples are not omissions", () => {
+  expect(findingIndex(url, { html_url: url, body: "VERDICT: PASS\nNo findings.\n~~~md\nF1: HIGH example\n~~~\n> [P4] quoted" })).toEqual([]);
+});
