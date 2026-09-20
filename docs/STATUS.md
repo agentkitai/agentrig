@@ -1,5 +1,18 @@
 # Status
 
+## Declared project checks (#395)
+
+Project config now validates ordered named checks, required bootstrap, optional preflight and
+optional counts-parser metadata, with whole-declaration project-profile overrides. A read-only
+CLI package module resolves an explicit project root; execution stays in skills. AgentRig
+supplies its own declaration. Empty steps means no local bootstrap/preflight/checks and an
+explicit none receipt; landing requires exact-head CI and human authorization. The four scoped
+skills override the inherited reviewer-trio rule: independent conductor proof precedes reviewer
+launch, reviewers inspect code/targeted mutants without rerunning full checks. Tests cover
+Python/Rust/Go, invalid declarations, profile replacement, policy wording and an external
+fixture executed by the test. Counts parsing is a caller metadata hint, not a new parser or
+workflow engine. No roadmap row is advanced by this issue-only change.
+
 ## Windows evalset hook budget (#405)
 
 Current roadmap row: user-directed Windows hookTimeout regression guard (#407),

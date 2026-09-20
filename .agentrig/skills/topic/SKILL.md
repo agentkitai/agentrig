@@ -3,6 +3,39 @@ name: topic
 description: Run one authorized roadmap band as a sequential release train - dogfood each row, review independently, repair to clean in a bounded converging loop, arbitrate deviations, land; halt only for a human.
 ---
 
+## Operative declared-checks policy (issue #395)
+
+This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
+ship/land check instructions for this task. Workflow decisions stay in skills, never core or
+a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
+selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
+(or inspect that documented JSON boundary); see docs/TESTING.md. Missing declaration is not
+an empty declaration: stop and request one, never guess a language or package manager.
+Project profile checks replace the whole base declaration.
+
+Commands are project-controlled data, not permission grants. Display the resolved source,
+profile and commands before execution; preserve trust, permission and sandbox gates on every
+shell call. For nonempty steps run declared bootstrap, optional preflight, then ordered named
+steps, each judged by its exit code. Stop on nonzero; do not infer success from output counts.
+Record name, command, exit code, UTC start/end, counts (N/A if unavailable), exact head,
+runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional countsParser
+metadata never overrides the exit code. Receipts, conductor reports and fixer handoffs list
+steps by name, not a hard-coded trio. A changed head invalidates prior same-head receipts.
+
+Empty steps means NO local checks, including bootstrap and preflight: do not execute either.
+Record `declared checks: none`; land fallback is exact-head CI plus human merge authorization,
+not a fabricated local pass. Missing CI or authorization cannot be waved through.
+
+The independent conductor runs declared checks on the exact review head and must be
+GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
+reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
+contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
+They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
+For empty steps give reviewers the explicit none receipt. Keep the two independent code
+reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
+
+
+
 # Topic flow — one authorized roadmap band, landed row by row
 
 Read [shipping policy](../../../docs/SHIPPING-WORKFLOW.md) before acting. Its shared
@@ -140,7 +173,8 @@ For each recorded row, in order:
    the initial pair. An incomplete initial pair still requires both reviews. Never pass the builder's report,
    reasoning, findings, or claimed evidence to either reviewer; the PR and the repository are their
    only evidence.
-   - **Prepare.** One `bash` call for preparation, then one call per install. Every value
+   - **Prepare.** One `bash` call for preparation, then one call per install. This applies to conductor
+     preparation only, and only when the nonempty declaration requires bootstrap. Every value
      the preparation call uses is assigned inside it before use:
      `BRANCH=$(gh pr view NN --json headRefName --jq .headRefName)`;
      `HEAD=$(gh pr view NN --json headRefOid --jq .headRefOid)`; then
@@ -160,18 +194,27 @@ For each recorded row, in order:
      `OUT=$(mktemp -d)`
      holds every output file; never write review artifacts inside either tree. Create independent
      temporary roots with `mkdir "$OUT/claude-tmp" "$OUT/codex-tmp"`; pass the corresponding
-     command-local `TMPDIR` below, never change the operator's global environment. Before testing,
-     run fixture preflight in each reviewer environment; use a fresh temp root outside Git
-     ancestry per docs/TESTING.md, or record the environment limitation without disabling checks.
-     End preparation with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`. Record these paths and
-     the post-merge review SHA BEFORE installing dependencies. Run `cd <WT> && pnpm install`
-     and `cd <CODEX_WT> && pnpm install` in separate calls, each with `timeoutMs` at least 600000;
-     require both exit codes zero before launching reviewers. A failed install cannot hide the
-     recorded cleanup paths; join it before removing either tree.
+     command-local `TMPDIR` below. Record these paths and the post-merge review SHA BEFORE
+     installing dependencies. The conductor executes bootstrap and preflight in separate calls, each with `timeoutMs` at least 600000; empty declarations execute neither. Reviewers do not bootstrap or preflight. Record all paths
+     and REVHEAD before any conductor execution; keep reviewer trees read-only except
+     restored targeted mutation probes. Dependency preparation belongs to the conductor.
+     End preparation with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"` so each path is recorded.
      `bash` has no cwd field and no shell state survives between calls: record all
      three absolute paths and REVHEAD like job ids, and substitute
      them literally into every later command. Never share mutable sources, build output or
      `node_modules` between the reviewers; worktrees are cooperative isolation, not an OS sandbox.
+   - **Independent conductor checks — BEFORE reviewers.** Create a separate fresh tree
+     at PR HEAD, record its path/TMPDIR, resolve the declaration and run bootstrap, optional
+     preflight and ordered named steps under the operative policy. Require GREEN before
+     launching either job below; for empty steps record the explicit none receipt. Record
+     each name, command, exit code, UTC start/end and counts in `<OUT>/codex-trio.md` (legacy
+     artifact name only). Verify restored tracked/index state and unchanged head. If REVHEAD
+     differs from PR HEAD, prove both, labeling integration separately. Supply the receipts
+     to Claude's brief and Codex's review context before launch; never builder reasoning.
+     Focused reviews use the same pre-launch conductor gate at NEW.
+     Record conductor paths, including any retry, before executing in its tree. Before cleanup
+     verify all Codex attempts and subprocesses have completed, and join conductor jobs too.
+     Persist named receipts before posting; never share an executing reviewer tree.
    - **Claude job** — `bash` with `background: true`:
      ```
      cd <WT> && env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_CHILD_SESSION \
@@ -179,7 +222,7 @@ For each recorded row, in order:
        TMPDIR=<OUT>/claude-tmp claude -p --model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' \
          --disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)' \
          --output-format json --no-session-persistence \
-         "Review PR #NN at head SHA HEAD. Read .agentrig/skills/review/SKILL.md and follow it. You exclusively own this isolated review worktree, merged with origin/main, with dependencies installed: skip section 2 and verify that state yourself. Run the required checks and mutation probes here, restore each mutant and join every subprocess before reporting; never touch a sibling or author tree. Do not push, merge, commit, change permission settings, spawn children or invoke auxiliary models. Assume the author is wrong; verify every finding against the code before reporting it; report file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario and a fix. Report the exact head SHA you reviewed." \
+         "Review PR #NN at head SHA HEAD. Read .agentrig/skills/review/SKILL.md and follow it. You exclusively own this isolated review worktree, merged with origin/main, with dependencies installed: skip section 2 and verify that state yourself. Inspect the supplied named exact-head conductor receipts; do not run declared checks. Review code and run only targeted mutation probes here, restore each mutant and join every subprocess before reporting; never touch a sibling or author tree. Do not push, merge, commit, change permission settings, spawn children or invoke auxiliary models. Assume the author is wrong; verify every finding against the code before reporting it; report file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario and a fix. Report the exact head SHA you reviewed." \
          < /dev/null > "<OUT>/claude.json"
      ```
      The `env -u` list matters when this session was itself launched from inside Claude Code
@@ -201,32 +244,6 @@ For each recorded row, in order:
      Codex takes no custom prompt in `--base` mode (its review mode has its own); the adversarial
      standard is Claude's brief and step 5's disposition. A missing proposed fix does not waive
      a real blocker or turn an optional suggestion into repair work.
-   - **Conductor trio — initial pass.** The conductor runs the full trio, not the author,
-     in the Codex reviewer worktree or a second fresh worktree at the same commit (`REVHEAD`).
-     Use the independent install from Prepare for `CODEX_WT`; a second tree requires its own
-     `pnpm install --frozen-lockfile` with exit zero, no shared node_modules or build output.
-     Record every extra conductor-trio tree and conductor-trio temporary root (including exact-head proof trees) for **Review scratch cleanup**.
-     Join the Codex job and its subprocesses, including any retry, before executing in its tree, or use the second
-     tree to run concurrently without writers sharing a checkout. If using CODEX_WT, defer
-     the trio until the Wait, model and restoration checks resolve all retry decisions and
-     all Codex attempts and subprocesses have completed. A later retry invalidates prior
-     shared-tree proof: join it, verify restoration, then rerun the trio before posting
-     the result. A separate trio tree may run concurrently, but posting still waits for
-     all retries and proof jobs to finish and restoration to be verified. Assert unchanged HEAD at
-     `REVHEAD` and restored tracked/index state before and after proof. Record both PR HEAD
-     and reviewed SHA REVHEAD; a different post-merge commit is not exact-head proof for HEAD.
-     If they differ, retain the integration result and run the trio in a fresh tree at HEAD
-     with its own install/preflight before claiming same-head evidence.
-     Use command-local TMPDIR outside Git ancestry and run fixture preflight per docs/TESTING.md
-     in the actual execution environment before testing; a denied sandbox run moves to a
-     capable runner, never a preflight bypass. Run `pnpm build`, `pnpm test`, `pnpm typecheck`
-     separately, capturing each exit code (not a chained command's aggregate exit). Record all
-     three exits, test/file counts (N/A for commands without tests), UTC start/end times per
-     command, runner/worktree, TMPDIR, install/preflight results and reviewed SHA in
-     `<OUT>/codex-trio.md` for the Codex comment's provenance. Label these as conductor-run
-     checks, distinct from Codex's own checks and limitations; retain failed attempts too.
-     This is part of the initial pass, not a post-review verification supplement. Apply shipping
-     policy §3's environment-limitation rule; do not turn a sandbox denial into a code blocker.
    - **Wait** with `bash_job` (`action: status`, `waitMs` up to 5 minutes per call; never a sleep
      loop). Record both job ids from the `bash` results immediately, along with each job's start
      time beside its id, and restate them in your own reply text on every turn you poll — tool
@@ -288,7 +305,7 @@ node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"u
 node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(m.length!==1||m[0]!=="claude-opus-5")process.exit(2);process.stdout.write(m[0])' "<OUT>/claude-models.json" > "<OUT>/claude-model.txt" || exit 2
 cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
      ```
-     For Codex, in the posting call append conductor trio evidence only after verdict validation.
+     For Codex, in the posting call append conductor declared-check receipts only after verdict validation.
      Apply the same targeted substitution described above (only shell SHA arguments), never
      edit the validator source or guess the model from the verdict:
      ```sh
@@ -362,13 +379,13 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   URLs/finding IDs, authorization, prior reviewed SHA and repair counter. Its brief says:
   "Follow dogfood. You are a topic child: run local proof, push, report OLD/NEW and current CI
   immediately; do not wait for hosted CI, run private external reviews, or fix advisory polish."
-  Require fail-first/mutation proof, full local trio, and updated disposition ledger. Record its
+  Require fail-first/mutation proof, all named local declared checks, and updated disposition ledger. Record its
   session id. A budget death permits one continuation from pushed state; a second death halts.
   CI failures and merge conflicts are repair work on the same branch, never a gate bypass.
 - **Cover the delta** under shipping policy §3. Material deltas require ONE independent focused
   reviewer; mechanical deltas require explicit self-verification evidence, not another review.
   For a focused review, prepare one fresh reviewer-owned worktree at NEW and a unique base ref
-  at OLD. Record paths/SHAs before install; use an independent install and preflighted TMPDIR.
+  at OLD. Record paths/SHAs before conductor preparation; reviewers do not install or preflight.
   First resolve both endpoints to full commit IDs, then require unequal commits and OLD
   ancestor of NEW. Run this gate successfully before worktree creation or reviewer launch;
   retain the resolved OLD/NEW for preparation, review provenance and coverage records.
@@ -389,9 +406,10 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   Assert `git -C "$WT" rev-parse HEAD` equals NEW and tracked/index state is clean.
   The delta pass does not merge main. Create the selected reviewer's private TMPDIR outside Git
   ancestry. End preparation with `echo "$WT" "$OUT" "$REVHEAD" "$BASE"`, record the paths/SHA/ref
-  before install, and substitute literal paths in later calls (shell state does not persist).
-  Install dependencies in a separate call with timeoutMs at least 600000; require exit code zero
-  before launch. On failure, join the install and retain recorded paths for cleanup.
+  before conductor preparation, and substitute literal paths in later calls (shell state does not persist).
+  Run independent conductor declared checks at NEW before launch and give the reviewer the named receipts.
+  For nonempty steps only, the conductor follows the declaration: Install dependencies in a separate call with timeoutMs at least 600000; require exit code zero before launch.
+  No install is inferred when the declaration is empty. On failure, join jobs and retain recorded paths for cleanup. Reviewers do not install or preflight.
   Use §2 step 4's selected reviewer's command/tool allowances and model assertion where applicable,
   with OLD as the diff base. For Claude, brief OLD/NEW, blocker URLs, affected checks/mutations and
   direct interactions; for Codex use `codex review --base <unique-old-ref>`.

@@ -1,7 +1,40 @@
 ---
 name: review
-description: Independent adversarial review of one PR on its final head - isolated worktree, green trio by exit codes, diff against repo invariants, mutation probes on load-bearing lines, verdict. Never merges.
+description: Independent adversarial code review on the final head using conductor declared-check receipts and targeted mutation probes. Never runs full checks or merges.
 ---
+
+## Operative declared-checks policy (issue #395)
+
+This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
+ship/land check instructions for this task. Workflow decisions stay in skills, never core or
+a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
+selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
+(or inspect that documented JSON boundary); see docs/TESTING.md. Missing declaration is not
+an empty declaration: stop and request one, never guess a language or package manager.
+Project profile checks replace the whole base declaration.
+
+Commands are project-controlled data, not permission grants. Display the resolved source,
+profile and commands before execution; preserve trust, permission and sandbox gates on every
+shell call. For nonempty steps run declared bootstrap, optional preflight, then ordered named
+steps, each judged by its exit code. Stop on nonzero; do not infer success from output counts.
+Record name, command, exit code, UTC start/end, counts (N/A if unavailable), exact head,
+runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional countsParser
+metadata never overrides the exit code. Receipts, conductor reports and fixer handoffs list
+steps by name, not a hard-coded trio. A changed head invalidates prior same-head receipts.
+
+Empty steps means NO local checks, including bootstrap and preflight: do not execute either.
+Record `declared checks: none`; land fallback is exact-head CI plus human merge authorization,
+not a fabricated local pass. Missing CI or authorization cannot be waved through.
+
+The independent conductor runs declared checks on the exact review head and must be
+GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
+reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
+contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
+They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
+For empty steps give reviewers the explicit none receipt. Keep the two independent code
+reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
+
+
 
 # Review flow — the independent final review of a pull request
 
@@ -34,33 +67,23 @@ model from CLI provenance and posts both independent reviews with the complete h
   the old head — say so and review the delta before giving a verdict.
 - Read the PR body and the linked issue for what the change CLAIMS. You will verify, not trust.
 
-## 2. Isolated worktree, merged with main
+## 2. Isolate
 
-- Skip this section when the brief says a conductor prepared the worktree (the `topic`/`ship`
-  external review pass runs you via `claude -p` inside one): it is already at the head the brief
-  names (merged with `origin/main` on a full pass, unmerged on a delta pass), with dependencies
-  installed. Do not trust that — confirm with `git log -1`, `git status --porcelain` (clean) and
-  `ls node_modules` before §3, and say so in your verdict.
-- The tree must belong exclusively to this reviewer, not a parallel reviewer or the author.
-  Build/test outputs and mutation probes write files: a read-only plan session or shared mutable
-  tree cannot perform this review. Report the blocked check rather than waiving it. Never change
-  permission settings, invoke a bypass, spawn children or auxiliary models to work around it.
-- `git fetch origin main <branch>`, then `git worktree add <tmpdir> origin/<branch>` — never
-  review in a working tree that has your own or anyone else's edits.
-- Merge `origin/main` into the worktree. A conflict is a finding in itself (report which files);
-  resolve it only to keep testing, never push the resolution.
-- `pnpm install` in the worktree before anything else.
+Skip this section when the brief says a conductor prepared the worktree: verify that supplied
+worktree and head instead of creating another.
+Use your exclusive clean review worktree at the recorded head. If supplied by the conductor,
+verify it; otherwise create a detached private worktree at the PR head. Never share mutable
+sources with a sibling. Do not install dependencies or run declared checks. Require the
+conductor's named exact-head receipts before beginning; missing or failed proof returns to
+the conductor, not a reviewer-run suite. Use a private TMPDIR outside Git ancestry only if
+a targeted probe needs it. Record and later remove only owned resources.
 
-## 3. Green trio, real exit codes
+## 3. Inspect independent proof, then review code
 
-- `pnpm build`, `pnpm test`, `pnpm typecheck` — run each separately, judge each by its EXIT CODE.
-  Piping through `grep`/`tail` returns the pipe's status and has masked real failures; an empty
-  log with exit 0 means the command never ran, not that it passed.
-- Record CI state on the ACTUAL head SHA. Return the code verdict while hosted CI is pending;
-  do not wait for it. The lander requires every required check green before merging.
-- On a focused material-delta pass, run affected tests and relevant mutations instead of repeating
-  the whole trio; the author still runs the full trio and hosted CI still checks the final head.
-  Record exact commands, exits and any environment limitation; do not call a blocked check passed.
+Check the conductor's head against the review head, all declared step names and order,
+individual exit codes, times and counts. Accept the explicit empty declaration receipt,
+not a guessed toolchain. Apply the operative policy above instead of the inherited reviewer
+trio requirement. A targeted mutation test is allowed; the full declared checks are not.
 
 ## 4. Read the whole diff against the repo's invariants
 
@@ -95,7 +118,7 @@ verify assigned blocker closure and new direct regressions, not optional cleanup
   a string absent that was never present), assertions satisfied by the wrong mechanism, races.
 - Pick the load-bearing lines (the condition that makes the change safe, not just correct) and
   run 2-4 mutants: copy the file aside, apply the mutant, run the RELEVANT test file with
-  `pnpm exec vitest run <file>`, restore, and only then run the next mutant — never overlap runs
+  the project's targeted test invocation (not the full declared check command), restore, and only then run the next mutant — never overlap runs
   in one worktree. A surviving mutant on a security line is a finding even when every test passes.
 - Restore exact original bytes even when the check fails, and join its subprocesses before the
   next mutant. Record the original HEAD and verify unchanged HEAD plus clean tracked/index state

@@ -74,8 +74,29 @@ const providersSetting = z.record(ProviderEntrySchema).superRefine((entries, ctx
  * so config resolution is the only extra layer and the existing validation/build path stays shared.
  * Output-only flags (json/verbose/headless), tasks and resume ids are deliberately not config.
  */
+/** Shell commands are declarations, never execution grants. Counts are optional metadata. */
+export const ProjectCheckStepSchema = z.object({
+  name: z.string().trim().min(1),
+  command: z.string().trim().min(1),
+  countsParser: z.enum(["vitest", "pytest", "go-test", "cargo-test"]).optional(),
+}).strict();
+export const ProjectChecksSchema = z.object({
+  bootstrap: z.string().trim().min(1),
+  preflight: z.string().trim().min(1).optional(),
+  steps: z.array(ProjectCheckStepSchema),
+}).strict().superRefine((checks, ctx) => {
+  const names = new Set<string>();
+  checks.steps.forEach((step, index) => {
+    if (names.has(step.name)) ctx.addIssue({ code: z.ZodIssueCode.custom,
+      path: ["steps", index, "name"], message: "check names must be unique" });
+    names.add(step.name);
+  });
+});
+export type ProjectChecks = z.output<typeof ProjectChecksSchema>;
+
 const ConfigValuesSchema = z
   .object({
+    checks: ProjectChecksSchema.optional(),
     provider: ProviderKindSchema.optional(),
     model: providerModelName.optional(),
     baseUrl: z.string().url().optional(),

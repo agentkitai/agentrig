@@ -24,7 +24,7 @@ const contracts = [
     ["   - **Provenance.", "Compose each comment body"],
     ["their receipts first.", "   - **Combine."],
   ].map(([start, end]) => ({ skill: "topic", start: start!, end: end!, issue: 341, phrases: ["conductor-trio tree", "conductor-trio temporary root"] })),
-  { skill: "topic", start: "   - **Conductor trio", end: "   - **Wait**", issue: 342, phrases: ["including any retry", "before executing in its tree", "before posting", "all Codex attempts and subprocesses have completed"] },
+  { skill: "topic", start: "   - **Independent conductor checks", end: "   - **Claude job**", issue: 342, phrases: ["including any retry", "before executing in its tree", "before posting", "all Codex attempts and subprocesses have completed"] },
   ...["dogfood", "ship"].map(skill => ({ skill, start: "## 1.", end: "## 2.", issue: 348, phrases: ["git worktree remove <path>", "then `git worktree prune`", "Never use bare directory deletion"] })),
   ...[
     ["## 7.", "## 8.", ["record the phase handoff in the PR body", "remove the owned builder worktree and proof TMPDIR", "before starting §8"]],

@@ -1,7 +1,40 @@
 ---
 name: dogfood
-description: Build and verify one change - fresh branch, green trio, PR; children hand off, standalone runs review and land only with explicit task merge authorization.
+description: Build and verify one change - fresh branch, green declared checks, PR; children hand off, standalone runs review and land only with explicit task merge authorization.
 ---
+
+## Operative declared-checks policy (issue #395)
+
+This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
+ship/land check instructions for this task. Workflow decisions stay in skills, never core or
+a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
+selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
+(or inspect that documented JSON boundary); see docs/TESTING.md. Missing declaration is not
+an empty declaration: stop and request one, never guess a language or package manager.
+Project profile checks replace the whole base declaration.
+
+Commands are project-controlled data, not permission grants. Display the resolved source,
+profile and commands before execution; preserve trust, permission and sandbox gates on every
+shell call. For nonempty steps run declared bootstrap, optional preflight, then ordered named
+steps, each judged by its exit code. Stop on nonzero; do not infer success from output counts.
+Record name, command, exit code, UTC start/end, counts (N/A if unavailable), exact head,
+runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional countsParser
+metadata never overrides the exit code. Receipts, conductor reports and fixer handoffs list
+steps by name, not a hard-coded trio. A changed head invalidates prior same-head receipts.
+
+Empty steps means NO local checks, including bootstrap and preflight: do not execute either.
+Record `declared checks: none`; land fallback is exact-head CI plus human merge authorization,
+not a fabricated local pass. Missing CI or authorization cannot be waved through.
+
+The independent conductor runs declared checks on the exact review head and must be
+GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
+reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
+contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
+They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
+For empty steps give reviewers the explicit none receipt. Keep the two independent code
+reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
+
+
 
 # Dogfood flow — how a change ships in this repository
 
@@ -104,18 +137,12 @@ dropped acceptance criterion, a wider scope), you may propose a change but never
 - `VERDICT: REJECT` means build the contract as written. If you believe that is infeasible, stop
   and report — the human decides, not you and not the arbiter.
 
-## 3. Prove it green — real exit codes, no exceptions
+## 3. Prove declared checks green
 
-```
-pnpm build && pnpm test && pnpm typecheck
-```
-
-- Judge each command by its EXIT CODE, never by grepping output for a pass line: piping through
-  `grep`/`tail` returns the pipe's status and has masked real failures twice. When capturing
-  output, run the command first, echo `$?`, then inspect the log.
-- Tests are network-free: fake `ModelProvider`, injected `fetchFn`, tmpdir fixtures wrapped in
-  `realpath` (macOS `/var` is a symlink — CI has a macOS leg and this exact mismatch has failed it).
-- Never skip, disable, or quarantine a test to get green.
+Apply the operative policy above: run bootstrap, optional preflight and ordered named steps
+with individual exit-code receipts. Never pipe away a failing exit. Run full suites in a
+background job with command-local TMPDIR outside Git ancestry; join all jobs before cleanup.
+Never skip, disable or quarantine tests to get green.
 
 ## 4. Tests carry the proof
 
@@ -164,8 +191,8 @@ into a private review loop the conductor cannot see: the R4a fixer spent thirty 
 minutes waiting on three rounds of self-arranged reviews and widened its diff on their findings,
 with the train's own external review pass still to come. A topic child's job ends at the push and the report.
 
-Follow topic §2 step 4's conductor trio and shipping policy §3: the independently run,
-same-head conductor checks supply the Codex trio evidence in the initial comment provenance.
+Follow topic §2 step 4's pre-launch conductor checks and this operative policy (overriding shipping policy §3): the independently run,
+same-head conductor checks supply the named checks evidence in the initial comment provenance.
 
 For initial posting, preserve topic's stale SHA/verdict validation gates and validated model
 files, then invoke these helper commands verbatim (replace only shell arguments NN, HEAD,
@@ -180,7 +207,7 @@ runs before `gh pr comment NN --body-file`; nonzero stops posting. Land gate unc
 
 The standalone dogfood author assumes the conductor role in fresh reviewer-owned trees;
 its author-tree proof is not independent evidence. Preserve each reviewer environment limitation
-and require the author's trio, the independent trio and exact-head CI green for landing.
+and require the author's declared checks, the independent declared checks and exact-head CI green for landing.
 Never halt solely because Codex cannot run the suite; actual failures and missing proof
 still follow the shared landing gates.
 
@@ -190,7 +217,7 @@ outside the removed builder tree using fresh reviewer-owned worktrees.
 Start both with `bash` `background: true` and poll with `bash_job` using `waitMs` (never a sleep
 loop, never a foreground command that a timeout can kill):
 
-Prepare separate reviewer-owned worktrees at the recorded PR head, with independent installs,
+Prepare separate reviewer-owned worktrees at the recorded PR head, with conductor-prepared dependencies,
 build outputs and command-local TMPDIRs, as in topic §2 step 4. Never run a mutation probe in
 the author's tree or a tree another reviewer is reading. Keep outputs outside both trees;
 join both jobs and their subprocesses and verify unchanged HEADs and restored tracked/index
@@ -231,12 +258,12 @@ round. Record advisory followups at the end of the roadmap when useful. Do not r
 as advisory. Record every finding's disposition and evidence in the PR body.
 
 For every repair, attach the existing branch in an owned worktree per §1.
-Batch blocking fixes with fail-first proof and meaningful mutations, re-run the full green trio,
+Batch blocking fixes with fail-first proof and meaningful mutations, re-run the full green declared checks,
 push, record a new phase handoff in the PR body, and repeat builder worktree and proof TMPDIR cleanup
 under §1 before resuming review; report OLD/NEW immediately. Do not add deferred polish to the batch. The conductor (or
 standalone author) classifies the whole delta: ONE independent focused review for material
 changes, self-verified evidence for mechanical changes. No per-commit full/dual review loop.
-Use topic §3's **Cover the delta** procedure for isolated preparation, installation, launch,
+Use topic §3's **Cover the delta** procedure for isolated preparation, conductor proof, launch,
 provenance and cleanup; the standalone author owns that procedure without becoming a topic train.
 Carry the initial pair and subsequent delta evidence through the current head. At most three
 repair rounds; unresolved blockers halt, never become landable just by filing issues.
@@ -257,5 +284,5 @@ Deferred non-blocking defects require issues; advisory suggestions do not.
   and report that merge authorization is still required. Tool permissions and YOLO are not human
   merge authorization; later revocation or narrowing wins.
 - When the supervisor's budget warning arrives, stop starting work: finish the current change,
-  run the trio, update STATUS, commit, push, open or update the PR. A pushed branch with an
+  run the declared checks, update STATUS, commit, push, open or update the PR. A pushed branch with an
   honest PR body beats a perfect uncommitted worktree.

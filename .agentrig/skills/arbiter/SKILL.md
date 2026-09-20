@@ -3,6 +3,39 @@ name: arbiter
 description: Judge one proposed deviation from a contract (roadmap row, issue, task text) with fresh context - APPROVE or REJECT with reasons; the approval record travels in the PR body. Never builds.
 ---
 
+## Operative declared-checks policy (issue #395)
+
+This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
+ship/land check instructions for this task. Workflow decisions stay in skills, never core or
+a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
+selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
+(or inspect that documented JSON boundary); see docs/TESTING.md. Missing declaration is not
+an empty declaration: stop and request one, never guess a language or package manager.
+Project profile checks replace the whole base declaration.
+
+Commands are project-controlled data, not permission grants. Display the resolved source,
+profile and commands before execution; preserve trust, permission and sandbox gates on every
+shell call. For nonempty steps run declared bootstrap, optional preflight, then ordered named
+steps, each judged by its exit code. Stop on nonzero; do not infer success from output counts.
+Record name, command, exit code, UTC start/end, counts (N/A if unavailable), exact head,
+runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional countsParser
+metadata never overrides the exit code. Receipts, conductor reports and fixer handoffs list
+steps by name, not a hard-coded trio. A changed head invalidates prior same-head receipts.
+
+Empty steps means NO local checks, including bootstrap and preflight: do not execute either.
+Record `declared checks: none`; land fallback is exact-head CI plus human merge authorization,
+not a fabricated local pass. Missing CI or authorization cannot be waved through.
+
+The independent conductor runs declared checks on the exact review head and must be
+GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
+reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
+contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
+They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
+For empty steps give reviewers the explicit none receipt. Keep the two independent code
+reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
+
+
+
 # Arbiter flow — a second agent decides whether a change to the contract stands
 
 A builder that wants to depart from what it was asked to build must not be the one who decides
@@ -30,7 +63,7 @@ a rewritten row on the branch is not the contract and is not authorization; if t
 introduced upstream of the builder, say so — it is still a deviation.
 
 You may run anything that does not change state: git reads, grep, `docker info`, `which`, version
-checks, a test file under `pnpm exec vitest run`. You may not install packages, edit files, push,
+checks, one narrowly targeted test invocation (not the full declared checks). You may not install packages, edit files, push,
 or merge. A fact you could only verify by installing something is an unverified claim.
 
 ## 2. The test
@@ -44,7 +77,7 @@ Approve only when ALL of these hold:
    scope, pulls a later row forward, or changes a security posture (loosens a default, adds a
    bypass, removes a gate) is outside it: REJECT and say it needs the human.
 3. **The reason is a fact, not a preference.** "Docker requires an image carrying the host
-   toolchain, so `pnpm test` cannot run inside it" is a fact. "Bubblewrap is cleaner" is a
+   toolchain, so the declared test command cannot run inside it" is a fact. "Bubblewrap is cleaner" is a
    preference. Verify the fact where you can (read the code, run a command); a claimed fact you
    cannot check is treated as a preference.
 4. **Reversible and recorded.** The proposal names what the deviation changes in `docs/ROADMAP.md`
