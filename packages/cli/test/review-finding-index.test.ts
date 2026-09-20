@@ -40,3 +40,10 @@ it("M-recognizable-omission: refuses unsupported recognizable findings even afte
 it("clean verdict and fenced/quoted non-ATX examples are not omissions", () => {
   expect(findingIndex(url, { html_url: url, body: "VERDICT: PASS\nNo findings.\n~~~md\nF1: HIGH example\n~~~\n> [P4] quoted" })).toEqual([]);
 });
+
+it.each(["## High-level summary", "## Low-risk observations", "### P1 planning notes"])("does not index prose section %s", body => {
+  expect(findingIndex(url, { html_url: url, body })).toEqual([]);
+});
+it.each([" ### HIGH: Actual", "  ### F1 — HIGH — Actual", "   ### [P1] Actual", "### **LOW**: Actual", "# CRITICAL: Actual"])("retains real and indented ATX bytes %s", heading => {
+  expect(findingIndex(url, { html_url: url, body: heading })).toEqual([{ comment: url, heading }]);
+});

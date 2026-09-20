@@ -7,6 +7,15 @@ are model-facing instructions, not a runtime enforcement mechanism.
 
 ## 1. CI and review are independent tracks
 
+`<REPO>` is the absolute path to a clean adapter checkout at the exact PR head, not the author tree or stale main checkout.
+Prepare it using `topic` §2 step 4's **Adapter checkout boundary**: record its literal path,
+HEAD and successful declared-build receipt (including `packages/cli/dist/config.js` and
+`provider.js`) before running helpers. The retained conductor-proof tree may supply it;
+keep it until all adapter/helper jobs join. Empty declared checks authorize no build;
+if required dist is unavailable, halt rather than run undeclared checks. Every `<REPO>`
+helper example below uses this same recorded checkout, never another worktree's output.
+
+
 Builders and fixers run the local green declared checks, fail-first regressions, and meaningful
 mutations before pushing. After opening/updating the PR, report its head and current
 CI state immediately; do not wait for hosted CI or run private external reviews.

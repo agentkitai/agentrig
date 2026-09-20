@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -12,7 +12,7 @@ afterEach(() => {
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "skill-text-"));
   owned.push(root);
-  mkdirSync(join(root, "dogfood"));
+  cpSync(new URL("../../../.agentrig/skills/", import.meta.url), root, { recursive: true });
   return root;
 }
 
@@ -25,7 +25,9 @@ it("normalizes CRLF and lone CR skill text from the entire-tree override", () =>
 });
 
 it("does not silently fall back to checkout skills when the override is incomplete", () => {
-  vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", fixture());
+  const root = fixture();
+  rmSync(join(root, "dogfood", "SKILL.md"));
+  vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
   expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(/ENOENT/);
 });
 
@@ -35,4 +37,20 @@ it("keeps non-skill document bytes and paths unchanged", () => {
   writeFileSync(path, "one\r\ntwo\r\n");
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
   expect(readSkillText(path)).toBe("one\r\ntwo\r\n");
+});
+
+it.each(["", " ", "\t"])("rejects a present-empty proof root %j", value => {
+  vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", value);
+  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(/empty/i);
+});
+it("rejects an incomplete tree even when the requested skill exists", () => {
+  const root = fixture();
+  rmSync(join(root, "topic"), { recursive: true });
+  vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
+  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow();
+});
+it("preserves generated SKILL.md raw bytes including line-ending-only edits", () => {
+  const path = join(fixture(), "SKILL.md");
+  writeFileSync(path, "one\r\ntwo\r");
+  expect(readSkillText(path)).toBe("one\r\ntwo\r");
 });

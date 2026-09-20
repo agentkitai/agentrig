@@ -1,5 +1,4 @@
-import { readSkillText } from "../../../test/skill-text.js";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -78,7 +77,7 @@ it.for([0, 900])("R6b emitted skill reaches actual CLI-built runtime only with c
     expect(applied.skillEmission!.status).toBe("applied");
     const name = applied.skillEmission!.proposals[0]!.name;
     const path = join(f.skills, name, "SKILL.md");
-    const emitted = await readSkillText(path, "utf8");
+    const emitted = await readFile(path, "utf8");
     expect(parseSkill(emitted, path)).not.toHaveProperty("trigger");
     const hinted = emitted.replace("metadata:\n", 'metadata:\n  agentrig-trigger: "When reviewing a release\\ncheck tests"\n');
     expect(parseSkill(hinted, path).trigger).toBe("When reviewing a release check tests");
@@ -93,7 +92,7 @@ it.for([0, 900])("R6b emitted skill reaches actual CLI-built runtime only with c
       provider: skillProvider(), limits: { maxCalls: 3 } }); dreams.push(reapply);
     expect(reapply.skillEmission!.status).toBe("refused");
     expect(reapply.skillEmission!.preserved).toHaveLength(1);
-    expect(await readSkillText(path, "utf8")).toBe(hinted);
+    expect(await readFile(path, "utf8")).toBe(hinted);
     for (const mode of ["default", "enabled", "disabled", "denied", "unapproved", "explicit"] as const) {
       signal.throwIfAborted();
       let turn = 0;

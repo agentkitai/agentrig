@@ -1,5 +1,17 @@
 # Status
 
+## Reviewer-slot residuals, second batch (#430–433, #436–439) — implemented, pending review
+
+Ship and shipping policy define the exact-head adapter checkout via topic preparation.
+Finding indexing uses explicit severity delimiters and preserves indented ATX bytes;
+large review posts prefer complete lines so boundary findings remain indexable.
+TESTING describes declared slots/checks including zero, Markdown-only LF attributes,
+and Windows editor/tooling tradeoffs. Skill-text enforcement follows function return
+paths and fs.promises namespaces with scope-bound taint. Empty/incomplete proof trees
+fail closed; generated SKILL.md fixtures retain raw-byte assertions.
+No product code or roadmap continuation changes. Local fail-first, mutation, CRLF
+and declared-check receipts are recorded in the PR; conductor review/CI remain pending.
+
 ## CRLF-safe skill text in tests (#428, #434) — implemented, pending review
 
 Shared test-only skill reader normalizes line endings and supports an entire-tree

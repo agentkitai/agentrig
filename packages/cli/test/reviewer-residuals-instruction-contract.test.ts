@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { readSkillText } from "../../../test/skill-text.js";
 import { expect, it } from "vitest";
 const read = (skill: string) => readSkillText(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
@@ -48,4 +49,35 @@ it("M-base-creation: topic explicitly creates and records the cleanup-owned base
   expect(() => check(preparation.replace(creation, "REMOVED"))).toThrow();
   expect(preparation).toContain("refuse an existing ref");
   expect(preparation).toContain("Record this exact ref as conductor-owned");
+});
+
+it("defines the exact-head adapter REPO checkout before ship examples and links topic", () => {
+  const ship = read("ship");
+  const policy = readFileSync(new URL("../../../docs/SHIPPING-WORKFLOW.md", import.meta.url), "utf8");
+  for (const text of [ship, policy]) {
+    expect(text).toMatch(/<REPO>[^\n]*exact PR head/i);
+    expect(text).toMatch(/topic[^\n]*§2 step 4/);
+    expect(text).toMatch(/not[^\n]*author[^\n]*main/i);
+  }
+  const topic = read("topic");
+  expect(topic).toMatch(/<REPO>[^\n]*exact PR head/i);
+});
+
+it("testing policy resolves named checks and zero reviewer slots", () => {
+  const policy = readFileSync(new URL("../../../docs/TESTING.md", import.meta.url), "utf8");
+  expect(policy).toMatch(/declared reviewer slots/);
+  expect(policy).toContain("External review: none declared");
+  expect(policy).toMatch(/zero[^\n]*slots/i);
+  expect(policy).toMatch(/resolved[^\n]*bootstrap/);
+  expect(policy).not.toContain("PRs list those checks and the two independent reviews");
+});
+
+it("pins Markdown-only LF policy and explains Windows tooling tradeoff", () => {
+  const policy = readFileSync(new URL("../../../docs/TESTING.md", import.meta.url), "utf8");
+  const attributes = readFileSync(new URL("../../../.gitattributes", import.meta.url), "utf8");
+  expect(attributes).toContain(".agentrig/skills/**/*.md text eol=lf");
+  expect(attributes).not.toContain(".agentrig/skills/** text eol=lf");
+  expect(policy).toMatch(/Windows[^\n]*editors/);
+  expect(policy).toMatch(/CRLF-only[^\n]*tooling/);
+  expect(policy).toMatch(/generated[^\n]*raw.byte/);
 });

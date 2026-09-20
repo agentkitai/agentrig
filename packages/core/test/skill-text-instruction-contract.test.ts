@@ -9,6 +9,12 @@ import ts from "typescript";
 // actual read calls rather than banning unrelated fixture I/O in the same file.
 function bypassesLoader(text: string): boolean {
   const source = ts.createSourceFile("test.ts", text, ts.ScriptTarget.Latest, true);
+  // Bind local identifiers so an unrelated fixture's `result` cannot inherit
+  // taint from another test's same-named local.
+  const host = ts.createCompilerHost({ noLib: true });
+  host.getSourceFile = name => name === "test.ts" ? source : undefined;
+  const checker = ts.createProgram(["test.ts"], { noLib: true }, host).getTypeChecker();
+  const symbol = (node: ts.Node) => checker.getSymbolAtLocation(node);
   const nodes: ts.Node[] = [];
   function visit(node: ts.Node) { nodes.push(node); ts.forEachChild(node, visit); }
   visit(source);
@@ -26,17 +32,28 @@ function bypassesLoader(text: string): boolean {
   // Most test files never mention skills; avoid walking their expression graph.
   if (!text.includes("SKILL.md") && !text.includes(".agentrig/skills")) return false;
   const functions = nodes.filter(node => ts.isFunctionDeclaration(node) || (ts.isVariableDeclaration(node) && node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))));
-  const tainted = new Set<string>();
+  const tainted = new Set<ts.Symbol | undefined>();
   function skill(node: ts.Node): boolean {
-    if (ts.isIdentifier(node) && tainted.has(node.text)) return true;
-    if ((ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) && /SKILL\.md|\.agentrig[\/\\]skills/.test(node.text)) return true;
+    if (ts.isIdentifier(node) && tainted.has(symbol(node))) return true;
+    if ((ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) && /\.agentrig[\/\\]skills/.test(node.text)) return true;
+    if (ts.isCallExpression(node) && node.arguments.some(arg => ts.isStringLiteralLike(arg) && arg.text === ".agentrig") && node.arguments.some(arg => ts.isStringLiteralLike(arg) && arg.text === "skills")) return true;
     return ts.forEachChild(node, child => skill(child) || undefined) ?? false;
   }
   let changed = true;
   while (changed) {
     const size = tainted.size;
     for (const node of nodes) {
-      if (ts.isVariableDeclaration(node) && node.initializer && skill(node.initializer) && ts.isIdentifier(node.name)) tainted.add(node.name.text);
+      if (ts.isVariableDeclaration(node) && node.initializer && skill(node.initializer) && ts.isIdentifier(node.name)) tainted.add(symbol(node.name));
+      if (ts.isFunctionDeclaration(node) && node.name && node.body) {
+        const returns: ts.Expression[] = [];
+        const collect = (child: ts.Node) => {
+          if (ts.isFunctionLike(child)) return;
+          if (ts.isReturnStatement(child) && child.expression) returns.push(child.expression);
+          ts.forEachChild(child, collect);
+        };
+        collect(node.body);
+        if (returns.some(skill)) tainted.add(symbol(node.name));
+      }
       if (ts.isCallExpression(node)) {
         for (const declaration of functions) {
           const fn = ts.isFunctionDeclaration(declaration) ? declaration
@@ -45,7 +62,7 @@ function bypassesLoader(text: string): boolean {
           if (!fn || name !== node.expression.getText(source)) continue;
           node.arguments.forEach((arg, index) => {
             const parameter = fn.parameters[index];
-            if (parameter && skill(arg) && ts.isIdentifier(parameter.name)) tainted.add(parameter.name.text);
+            if (parameter && skill(arg) && ts.isIdentifier(parameter.name)) tainted.add(symbol(parameter.name));
           });
         }
       }
@@ -55,7 +72,7 @@ function bypassesLoader(text: string): boolean {
   return nodes.some(node => {
     if (!ts.isCallExpression(node)) return false;
     const expression = node.expression;
-    const reader = readers.has(expression.getText(source)) || (ts.isPropertyAccessExpression(expression) && namespaces.has(expression.expression.getText(source)) && /^readFile(?:Sync)?$/.test(expression.name.text));
+    const reader = readers.has(expression.getText(source)) || (ts.isPropertyAccessExpression(expression) && (namespaces.has(expression.expression.getText(source)) || (ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === "promises" && namespaces.has(expression.expression.expression.getText(source)))) && /^readFile(?:Sync)?$/.test(expression.name.text));
     return reader && node.arguments.some(skill);
   });
 }
@@ -79,8 +96,18 @@ it.each([
   'import { readFileSync as read } from "node:fs"; read(new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url));',
   'import * as fs from "node:fs"; fs.readFileSync(resolve(".agentrig/skills", name, "SKILL.md"));',
   'import { readFileSync } from "fs"; const path = join(".agentrig", "skills", "topic", "SKILL.md"); readFileSync(path);',
+  'import { readFileSync } from "node:fs"; function skillPath() { return new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url); } readFileSync(skillPath());',
+  'import { readFileSync } from "node:fs"; function skillPath() { const path = new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url); return path; } readFileSync(skillPath());',
+  'import { readFileSync } from "node:fs"; function identity(p) { return p; } readFileSync(identity(".agentrig/skills/topic/SKILL.md"));',
+  'import * as fs from "node:fs"; fs.promises.readFile(".agentrig/skills/topic/SKILL.md");',
 ])("rejects bypass shape %s", text => expect(bypassesLoader(text)).toBe(true));
 
 it("pins the builder/fixer pre-push CRLF proof beside the trio", () => {
   expect(readSkillText(".agentrig/skills/dogfood/SKILL.md")).toContain("Before every push, builders and fixers must rerun all touched instruction-contract and skill-text test files against a CRLF copy of the entire `.agentrig/skills` tree (normalize LF before converting to CRLF), point `AGENTRIG_TEST_SKILLS_ROOT` at that copy under the proof `TMPDIR` outside Git ancestry, and record start/end times, exact commands, exits and test counts next to the declared-check trio in the PR.");
 });
+
+it.each([
+  'import { readFileSync } from "node:fs"; const path = join(temp, "generated", "SKILL.md"); readFileSync(path);',
+  'import * as fs from "node:fs"; function unrelated() { const example = ".agentrig/skills/topic/SKILL.md"; return "fixture.md"; } fs.promises.readFile(unrelated());',
+  'import { readFileSync } from "node:fs"; function skillPath() { const path = ".agentrig/skills/topic/SKILL.md"; return path; } function fixture() { const path = "generated/SKILL.md"; readFileSync(path); }',
+])("allows non-repository fixture reads %s", text => expect(bypassesLoader(text)).toBe(false));

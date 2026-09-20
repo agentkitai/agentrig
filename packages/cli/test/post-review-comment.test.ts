@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
+// @ts-expect-error standalone helper
+import { findingIndex } from "../../../scripts/review-finding-index.mjs";
 
 function fixtureConfig(dir: string) {
   mkdirSync(join(dir, ".agentrig"), { recursive: true });
@@ -31,6 +33,7 @@ function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?
       cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
     });
     return { status: result.status, stderr: result.stderr,
+      posts: Array.from({ length: 20 }, (_, i) => join(dir, `comment.${i + 1}`)).filter(existsSync).map(p => readFileSync(p, "utf8")),
       receipt: existsSync(join(dir, "comment.receipt.json")) ? readFileSync(join(dir, "comment.receipt.json"), "utf8") : "",
       posted: existsSync(join(dir, "posted")) ? readFileSync(join(dir, "posted"), "utf8") : undefined,
       args: existsSync(join(dir, "args")) ? readFileSync(join(dir, "args"), "utf8") : undefined };
@@ -342,4 +345,19 @@ it("R401 refuses a complete receipt for a different PR with the same canonical h
     expect(existsSync(join(dir, "posted"))).toBe(false);
     expect(readFileSync(join(dir, "comment.receipt.json"), "utf8")).toBe(saved);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it("keeps boundary findings whole and indexed in oversized posts", () => {
+  const capacity = 60000 - heading.length - 2 - (2 * 5 + 7);
+  const finding = "### HIGH: Boundary finding";
+  const body = "x\n".repeat(Math.floor((capacity - 10) / 2)) + finding + "\n" + "tail\n".repeat(100);
+  const result = run(body);
+  expect(result.status, result.stderr).toBe(0);
+  const indexed = result.posts.flatMap((body, i) => {
+    const url = `https://github.com/agentkitai/agentrig/pull/1#issuecomment-${i + 1}`;
+    expect(body.length).toBeLessThanOrEqual(60000);
+    return findingIndex(url, { html_url: url, body });
+  });
+  expect(indexed.map((f: { heading: string }) => f.heading)).toEqual([finding]);
+  expect(result.posts.map((p, i) => p.slice(`${heading}\n\n(${i + 1}/${result.posts.length})\n\n`.length)).join("")).toBe(body);
 });
