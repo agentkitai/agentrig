@@ -188,8 +188,8 @@ a standalone reviewer owns only its unique private ref. CLI slots use the declar
 templates. The codex-cli adapter intentionally uses `codex exec`, not the dedicated `codex review`
 subcommand: exec accepts the full skill prompt, exact model pin, explicit sandbox and last-message
 output contract. This is not permission to change tool allowances or run project checks.
-API review entries with dailyCap are rejected before construction because the adapter has no
-spend ledger; select an explicitly uncapped entry or CLI slot, never strip the configured cap.
+API review configs with top-level `config.dailyCap` are rejected before construction because the adapter has no
+spend ledger; select an explicitly uncapped review config or CLI slot, never strip the configured cap.
 
 Finding identity is the verbatim Markdown finding heading plus source comment URL/anchor. Run
 `node <REPO>/scripts/review-finding-index.mjs <comment-URL>` on each posted review to produce a
