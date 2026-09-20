@@ -35,6 +35,8 @@ No alternate heading is valid for posting,
 acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
 elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
 
+The Claude Code initial heading model must equal `claude-opus-5`; any other Claude model is a missing required initial review, not a receipt that satisfies the pair.
+
 ## 0. Residuals are issues, not prose
 
 Before anything else: if the PR body has a `## Residuals` section, every entry must name an
@@ -77,6 +79,11 @@ proof, unresolved review blockers and non-green exact-head CI still prevent land
 One permitted flake re-run: a failure that is green on the base branch, names nothing the diff
 touches, and passed for this same commit before may be re-run ONCE; a second failure is real and
 blocks.
+
+For every dispatched fixer, require the persisted handoff to quote `Repair round: N/3` and
+ledger blocker IDs, with a conductor `gh pr view NN --json body` read-back receipt BEFORE the
+subagent call. Reject a missing quote, missing read-back receipt, or advisory-only dispatch as a
+contract violation; a counter repaired by the fixer afterwards cannot retroactively satisfy it.
 
 ## 2. Merge
 

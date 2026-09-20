@@ -1,5 +1,14 @@
 # Status
 
+## Review-gate contracts (#374, #377, #382)
+
+Instruction-only tightening: pinned Claude initial headings, non-empty ancestral focused deltas,
+evidence-only blocker closure, persisted/read-back fixer and land handoffs, and bounded fail-closed
+SHA claim grammar. Executable instruction contracts cover stale aliases, overlong tokens and prior
+reviewed-commit mentions; deletion/reversion mutants pin each gate. No runtime changes.
+Builder verification and review/landing ownership are recorded in the task PR; parent owns review
+and landing, and the builder cannot merge.
+
 ## Skill wording follow-ups (#367, #368, #369)
 
 Instruction-only follow-up to PR #366: ship/dogfood now explicitly share topic's

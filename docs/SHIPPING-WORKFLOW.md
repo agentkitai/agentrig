@@ -65,6 +65,14 @@ No finding is silently dropped, and an issue number never makes a blocker landab
 
 ## 3. Batch fixes; review only material deltas
 
+A blocker closes only with a fixer delta plus independent focused review, an evidence-backed
+ledger rebuttal quoting a reproducible command and its result, or an arbiter verdict within the
+existing arbitration allowance. Explicitly prohibit re-prompting the raising reviewer under the
+conductor’s contract reading as closure; that is not independent delta coverage or a rebuttal.
+Before launching a focused reviewer require `OLD != NEW` with `[ "$OLD" != "$NEW" ]`
+and OLD ancestor of NEW with `git merge-base --is-ancestor "$OLD" "$NEW"`, both exit zero.
+A same-head re-read is not delta coverage and cannot close a blocker.
+
 Collect both initial verdicts before one repair batch. Give the fixer all blocking
 finding texts/URLs, not the advisory list as new requirements. Keep the same PR.
 Re-run the local trio after repairs, retain fail-first and mutation evidence, push,
@@ -85,7 +93,8 @@ rewritten head, preserving the repair counter rather than certifying a false del
 - **Mechanical:** only spelling/formatting, broken links, or factual PR/STATUS receipts
   without changed guarantees. Record the diff, relevant checks and why it is mechanical
   as `self-verified mechanical delta; not independently re-reviewed`. A small executable
-  fix is not mechanical. Prior independent reviews remain evidence for unchanged code.
+  fix is not mechanical. This exemption covers non-blocker bookkeeping only; it cannot replace
+  independent focused review to close a blocker. Prior independent reviews remain evidence for unchanged code.
 
 A focused reviewer verifies closure of the assigned blockers, tests the changed
 behavior and relevant mutations, and checks direct regressions. Do not re-audit
