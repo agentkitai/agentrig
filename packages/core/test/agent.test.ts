@@ -977,19 +977,28 @@ describe("agent loop", () => {
   });
 
   it("abort wins over a tool that ignores its signal", async () => {
+    let markToolStarted!: () => void;
+    const toolStarted = new Promise<void>(resolve => { markToolStarted = resolve; });
     const hangingTool: AnyTool = {
       name: "hang",
       description: "never resolves",
       inputSchema: z.object({}),
       permission: "read",
-      execute: () => new Promise(() => {}),
+      execute: () => {
+        markToolStarted();
+        return new Promise(() => {});
+      },
     };
     const provider = new FakeProvider([
       [{ type: "tool_use", id: "t1", name: "hang", input: {} }, usage(1, 1), stop("tool_use")],
     ]);
     const session = createAgent(makeConfig(provider, { tools: [hangingTool] })).run("t");
-    setTimeout(() => session.control.abort(), 50);
-    const events = await collect(session);
+    const collecting = collect(session);
+    // Abort only after execution starts: a startup timer can fire before any
+    // tool result is owed. The tool deliberately never settles or reads signal.
+    await toolStarted;
+    session.control.abort();
+    const events = await collecting;
     const summary = await session.done;
 
     expect(summary.reason).toBe("aborted");

@@ -343,3 +343,21 @@ it("R393 all-publication receipt failure does not claim a partial post", () => {
   expect(r.stderr).toContain("in-memory receipt");
   expect(JSON.parse(r.receipt)).toMatchObject({ successful: [], pending: 1, status: "posting" });
 });
+
+it("R401 refuses a complete receipt for a different PR with the same canonical heading", () => {
+  const dir = mkdtempSync(join(tmpdir(), "receipt-pr-"));
+  try {
+    writeFileSync(join(dir, "body"), `Reviewed head ${head}\nOK`);
+    writeFileSync(join(dir, "model"), "gpt-5.5");
+    writeFileSync(join(dir, "gh"), `#!/bin/sh\ntouch '${dir}/posted'\n`);
+    chmodSync(join(dir, "gh"), 0o755);
+    const saved = JSON.stringify({ pr: "1", heading, status: "complete", successful: [1], pending: null, total: 1 });
+    writeFileSync(join(dir, "comment.receipt.json"), saved);
+    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("receipt PR differs from current review");
+    expect(r.stderr).not.toContain("already complete; no retry needed");
+    expect(existsSync(join(dir, "posted"))).toBe(false);
+    expect(readFileSync(join(dir, "comment.receipt.json"), "utf8")).toBe(saved);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

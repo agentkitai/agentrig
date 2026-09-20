@@ -1,5 +1,16 @@
 # Status
 
+## Posting receipt and abort-test residuals (#401, #403)
+
+Receipt reuse checks PR identity as well as the canonical heading before completion
+advice. A same-heading receipt from another PR remains fail-closed, unchanged, and
+reports a PR mismatch without posting. The abort-wins hanging-tool test now waits
+for tool execution to start before aborting; it still requires the aborted summary,
+failed `t1` tool result, and aborted session end. A controlled 100ms provider-startup
+delay reproduced the old 50ms timer race and passes with the execution latch. Named
+PR-identity deletion and abort-before-dispatch mutants fail the targeted assertions.
+No product source, skill, or roadmap changes; independent review remains parent-owned.
+
 ## Review-posting receipt residuals (#390–#393, #397–#399)
 
 Receipt reuse checks the current canonical heading before completion advice; publication
