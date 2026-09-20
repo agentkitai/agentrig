@@ -15,7 +15,10 @@ workflow engine. Repair coverage separates declaration metadata from runtime/eva
 reserves receipt identities, bounds single-line fields/step counts, and distinguishes absent files
 from unknown profiles in existing files. Review preparation requires conductor-owned prepared
 state and proof on the actual PR head, not an integration-only SHA; flow-specific assertions and
-independent validation mutants guard these gates. No roadmap row is advanced by this issue-only change.
+independent validation mutants guard these gates. Topic preparation explicitly gates both reviewer
+launches on each reviewer tree’s conductor-run bootstrap/optional preflight exiting zero; failures
+halt with owned-resource cleanup, while empty steps execute no commands. A named per-tree
+exit-gate mutant guards this repair (#409 R2-F8). No roadmap row is advanced by this issue-only change.
 
 ## Windows evalset hook budget (#405)
 

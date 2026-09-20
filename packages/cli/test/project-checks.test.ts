@@ -108,3 +108,17 @@ it("pins actual review flow and exact PR-head preparation", async () => {
   expect(topic).toContain("update the PR branch and re-prove its new head before review");
   expect(topic).not.toContain('git -C "$WT" merge --no-edit origin/main');
 });
+
+it("gates both reviewer launches on each tree's conductor preparation", async () => {
+  const topic = await readFile(resolve(".agentrig/skills/topic/SKILL.md"), "utf8");
+  const prepare = topic.split("- **Prepare.**")[1]?.split("- **Independent conductor checks")[0]?.replace(/\s+/g, " ") ?? "";
+  for (const required of [
+    "For non-empty steps, the conductor executes the project's declared bootstrap and optional preflight separately in `WT` and in `CODEX_WT`",
+    "Require each command's exit code zero in each reviewer tree before launching either reviewer job",
+    "If any preparation command fails, halt before either launch",
+    "join all owned jobs and remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before returning",
+    "Empty steps run no commands, including bootstrap and preflight",
+    "A separate conductor proof tree does not satisfy either reviewer tree's dependency preparation",
+    "Reviewers do not run the declared suite, bootstrap or preflight",
+  ]) expect(prepare).toContain(required);
+});
