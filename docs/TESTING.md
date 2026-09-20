@@ -122,3 +122,65 @@ A session that cannot get a clean preflight can still review code, and should sa
   separate facts about the same head; neither one converts the other into a pass or a failure.
 - A review that did not run the suite says so. Someone else's passing run does not retire that
   limitation, and a passing run elsewhere does not erase an observed failure.
+
+## Declared project checks
+
+The shipping skills consume **project data**, not a built-in JavaScript workflow. Declare
+`checks` in the repository's `.agentrig/config.json`. `profiles.<name>.checks` replaces the
+whole base declaration (including the ordered steps). This uses the existing strict zod
+config boundary; duplicate step names, unknown fields, blank commands/names and unsupported
+parser identifiers are rejected. Names need not be build/test/typecheck. `bootstrap` and
+`preflight` are reserved step names after trimming, even if preflight is absent. At most 64
+steps are allowed; names are limited to 256 UTF-16 code units, commands (including bootstrap
+and preflight) to 4096 before trimming. Fields are single-line: C0/C1 controls (including tabs,
+newlines and ESC), Unicode line/paragraph separators and bidi formatting U+202A–202E,
+U+2066–2069 are rejected before trimming. Ordinary shell quotes/operators remain allowed;
+this is receipt/display hygiene, not shell safety or authorization. Checks are file declaration
+metadata only: normal resolved runtime/evaluation settings never carry them.
+
+AgentRig's worked example (also committed as its project config):
+
+```json
+{
+  "checks": {
+    "bootstrap": "pnpm install --frozen-lockfile",
+    "preflight": "pnpm test:preflight",
+    "steps": [
+      { "name": "build", "command": "pnpm build" },
+      { "name": "test", "command": "pnpm test", "countsParser": "vitest" },
+      { "name": "typecheck", "command": "pnpm typecheck" }
+    ]
+  }
+}
+```
+
+Python can declare bootstrap `python -m pip install -e .` and a step named `unit` running
+`python -m pytest` with `countsParser: "pytest"`; Rust can declare `cargo fetch` and
+`cargo test` (`cargo-test`); Go can declare `go mod download` and `go test ./...` (`go-test`).
+The optional countsParser is a metadata hint to the caller, not executable code or an
+implemented output parser here. Unknown/unavailable counts are N/A; only exit codes judge
+success. No parser result can turn a nonzero exit green.
+
+Read-only module boundary for skills/supervisor integrations: import `resolveProjectChecks`
+from `packages/cli/dist/project-checks.js` after building AgentRig (source:
+`packages/cli/src/project-checks.ts`), then call `await resolveProjectChecks(projectRoot, profile?)`.
+The explicit root may be any repository, including outside this monorepo. This only reads and
+validates that project's config; it does not search home config, infer commands, spawn a shell,
+or implement a workflow. A missing declaration returns undefined (stop/request declaration),
+not an empty success. A missing file returns undefined even with a selected profile; an existing file with an unknown profile rejects. Invalid config rejects. The returned object is declaration data,
+not permission to execute it: display source/root, selected profile and commands and retain
+normal project trust, permission prompts and sandbox checks.
+
+An explicit `steps: []` is valid and means **NO local checks**, including bootstrap and
+preflight, even if declared. Consumers must branch on empty steps **before** executing anything
+(the resolver returns bootstrap and preflight unchanged as inert declaration data).
+Record `declared checks: none`; landing still needs exact-head CI plus human merge authorization.
+Do not claim local green or waive missing CI. For nonempty steps, bootstrap, optional preflight,
+and each named step run in order, stopping on nonzero, recording name, command, exit code,
+UTC start/end, counts (or N/A), head and runner. The independent conductor supplies GREEN
+same-head receipts **before** launching the review pair. Reviewers inspect code and targeted
+mutants, not a duplicate full suite. The operative sections in dogfood/topic/review/arbiter
+supersede shipping policy §3's reviewer-trio rule; ship/land and shipping policy are unchanged.
+
+`packages/cli/test/project-checks.test.ts` executes a tiny generated external fixture using
+this resolver in the test itself. There is no CLI workflow runner.

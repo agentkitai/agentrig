@@ -74,6 +74,32 @@ const providersSetting = z.record(ProviderEntrySchema).superRefine((entries, ctx
  * so config resolution is the only extra layer and the existing validation/build path stays shared.
  * Output-only flags (json/verbose/headless), tasks and resume ids are deliberately not config.
  */
+/** Shell commands are declarations, never execution grants. Counts are optional metadata. */
+// Single-line receipt/display policy: reject C0/C1, bidi formatting and Unicode line
+// separators before trimming; shell operators/quotes remain literal declaration data.
+const checkText = (max: number) => z.string().max(max)
+  .refine(value => !/[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/u.test(value),
+    "control characters are unsupported")
+  .transform(value => value.trim()).pipe(z.string().min(1));
+export const ProjectCheckStepSchema = z.object({
+  name: checkText(256),
+  command: checkText(4096),
+  countsParser: z.enum(["vitest", "pytest", "go-test", "cargo-test"]).optional(),
+}).strict();
+export const ProjectChecksSchema = z.object({
+  bootstrap: checkText(4096),
+  preflight: checkText(4096).optional(),
+  steps: z.array(ProjectCheckStepSchema).max(64),
+}).strict().superRefine((checks, ctx) => {
+  const names = new Set<string>(["bootstrap", "preflight"]);
+  checks.steps.forEach((step, index) => {
+    if (names.has(step.name)) ctx.addIssue({ code: z.ZodIssueCode.custom,
+      path: ["steps", index, "name"], message: "check names must be unique" });
+    names.add(step.name);
+  });
+});
+export type ProjectChecks = z.output<typeof ProjectChecksSchema>;
+
 const ConfigValuesSchema = z
   .object({
     provider: ProviderKindSchema.optional(),
@@ -154,8 +180,10 @@ const ConfigValuesSchema = z
 
 export type ConfigValues = z.output<typeof ConfigValuesSchema>;
 
-const ConfigFileSchema = ConfigValuesSchema.extend({
-  profiles: z.record(ConfigValuesSchema).optional(),
+// Declarations are file metadata, not runtime launch/evaluation settings.
+const ConfigDeclarationSchema = ConfigValuesSchema.extend({ checks: ProjectChecksSchema.optional() });
+const ConfigFileSchema = ConfigDeclarationSchema.extend({
+  profiles: z.record(ConfigDeclarationSchema).optional(),
 });
 export type ConfigFile = z.output<typeof ConfigFileSchema>;
 
@@ -261,7 +289,7 @@ export interface ResolveConfigInput<T extends Record<string, unknown>> {
 
 function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   if (file === undefined) return {};
-  const { profiles: _profiles, ...values } = file;
+  const { profiles: _profiles, checks: _checks, ...values } = file;
   return values;
 }
 
@@ -290,9 +318,9 @@ export function resolveConfig<T extends Record<string, unknown>>(input: ResolveC
   return {
     ...defaults,
     ...withoutProfiles(user),
-    ...(profile === undefined ? {} : user?.profiles?.[profile] ?? {}),
+    ...(profile === undefined ? {} : withoutProfiles(user?.profiles?.[profile])),
     ...withoutProfiles(project),
-    ...(profile === undefined ? {} : project?.profiles?.[profile] ?? {}),
+    ...(profile === undefined ? {} : withoutProfiles(project?.profiles?.[profile])),
     ...env,
     ...cli,
   };

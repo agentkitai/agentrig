@@ -8,8 +8,8 @@ const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.m
 const section = (text: string, start: string, end: string) => text.split(start)[1]?.split(end)[0] ?? "";
 const requirements = [
   {
-    path: ".agentrig/skills/topic/SKILL.md", start: "   - **Conductor trio", end: "   - **Wait**",
-    phrases: ["initial pass", "Codex reviewer worktree", "second fresh worktree at the same commit", "independent install", "outside Git ancestry", "fixture preflight", "pnpm build", "pnpm test", "pnpm typecheck", "separately", "exit code", "UTC start/end times", "test/file counts", "reviewed SHA", "Codex comment's provenance", "not the author", "Join the Codex job", "unchanged HEAD", "restored tracked/index state"],
+    path: ".agentrig/skills/topic/SKILL.md", start: "   - **Independent conductor checks", end: "   - **Claude job**",
+    phrases: ["BEFORE reviewers", "PR HEAD", "ordered named steps", "Require GREEN before", "launching either job", "empty steps", "name, command, exit code, UTC start/end and counts", "restored tracked/index state", "unchanged head", "receipts", "before launch", "NEW"],
   },
   {
     path: "docs/SHIPPING-WORKFLOW.md", start: "## 3.", end: "## 4.",
@@ -19,10 +19,14 @@ const requirements = [
     path: ".agentrig/skills/land/SKILL.md", start: "## 1.", end: "## 2.",
     phrases: ["runs independently of the author on the same reviewed head", "conductor trio is the Codex trio evidence", "shipping policy §3", "docs/TESTING.md", "denied sockets", "npm cache", "GitHub", "environment limitation", "author's trio", "exact-head CI", "Never halt solely because Codex cannot run the suite", "does not erase", "Real test failures"],
   },
-  ...["ship", "dogfood"].map(skill => ({
+  ...["ship"].map(skill => ({
     path: `.agentrig/skills/${skill}/SKILL.md`, start: skill === "ship" ? "## 2." : "## 8.", end: skill === "ship" ? "## 3." : "## 9.",
     phrases: ["author-tree proof is not independent evidence", "the independent trio", "topic §2 step 4's conductor trio", "shipping policy §3", "Codex trio evidence", "environment limitation", "Never halt solely because Codex cannot run the suite"],
   })),
+  {
+    path: ".agentrig/skills/dogfood/SKILL.md", start: "## 8.", end: "## 9.",
+    phrases: ["author-tree proof is not independent evidence", "the independent declared checks", "pre-launch conductor checks", "overriding shipping policy §3", "named checks evidence", "environment limitation"],
+  },
 ];
 
 for (const { path, start, end, phrases } of requirements) {

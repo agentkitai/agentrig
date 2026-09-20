@@ -1,0 +1,11 @@
+{
+  "checks": {
+    "bootstrap": "pnpm install --frozen-lockfile",
+    "preflight": "pnpm test:preflight",
+    "steps": [
+      { "name": "build", "command": "pnpm build" },
+      { "name": "test", "command": "pnpm test", "countsParser": "vitest" },
+      { "name": "typecheck", "command": "pnpm typecheck" }
+    ]
+  }
+}
