@@ -1,3 +1,4 @@
+import { readSkillText } from "../../../test/skill-text.js";
 import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -71,7 +72,7 @@ describe("declared project checks", () => {
 });
 
 it.each(["dogfood", "topic", "review", "arbiter"])("%s pins operative declared-checks policy", async (skill) => {
-  const text = await readFile(resolve(".agentrig/skills", skill, "SKILL.md"), "utf8");
+  const text = await readSkillText(resolve(".agentrig/skills", skill, "SKILL.md"), "utf8");
   expect(text).not.toMatch(/pnpm/i);
   const policy = text.split("## Operative declared-checks policy (issue #395)")[1]?.split("\n## ")[0] ?? "";
   for (const required of ["shipping policy §3", "GREEN BEFORE launching", "must be", "reviewers do NOT run checks", "name, command, exit code, UTC start/end, counts", "declared checks: none", "exact-head CI plus human merge authorization", "permission", "project-checks.js", "bootstrap and preflight"]) expect(policy).toContain(required);
@@ -97,20 +98,20 @@ it("accepts bounded shell syntax without interpreting it", () => {
     steps: Array.from({ length: 64 }, (_, i) => ({ name: `${i}`.padEnd(256, "x"), command, countsParser: "vitest" })) }).checks?.steps).toHaveLength(64);
 });
 it("pins actual review flow and exact PR-head preparation", async () => {
-  const review = await readFile(resolve(".agentrig/skills/review/SKILL.md"), "utf8");
+  const review = await readSkillText(resolve(".agentrig/skills/review/SKILL.md"), "utf8");
   const isolate = review.split("## 2. Isolate")[1]?.split("\n## ")[0] ?? "";
   expect(isolate).toContain("Standalone review also requires conductor-prepared dependencies, build outputs and exact-head receipts");
   expect(isolate).not.toContain("otherwise create");
   const proof = review.split("## 3. Inspect independent proof, then review code")[1]?.split("\n## ")[0] ?? "";
   for (const required of ["head against the review head", "all declared step names and order", "individual exit codes, times and counts", "missing or failed proof", "return to the conductor"]) expect(proof).toContain(required);
-  const topic = await readFile(resolve(".agentrig/skills/topic/SKILL.md"), "utf8");
+  const topic = await readSkillText(resolve(".agentrig/skills/topic/SKILL.md"), "utf8");
   expect(topic).toContain("assert each tree HEAD equals current PR HEAD");
   expect(topic).toContain("update the PR and re-prove its new head");
   expect(topic).not.toContain('git -C "$WT" merge --no-edit origin/main');
 });
 
 it("gates each declared reviewer launch on its tree's conductor preparation", async () => {
-  const topic = await readFile(resolve(".agentrig/skills/topic/SKILL.md"), "utf8");
+  const topic = await readSkillText(resolve(".agentrig/skills/topic/SKILL.md"), "utf8");
   const prepare = topic.split("- **Prepare.**")[1]?.split("- **Independent conductor checks")[0]?.replace(/\s+/g, " ") ?? "";
   for (const required of [
     "For nonempty steps the conductor runs declared bootstrap and optional preflight separately in every reviewer tree",

@@ -1,3 +1,4 @@
+import { readSkillText } from "../../../test/skill-text.js";
 /**
  * Corpus-defined instruction guards, not a natural-language grammar. A phrasing
  * not in the corpus is, by definition, a coverage addition and not a regression,
@@ -12,10 +13,9 @@
  * Semicolons, colons, dashes and conjunctions stay inside a sentence: their
  * scoping was precisely where the old predicate heuristics exceeded coverage.
  */
-import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-const read = (skill: string) => readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+const read = (skill: string) => readSkillText(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
 const section = (text: string, start: string, end: string) => text.split(start)[1]?.split(end)[0]?.replace(/\s+/g, " ") ?? "";
 const contracts = [
   { skill: "dogfood", start: "## 1.", end: "## 2.", phrases: [

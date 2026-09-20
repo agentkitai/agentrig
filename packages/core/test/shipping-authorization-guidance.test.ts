@@ -1,8 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { readSkillText } from "../../../test/skill-text.js";
 import { expect, it } from "vitest";
 
 // Contract tests for model-facing instructions, not a claim that prose enforces runtime authority.
-const skill = async (name: string) => (await readFile(
+const skill = async (name: string) => (await readSkillText(
   new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url), "utf8",
 )).replace(/\s+/g, " ");
 

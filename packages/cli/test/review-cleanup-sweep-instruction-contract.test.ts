@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
+import { readSkillText } from "../../../test/skill-text.js";
 import { expect, it } from "vitest";
 
-const read = (skill: string) => readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+const read = (skill: string) => readSkillText(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
 const section = (text: string, start: string, end: string) => {
   expect(text.split(start)).toHaveLength(2);
   const rest = text.split(start)[1]!;

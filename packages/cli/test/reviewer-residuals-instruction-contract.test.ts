@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readSkillText } from "../../../test/skill-text.js";
 import { expect, it } from "vitest";
-const read = (skill: string) => readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+const read = (skill: string) => readSkillText(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
 const contracts: Array<[string, string, string]> = [
   ["arbiter", "M-arbiter-slots", "Missing `reviewers` or `{}` means zero slots"],
   ["arbiter", "M-arbiter-checks", "named same-head receipts"],

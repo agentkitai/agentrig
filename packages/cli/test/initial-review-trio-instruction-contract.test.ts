@@ -1,7 +1,8 @@
+import { readSkillText } from "../../../test/skill-text.js";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
+const read = (path: string) => readSkillText(new URL(`../../../${path}`, import.meta.url), "utf8");
 const section = (text: string, start: string, end: string) => text.split(start)[1]?.split(end)[0] ?? "";
 const requirements = [
   { path: ".agentrig/skills/topic/SKILL.md", start: "   - **Independent conductor checks", end: "   - **Launch each slot", phrases: ["BEFORE reviewers", "PR HEAD", "ordered named steps", "Require GREEN BEFORE launching any reviewer", "Empty steps", "name, command, exit code", "UTC start/end, counts", "Restore tracked/index state", "recheck current PR head before launch", "Supply receipts to every slot"] },

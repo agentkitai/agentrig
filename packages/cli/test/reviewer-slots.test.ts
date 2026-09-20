@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readSkillText } from "../../../test/skill-text.js";
 import { expect, it } from "vitest";
 import { parseConfigText, resolveConfig } from "../src/config.js";
 const parse = (value: unknown) => parseConfigText("fixture", JSON.stringify(value));
@@ -22,7 +22,7 @@ it("accepts named CLI bindings and absent declaration", () => {
   expect(parse({ reviewers: { "Team One": { adapter: "claude-cli", model: "pin-1" }, other: { adapter: "codex-cli", model: "pin-2" } } })).toHaveProperty("reviewers");
   expect(parse({})).not.toHaveProperty("reviewers");
 });
-const read = (p: string) => readFileSync(new URL(`../../../${p}`, import.meta.url), "utf8");
+const read = (p: string) => readSkillText(new URL(`../../../${p}`, import.meta.url), "utf8");
 for (const skill of ["topic", "ship", "review", "land", "dogfood", "arbiter"]) {
   it(`${skill} uses declared slots and no vendor literals`, () => {
     const text = read(`.agentrig/skills/${skill}/SKILL.md`);
@@ -73,7 +73,7 @@ it("M-vendor-literal and M-pin-gate are rejected instruction mutants", () => {
 });
 
 it("keeps topic posting continuations and adapter fences inside the enclosing CommonMark list", () => {
-  const text = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
+  const text = readSkillText(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
   const start = text.indexOf("   - **Launch each slot through its adapter**");
   const end = text.indexOf("   - **Combine.**", start);
   expect(start).toBeGreaterThan(-1);

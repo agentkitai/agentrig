@@ -1,5 +1,17 @@
 # Status
 
+## CRLF-safe skill text in tests (#428, #434) — implemented, pending review
+
+Shared test-only skill reader normalizes line endings and supports an entire-tree
+CRLF override. Instruction-contract enforcement covers core/CLI test readers.
+Dogfood pins builder/fixer pre-push CRLF receipts beside the declared-check trio;
+skill sources are LF-pinned as defense in depth. The child session-end hook test
+waits on tool-entry/hook-completion signals with controlled deadline timers,
+preserves grace/orphan/persistence assertions, and joins its sessions.
+No product behavior or roadmap continuation changes. Failure: run 35518775044
+attempt 1 (Ubuntu); passing local exact-head receipts and hosted conductor
+follow-up live in the PR.
+
 ## PR #429 repair round 1 — assigned C1/C2/C3/C7
 
 API reviewer cap refusal checks schema-valid top-level `config.dailyCap` before provider construction.
