@@ -193,8 +193,10 @@ const corpusManifest = [
   {
     name: "branch rejected", actual: branchCorpus.rejected, minimum: 35,
     seeds: [
-      // #359; #358 focused F1, G4 and N4 (expanded concrete probes).
+      // #362; #358 focused F1, G4 and N4 (expanded concrete probes).
       "Builders never work on main, so in the author checkout run `git switch -c docs/task`.",
+      "Never remove the proof TMPDIR, and builders run `git checkout -b docs/task` there.",
+      "Never reuse a stale tree, so run `git switch -c docs/task` in the author checkout.",
       "Never run the builder loop before you run `git checkout -b docs/task` in the author checkout.",
       "Never run the builder loop and then run `git switch docs/task` in the author checkout.",
       "Do not use the author tree, run `git switch -c docs/task` first.",
@@ -248,7 +250,7 @@ const corpusManifest = [
   {
     name: "cleanup accepted", actual: cleanupCorpus.accepted, minimum: 12,
     seeds: [
-      // #362; #358 focused F3 and N1.
+      // #359; #358 focused F3 and N1.
       "Before handoff, builders must never remove the owned worktree.",
       "Do not remove the owned worktree before handoff.",
       "Never remove the owned worktree before the handoff.",

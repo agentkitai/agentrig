@@ -87,7 +87,7 @@ entry: each yielded **5 failed / 658 passed, exit 1**, followed by restored
 
 #375 adds an independent manifest: literal distinct-content minimum counts for
 all six accepted/rejected buckets (branch **12/35**, carve-out **6/27**, cleanup
-**12/31**) and literal content assertions for concrete issue/review seeds from
+**12/31**) and literal content assertions for 69 concrete issue/review seeds from
 #359–#362 and the #358 focused reviews. Neither floors nor expected seeds are
 derived from corpus arrays. This protects preservation without broadening the
 classifier or turning unknown prose into regressions; no skill/product changes.
@@ -100,7 +100,10 @@ same failure count; six same-size seed replacements each produced **1 failed /
 674 passed (675), exit 1**, proving content rather than just size is protected.
 Restored final tests: **675 passed, exit 0**. Full-trio and timed mutant receipts
 belong in the PR ledger.
-Repair round: 0/3. Independent review and exact-head CI remain conductor-owned;
+Repair round: 1/3 corrects swapped #359/#362 seed provenance and content-locks
+both omitted #358 F1 branch probes. Each same-size replacement failed only seed
+membership (**1 failed / 674 passed, exit 1**); restored tests passed **675/675,
+exit 0**. Independent review and exact-head CI remain conductor-owned;
 the ship child does not run external reviews or merge.
 
 ## Instruction-contract guard sweep (#344–#347)
