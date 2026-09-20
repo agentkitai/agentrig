@@ -21,7 +21,7 @@ function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?
     }
     if (source !== undefined) writeFileSync(join(dir, "helper.mjs"), source);
     const result = spawnSync(process.execPath, [source === undefined ? helper : join(dir, "helper.mjs"), "372", reviewer, join(dir, "model"), join(dir, "body"), sha, base, join(dir, "comment")], {
-      encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+      cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
     });
     return { status: result.status, stderr: result.stderr,
       posted: existsSync(join(dir, "posted")) ? readFileSync(join(dir, "posted"), "utf8") : undefined,
@@ -93,8 +93,8 @@ it.each([
 });
 
 const calls = [
-  'node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2',
-  'node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2',
+  'cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2',
+  'cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2',
 ];
 function contract(text: string) {
   for (const call of calls) expect(text).toContain(call);
@@ -114,14 +114,19 @@ it.each(["claude", "codex"])("M8 %s topic gate blocks stale/empty verdicts befor
     const text = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
     const marker = `# ${reviewer === "claude" ? "Claude" : "Codex"} posting gate\n`;
     const snippet = text.slice(text.indexOf(marker) + marker.length).split("```")[0]!
-      .replaceAll("<OUT>", dir).replace('mjs NN', 'mjs 372').replaceAll('"HEAD"', `"${head}"`).replaceAll('"MAIN"', `"${main}"`);
-    writeFileSync(join(dir, "claude-models.json"), '["claude-opus-5"]');
+      .replaceAll("<OUT>", dir).replaceAll("<WT>", fileURLToPath(new URL("../../../", import.meta.url))).replace('mjs NN', 'mjs 372').replaceAll('"HEAD"', `"${head}"`).replaceAll('"MAIN"', `"${main}"`);
+    // Start with the actual CLI artifact, never a fabricated intermediate models file.
+    writeFileSync(join(dir, "claude.json"), JSON.stringify({modelUsage: {"claude-opus-5": {inputTokens: 1}}, result: regression}));
+    const extraction = text.split("**Assert the model and extract the Claude review:**")[1]!.split("```")[1]!
+      .replaceAll("<OUT>", dir);
+    const extracted = spawnSync("/bin/sh", ["-c", extraction], { encoding: "utf8", cwd: dir });
+    expect(extracted.status, extracted.stderr).toBe(0);
     writeFileSync(join(dir, "codex-model.txt"), "gpt-5.5");
     writeFileSync(join(dir, "codex-trio.md"), "Conductor trio: all exits 0");
     writeFileSync(join(dir, "gh"), `#!/bin/sh\ncat "$5" > '${dir}/posted'\n`);
     chmodSync(join(dir, "gh"), 0o755);
     const invoke = () => spawnSync("/bin/sh", ["-c", snippet], {
-      cwd: new URL("../../../", import.meta.url), encoding: "utf8",
+      cwd: dir, encoding: "utf8",
       env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
     });
     for (const body of ["", "# verdict heading only", "Reviewed head HEAD\nverdict", `Reviewed head ${main}\nverdict`, `## External review — stale — head ${main}\n\nverdict`]) {
@@ -134,4 +139,28 @@ it.each(["claude", "codex"])("M8 %s topic gate blocks stale/empty verdicts befor
     expect(result.status, result.stderr).toBe(0);
     expect(readFileSync(join(dir, "posted"), "utf8").split("\n")[0]).toBe(reviewer === "codex" ? heading : heading.replace("Codex (gpt-5.5)", "Claude Code (claude-opus-5)"));
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it("B2 splits long review plus proof into bounded lossless canonical comments", () => {
+  const dir = mkdtempSync(join(tmpdir(), "review-chunks-"));
+  try {
+    const body = "VERDICT: PASS\n" + "😀long line".repeat(15000);
+    const proof = "PROOF\n" + "evidence\n".repeat(9000);
+    writeFileSync(join(dir, "body"), body);
+    writeFileSync(join(dir, "proof"), proof);
+    writeFileSync(join(dir, "model"), "gpt-5.5");
+    writeFileSync(join(dir, "gh"), `#!/bin/sh\nnode -e 'const fs=require("fs");fs.appendFileSync("${dir}/posts",JSON.stringify(fs.readFileSync(process.argv[1],"utf8"))+"\\n")' "$5"\n`);
+    chmodSync(join(dir, "gh"), 0o755);
+    const result = spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment"), join(dir,"proof")], {cwd: dir, encoding:"utf8", env:{...process.env, PATH:`${dir}:${process.env.PATH}`}});
+    expect(result.status, result.stderr).toBe(0);
+    const posts = readFileSync(join(dir,"posts"),"utf8").trim().split("\n").map(s => JSON.parse(s) as string);
+    expect(posts.length).toBeGreaterThan(1);
+    const restored = posts.map((post, i) => {
+      expect(post.length).toBeLessThanOrEqual(60000);
+      const prefix = `${heading}\n\n(${i+1}/${posts.length})\n\n`;
+      expect(post.startsWith(prefix)).toBe(true);
+      return post.slice(prefix.length);
+    }).join("");
+    expect(restored).toBe(`${body}\n${proof}`);
+  } finally { rmSync(dir,{recursive:true,force:true}); }
 });

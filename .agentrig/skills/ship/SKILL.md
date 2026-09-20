@@ -80,12 +80,13 @@ same-head conductor checks supply the Codex trio evidence in the initial comment
 
 For initial posting, preserve topic's stale SHA/verdict validation gates and validated model
 files, then invoke these helper commands verbatim (replace only shell arguments NN, HEAD,
-MAIN and <OUT> with the recorded values; never globally substitute validator source):
+MAIN, <WT> and <OUT> with the recorded values; never globally substitute validator source):
 ```sh
-node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
-node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
+cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
+cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
 ```
-Do not compose headings inline or post manually. The helper's exact `head -1` acceptance
+<WT> is the recorded absolute reviewer-owned reviewed worktree, never the author checkout.
+These commands work from an unrelated cwd. Do not compose headings inline or post manually. The helper's exact `head -1` acceptance
 runs before `gh pr comment NN --body-file`; nonzero stops posting. Land gate unchanged.
 
 The standalone dogfood author assumes the conductor role in fresh reviewer-owned trees;

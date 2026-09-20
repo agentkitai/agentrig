@@ -235,7 +235,7 @@ For each recorded row, in order:
      one surviving review is not a pass — halt with the surviving review posted (post any surviving review and persist verdicts, provenance, proof results and failure receipts in the PR; then remove both reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup**; only then halt the train); the train never lands on one reviewer.
    - **Assert the model and extract the Claude review:**
      ```
-     node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const m=Object.keys(r.modelUsage??{});if(m.length!==1||m[0]!=="claude-opus-5"){console.error("claude review ran on "+(m.join(",")||"unknown")+", not claude-opus-5");process.exit(2)}process.stdout.write(String(r.result??""))' "<OUT>/claude.json" > "<OUT>/claude.md"
+     node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const m=Object.keys(r.modelUsage??{});if(m.length!==1||m[0]!=="claude-opus-5"){console.error("claude review ran on "+(m.join(",")||"unknown")+", not claude-opus-5");process.exit(2)}require("fs").writeFileSync(process.argv[2],JSON.stringify(m));process.stdout.write(String(r.result??""))' "<OUT>/claude.json" "<OUT>/claude-models.json" > "<OUT>/claude.md"
      ```
      A non-zero exit here is a dead job under the Wait rule above (retry once, then halt if both
      are dead), never a review to use.
@@ -264,16 +264,18 @@ For each recorded row, in order:
      Claim parsing ignores inline Markdown emphasis/code delimiters, consumes intervening
      SHA/commit/head labels before the claim, rejects literal HEAD placeholders separately
      from hex comparison, and accepts only matching SHA prefixes of 7–40 hex characters.
-     Invoke the repo-shipped helper verbatim below, not inline composition. It reads the model
+     Invoke the repo-shipped helper verbatim below, not inline composition.
+     `<WT>` is the recorded absolute reviewer-owned reviewed worktree, never the author checkout;
+     the explicit `cd` makes both commands usable from an unrelated cwd. It reads the model
      only from the validated model file and asserts the exact first line with `head -1` BEFORE
-     its sole `gh pr comment NN --body-file` call. Nonzero means stop; no manual posting fallback.
+     each `gh pr comment NN --body-file` call. Nonzero means stop; no manual posting fallback.
      The heading suffix `head HEAD — merged with origin/main MAIN — full` uses full SHAs,
      never literal placeholders. Keep these stale SHA/verdict gates before invoking the helper.
      ```sh
 # Claude posting gate
 node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:head|reviewed)(?:\s+(?:SHA|commit|head))*\s*[:=]?\s*([0-9a-f]{7,40}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/claude.md" "HEAD" > "<OUT>/claude-validated.md" || exit 2
 node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(m.length!==1||m[0]!=="claude-opus-5")process.exit(2);process.stdout.write(m[0])' "<OUT>/claude-models.json" > "<OUT>/claude-model.txt" || exit 2
-node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
+cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
      ```
      For Codex, in the posting call append conductor trio evidence only after verdict validation.
      Apply the same targeted substitution described above (only shell SHA arguments), never
@@ -282,11 +284,12 @@ node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "
 # Codex posting gate
 node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:head|reviewed)(?:\s+(?:SHA|commit|head))*\s*[:=]?\s*([0-9a-f]{7,40}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/codex.md" "HEAD" > "<OUT>/codex-validated.md" || exit 2
 [ -s "<OUT>/codex-trio.md" ] || exit 2
-node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
+cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
      ```
      The conductor posts full outputs through those helper calls (not a rewritten summary), and
      record both comment URLs — they stand in for reviewer session ids. A body over 60,000
-     characters is split into numbered comments `(1/2)`, `(2/2)`. Read/combine the verdicts and persist
+     characters is split by the helper into bounded numbered comments `(1/2)`, `(2/2)`
+     below the unchanged canonical first line; concatenate payloads to recover the full output. Read/combine the verdicts and persist
      their receipts first. Then, subject to **Review scratch cleanup**,
      `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`;
      remove any recorded owned conductor-trio tree and conductor-trio temporary root, the reviewer temporary roots and `OUT` as well.

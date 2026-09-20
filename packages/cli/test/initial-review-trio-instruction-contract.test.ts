@@ -61,7 +61,7 @@ it.each(["missing", "empty", "present"])("topic posting guard handles %s trio ev
       .replace('mjs NN', 'mjs 372').replaceAll('"HEAD"', `"${"a".repeat(40)}"`).replaceAll('"MAIN"', `"${"b".repeat(40)}"`);
     writeFileSync(join(out, "gh"), "#!/bin/sh\nexit 0\n");
     chmodSync(join(out, "gh"), 0o755);
-    const result = spawnSync("/bin/sh", ["-c", snippet.replaceAll("<OUT>", out)], { encoding: "utf8", cwd: new URL("../../../", import.meta.url), env: { ...process.env, PATH: `${out}:${process.env.PATH}` } });
+    const result = spawnSync("/bin/sh", ["-c", snippet.replaceAll("<OUT>", out).replaceAll("<WT>", new URL("../../../", import.meta.url).pathname)], { encoding: "utf8", cwd: new URL("../../../", import.meta.url), env: { ...process.env, PATH: `${out}:${process.env.PATH}` } });
     expect(result.status).toBe(state === "present" ? 0 : 2);
     const comment = join(out, "codex-comment.md");
     expect(existsSync(comment)).toBe(state === "present");

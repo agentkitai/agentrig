@@ -19,13 +19,34 @@ try {
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");
   const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full`;
-  writeFileSync(outputFile, `${heading}\n\n${body}${proofFile === undefined ? "" : `\n${proof}`}`);
-  // Keep the same head -1 acceptance, immediately before the only posting call.
-  const first = spawnSync("head", ["-1", outputFile], { encoding: "utf8" });
-  if (first.status !== 0 || first.stdout !== `${heading}\n`) throw new Error("canonical first-line assertion failed");
-  const posted = spawnSync("gh", ["pr", "comment", pr, "--body-file", outputFile], { stdio: "inherit" });
-  if (posted.error) throw posted.error;
-  process.exitCode = posted.status ?? 2;
+  const payload = `${body}${proofFile === undefined ? "" : `\n${proof}`}`;
+  // Payload length bounds chunk count; reserve space for its numbered marker.
+  const digits = String(payload.length).length;
+  const capacity = 60000 - heading.length - 2 - (2 * digits + 7);
+  const pieces = [];
+  if (`${heading}\n\n${payload}`.length <= 60000) pieces.push(payload);
+  else {
+    for (let start = 0; start < payload.length;) {
+      let end = Math.min(start + capacity, payload.length);
+      // Never split a surrogate pair; UTF-16 length is a conservative character bound.
+      if (end < payload.length && /[\uD800-\uDBFF]/.test(payload[end - 1])) end--;
+      pieces.push(payload.slice(start, end));
+      start = end;
+    }
+  }
+  for (const [index, piece] of pieces.entries()) {
+    const path = pieces.length === 1 ? outputFile : `${outputFile}.${index + 1}`;
+    const marker = pieces.length === 1 ? "" : `(${index + 1}/${pieces.length})\n\n`;
+    const comment = `${heading}\n\n${marker}${piece}`;
+    if (comment.length > 60000) throw new Error("review comment exceeds limit");
+    writeFileSync(path, comment);
+    // Assert the exact first line of EVERY emitted body immediately before posting.
+    const first = spawnSync("head", ["-1", path], { encoding: "utf8" });
+    if (first.status !== 0 || first.stdout !== `${heading}\n`) throw new Error("canonical first-line assertion failed");
+    const posted = spawnSync("gh", ["pr", "comment", pr, "--body-file", path], { stdio: "inherit" });
+    if (posted.error) throw posted.error;
+    if (posted.status !== 0) { process.exitCode = posted.status ?? 2; break; }
+  }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 2;
