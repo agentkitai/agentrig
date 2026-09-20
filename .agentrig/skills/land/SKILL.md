@@ -114,8 +114,9 @@ persisted handoff; verify its timestamp precedes the dispatch. Private session n
 substitute for this GitHub-visible receipt. Missing or mismatched evidence blocks landing;
 a receipt added after dispatch cannot retroactively authorize that dispatch.
 Fetch every ledger source comment live. Compare its exact verbatim finding heading and
-comment URL/anchor against the ledger, pre-dispatch receipt and persisted fixer task, not the
-conductor's paraphrase. Require the fixer's recorded precondition comparison before editing.
+comment URL/anchor against the ledger, not the conductor's paraphrase. For assigned blockers,
+also compare against the pre-dispatch receipt and persisted fixer task, and require the fixer's
+recorded precondition comparison before editing. Deferred/advisory rows need no fixer task.
 A missing, edited or mismatched heading/anchor blocks landing even when the local finding ID
 matches; preserve conflicting texts and halt, never retroactively rewrite the assignment.
 
