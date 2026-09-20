@@ -77,6 +77,18 @@ for a worktree; remove the owned proof TMPDIR separately.
 
 Follow topic §2 step 4's conductor trio and shipping policy §3: the independently run,
 same-head conductor checks supply the Codex trio evidence in the initial comment provenance.
+
+For initial posting, preserve topic's stale SHA/verdict validation gates and validated model
+files, then invoke these helper commands verbatim (replace only shell arguments NN, HEAD,
+MAIN, <WT> and <OUT> with the recorded values; never globally substitute validator source):
+```sh
+cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
+cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
+```
+<WT> is the recorded absolute reviewer-owned reviewed worktree, never the author checkout.
+These commands work from an unrelated cwd. Do not compose headings inline or post manually. The helper's exact `head -1` acceptance
+runs before `gh pr comment NN --body-file`; nonzero stops posting. Land gate unchanged.
+
 The standalone dogfood author assumes the conductor role in fresh reviewer-owned trees;
 its author-tree proof is not independent evidence. Preserve each reviewer environment limitation
 and require the author's trio, the independent trio and exact-head CI green for landing.

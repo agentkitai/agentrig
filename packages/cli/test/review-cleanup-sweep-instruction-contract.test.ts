@@ -71,51 +71,8 @@ for (const skill of ["ship", "topic"]) {
   });
 }
 
-for (const reviewer of ["claude", "codex"]) {
-  it.each(["verdict\n", "\n\nverdict\n", "\n## External review — duplicate\n\nverdict\n", "\n## External review — duplicate\n\n## External review — another\nverdict\n"])(`#365 ${reviewer} canonical first line and normalized body: %j`, body => {
-    const out = mkdtempSync(join(tmpdir(), "review-heading-"));
-    try {
-      writeFileSync(join(out, `${reviewer}.md`), body);
-      writeFileSync(join(out, "codex-model.txt"), "gpt-test");
-      writeFileSync(join(out, "codex-trio.md"), "independent proof");
-      const text = read("topic");
-      const snippet = section(text, reviewer === "claude" ? "```sh\nCLAUDE_HEADING=" : "```\nCODEX_MODEL=$(cat", "```");
-      const prefix = reviewer === "claude" ? "CLAUDE_HEADING=" : "CODEX_MODEL=$(cat";
-      const result = spawnSync("/bin/sh", ["-c", (prefix + snippet).replaceAll("<OUT>", out)], { encoding: "utf8" });
-      expect(result.status, result.stderr).toBe(0);
-      const comment = readFileSync(join(out, `${reviewer}-comment.md`), "utf8");
-      const heading = `## External review — ${reviewer === "claude" ? "Claude Code (claude-opus-5)" : "Codex (gpt-test)"} — head HEAD — merged with origin/main MAIN — full`;
-      expect(comment.split("\n")[0]).toBe(heading);
-      expect(comment).toContain(`${heading}\n\nverdict\n`);
-      expect(comment.match(/^## External review/gm)).toHaveLength(1);
-      expect(snippet).toContain('head -1');
-      expect(snippet).toContain('|| exit 2');
-      expect(text.indexOf(prefix + snippet)).toBeLessThan(text.indexOf(`gh pr comment NN --body-file "<OUT>/${reviewer}-comment.md"`));
-    } finally { rmSync(out, { recursive: true, force: true }); }
-  });
-}
-
-it.each(["claude", "codex"])("#365 %s assertion rejects a damaged first line before posting", reviewer => {
-  const out = mkdtempSync(join(tmpdir(), "review-heading-mutation-"));
-  try {
-    writeFileSync(join(out, `${reviewer}.md`), "\n## External review — duplicate\nverdict\n");
-    writeFileSync(join(out, "codex-model.txt"), "gpt-test");
-    writeFileSync(join(out, "codex-trio.md"), "proof");
-    const prefix = reviewer === "claude" ? "CLAUDE_HEADING=" : "CODEX_MODEL=$(cat";
-    const fence = reviewer === "claude" ? "```sh\n" : "```\n";
-    const snippet = (prefix + section(read("topic"), fence + prefix, "```" )).replaceAll("<OUT>", out);
-    const damaged = snippet.replace('[ "$(head -1', `printf '\\n' > "${out}/${reviewer}-comment.md"\n[ "$(head -1`);
-    expect(damaged).not.toBe(snippet);
-    expect(spawnSync("/bin/sh", ["-c", damaged]).status).toBe(2);
-    const withoutNormalization = snippet.replace(/node -e '[^']*' "[^"]+-validated\.md"/, `cat "${out}/${reviewer}.md"`);
-    expect(withoutNormalization).not.toBe(snippet);
-    expect(spawnSync("/bin/sh", ["-c", withoutNormalization]).status).toBe(0);
-    const comment = readFileSync(join(out, `${reviewer}-comment.md`), "utf8");
-    // This mutant would fail the executable canonical-body contract above.
-    expect(comment.match(/^## External review/gm)).toHaveLength(2);
-    expect(comment).not.toContain("full\n\nverdict\n");
-  } finally { rmSync(out, { recursive: true, force: true }); }
-});
+// Canonical composition/posting and #365 regressions live in post-review-comment.test.ts.
+const validator = (reviewer: string) => section(read("topic"), `# ${reviewer === "claude" ? "Claude" : "Codex"} posting gate\n`, "\n");
 
 // #368: enforce order in each local halt path, not by a distant delegation.
 for (const start of ["both reviewers dead\n", "one surviving review is not"]) {
@@ -142,11 +99,9 @@ for (const reviewer of ["claude", "codex"]) {
       writeFileSync(join(out, `${reviewer}.md`), body);
       writeFileSync(join(out, "codex-model.txt"), "gpt-test");
       writeFileSync(join(out, "codex-trio.md"), "proof cannot substitute for verdict");
-      const prefix = reviewer === "claude" ? "CLAUDE_HEADING=" : "CODEX_MODEL=$(cat";
-      const fence = reviewer === "claude" ? "```sh\n" : "```\n";
-      let snippet = (prefix + section(read("topic"), fence + prefix, "```")).replaceAll("<OUT>", out).replaceAll("— head HEAD — merged with origin/main MAIN — full", `— head ${"a".repeat(40)} — merged with origin/main ${"b".repeat(40)} — full`).replace('"HEAD" >', `"${"a".repeat(40)}" >`);
-      // Substitute only shell argument/heading placeholders, never node program text or variable names.
-      const source = prefix + section(read("topic"), fence + prefix, "```");
+      const source = validator(reviewer);
+      let snippet = source.replaceAll("<OUT>", out).replace('"HEAD" >', `"${"a".repeat(40)}" >`);
+      // Substitute only shell arguments, never node program text.
       expect(snippet.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
       if (mutate === "heading-only") {
         const clause = String.raw` || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))`;
@@ -159,7 +114,7 @@ for (const reviewer of ["claude", "codex"]) {
         expect(snippet).not.toBe(original);
       }
       const result = spawnSync("/bin/sh", ["-c", snippet], { encoding: "utf8" });
-      return { status: result.status, comment: result.status === 0 ? readFileSync(join(out, `${reviewer}-comment.md`), "utf8") : "" };
+      return { status: result.status, comment: result.status === 0 ? readFileSync(join(out, `${reviewer}-validated.md`), "utf8") : "" };
     } finally { rmSync(out, { recursive: true, force: true }); }
   };
   const heading = (sha: string) => `## External review — duplicate — head ${sha} — merged with origin/main ${"b".repeat(40)} — full`;
@@ -192,10 +147,10 @@ for (const reviewer of ["claude", "codex"]) {
       }
     }
   });
-  it(`#369 ${reviewer} accepts matching SHA preserving canonical heading`, () => {
+  it(`#369 ${reviewer} accepts matching SHA preserving raw verdict for helper`, () => {
     const result = run(`${heading("a".repeat(40))}\n\nverdict\n`);
     expect(result.status).toBe(0);
-    expect(result.comment).toContain(`— head ${"a".repeat(40)} — merged with origin/main ${"b".repeat(40)} — full\n\nverdict\n`);
+    expect(result.comment).toBe(`${heading("a".repeat(40))}\n\nverdict\n`);
     expect(result.comment.match(/^## External review/gm)).toHaveLength(1);
   });
   it(`#369 ${reviewer} validation-bypass mutant exposes stale and empty acceptance`, () => {
@@ -204,10 +159,10 @@ for (const reviewer of ["claude", "codex"]) {
 }
 
 // D1: the local Codex lead-in must not override the shared targeted-substitution rule.
-const codexSubstitutionRule = 'Apply the same targeted substitution described above (only the `"HEAD"` shell argument and canonical heading spans) with the same recorded full SHAs:';
+const codexSubstitutionRule = "Apply the same targeted substitution described above (only shell SHA arguments), never edit the validator source or guess the model from the verdict:";
 const staleCodexSubstitutionRule = "Replace HEAD and MAIN below with the same recorded full SHAs:";
 const checkCodexSubstitution = (text: string) => {
-  const lead = section(text, "For Codex, in the posting call", "```\nCODEX_MODEL=").replace(/\s+/g, " ");
+  const lead = section(text, "For Codex, in the posting call", "```sh\n# Codex posting gate").replace(/\s+/g, " ");
   expect(lead).toContain(codexSubstitutionRule);
   expect(lead).not.toContain(staleCodexSubstitutionRule);
 };
@@ -215,7 +170,7 @@ it("D1 Codex operative lead-in delegates only targeted substitution", () => chec
 it("D1-stale-Codex-lead-in mutant rejects conflicting prose even with appended correction", () => {
   const text = read("topic");
   checkCodexSubstitution(text);
-  const mutant = text.replace(codexSubstitutionRule, staleCodexSubstitutionRule);
+  const mutant = text.replace(/Apply the same targeted substitution described above[^:]+:/, staleCodexSubstitutionRule);
   expect(mutant).not.toBe(text);
   expect(() => checkCodexSubstitution(mutant + `\n${codexSubstitutionRule}`)).toThrow();
 });
@@ -224,7 +179,7 @@ it("D1 global substitution corrupts Codex validation; targeted substitution reje
   try {
     writeFileSync(join(out, "codex-model.txt"), "gpt-test");
     writeFileSync(join(out, "codex-trio.md"), "independent proof");
-    const source = "CODEX_MODEL=$(cat" + section(read("topic"), "```\nCODEX_MODEL=$(cat", "```");
+    const source = validator("codex");
     const head = "a".repeat(40), main = "b".repeat(40);
     const targeted = source.replaceAll("<OUT>", out).replaceAll("— head HEAD — merged with origin/main MAIN — full", `— head ${head} — merged with origin/main ${main} — full`).replace('"HEAD" >', `"${head}" >`);
     const global = source.replaceAll("<OUT>", out).replaceAll("HEAD", head).replaceAll("MAIN", main);
@@ -235,6 +190,6 @@ it("D1 global substitution corrupts Codex validation; targeted substitution reje
       expect(spawnSync("/bin/sh", ["-c", targeted]).status).toBe(expected);
     }
     expect(spawnSync("/bin/sh", ["-c", global]).status).toBe(0);
-    expect(readFileSync(join(out, "codex-comment.md"), "utf8")).toContain("Reviewed head HEAD\nverdict");
+    expect(readFileSync(join(out, "codex-validated.md"), "utf8")).toContain("Reviewed head HEAD\nverdict");
   } finally { rmSync(out, { recursive: true, force: true }); }
 });

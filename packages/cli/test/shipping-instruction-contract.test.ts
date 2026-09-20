@@ -159,9 +159,9 @@ it("topic captures and validates Codex stderr provenance before its concrete can
   const slice = topic.split("**Assert the Codex model from stderr:**")[1]?.split("**Combine.**")[0];
   expect(slice).toContain('"<OUT>/codex.err" > "<OUT>/codex-model.txt"');
   expect(slice).toContain("Missing, malformed or ambiguous model provenance halts the pass; never guess or post a placeholder.");
-  expect(slice).toContain('CODEX_MODEL=$(cat "<OUT>/codex-model.txt")');
-  expect(slice).toContain('## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full');
-  expect(slice).toContain('gh pr comment NN --body-file "<OUT>/codex-comment.md"');
+  expect(slice).toContain('node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt"');
+  expect(slice).toContain('"<OUT>/codex-validated.md" "HEAD" "MAIN"');
+  expect(slice).toContain('"<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2');
 });
 
 it("isolated reviewer hands off only its own verdict; conductor owns the complete pair", () => {
