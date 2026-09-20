@@ -25,6 +25,8 @@ No alternate heading is valid for posting,
 acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
 elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
 
+The Claude Code initial heading model must equal `claude-opus-5`; any other Claude model is a missing required initial review, not a receipt that satisfies the pair.
+
 ## Review scratch cleanup
 
 Human cleanup contract (verbatim):
@@ -264,6 +266,13 @@ For each recorded row, in order:
      Claim parsing ignores inline Markdown emphasis/code delimiters, consumes intervening
      SHA/commit/head labels before the claim, rejects literal HEAD placeholders separately
      from hex comparison, and accepts only matching SHA prefixes of 7–40 hex characters.
+     Bounded claim grammar (case-insensitive, anywhere in verdict): after removing inline
+     Markdown delimiters, recognize head, head_sha (normalized to headsha), or reviewed,
+     followed by zero or more SHA/commit/head/at labels, optional colon/equal, then hex or HEAD.
+     Reject 41-or-more hex tokens, stale `head_sha:` and stale `Reviewed at` claims.
+     This deliberately fails closed on a prior `reviewed commit <stale>` discussion mention;
+     rewrite historical discussion without that claim form before posting. It is not natural-language
+     attribution: other prose is not a SHA claim; Claude still must explicitly name its reviewed HEAD.
      Invoke the repo-shipped helper verbatim below, not inline composition.
      `<WT>` is the recorded absolute reviewer-owned reviewed worktree, never the author checkout;
      the explicit `cd` makes both commands usable from an unrelated cwd. It reads the model
@@ -273,7 +282,7 @@ For each recorded row, in order:
      never literal placeholders. Keep these stale SHA/verdict gates before invoking the helper.
      ```sh
 # Claude posting gate
-node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:head|reviewed)(?:\s+(?:SHA|commit|head))*\s*[:=]?\s*([0-9a-f]{7,40}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/claude.md" "HEAD" > "<OUT>/claude-validated.md" || exit 2
+node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || c.length>40 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/claude.md" "HEAD" > "<OUT>/claude-validated.md" || exit 2
 node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(m.length!==1||m[0]!=="claude-opus-5")process.exit(2);process.stdout.write(m[0])' "<OUT>/claude-models.json" > "<OUT>/claude-model.txt" || exit 2
 cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
      ```
@@ -282,7 +291,7 @@ cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude
      edit the validator source or guess the model from the verdict:
      ```sh
 # Codex posting gate
-node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:head|reviewed)(?:\s+(?:SHA|commit|head))*\s*[:=]?\s*([0-9a-f]{7,40}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/codex.md" "HEAD" > "<OUT>/codex-validated.md" || exit 2
+node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || c.length>40 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/codex.md" "HEAD" > "<OUT>/codex-validated.md" || exit 2
 [ -s "<OUT>/codex-trio.md" ] || exit 2
 cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
      ```
@@ -310,6 +319,11 @@ Follow shipping policy §§2–3: at most THREE repair rounds, retaining the cou
 Collect both initial verdicts, disposition all findings, and batch only blocking repairs.
 Non-blocking defects get documented issues; optional suggestions do not consume rounds.
 
+A blocker closes only with a fixer delta plus independent focused review, an evidence-backed
+ledger rebuttal quoting a reproducible command and its result, or an arbiter verdict within the
+existing arbitration allowance. Explicitly prohibit re-prompting the raising reviewer under the
+conductor’s contract reading as closure; that is not independent delta coverage or a rebuttal.
+
 The human-directed classification rule is explicit: the topic skill permits one arbitration per row; a conductor that disagrees with a focused reviewer's non-blocking classification records the disagreement in the ledger and either accepts it or halts for the human, without a second arbitration.
 This disagreement rule does not reclassify blocking findings: all HIGH findings, unmet acceptance, uncertain impact and unresolved blockers still block landing under shipping policy §2.
 
@@ -327,7 +341,20 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    `Repair round: N/3` (at most 3, never reset on restart), recording OLD and assigned blocker IDs.
    Update `## Residuals` with deferred defect issue links or none. Require edit success before proceeding;
    a private note or an instruction for the fixer to update it later is not persistence.
-2. Only then call the fixer described below, carrying that persisted ledger and counter.
+2. Only then perform this read-back gate. Read back `gh pr view NN --json body` BEFORE
+   spawning the fixer subagent; verify the
+   persisted `Repair round: N/3` and assigned ledger blocker IDs match the intended handoff.
+   Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim in the fixer handoff.
+   Dispatch only ledger-blocking findings. Nonblocking defects go to residual issues; advisory
+   notes are not repairs. Record any reclassification in the ledger first with its rationale, then edit and read back
+   again before dispatch. Missing or mismatched persistence halts; never delegate its creation.
+3. Persist the verified read-back receipt in the GitHub PR body BEFORE dispatch:
+   `Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>`.
+   Fill it from step 2's actual read-back, with its UTC timestamp; retain earlier rounds' receipts.
+   Require edit success and read back the receipt with `gh pr view NN --json body`;
+   verify the receipt, round, OLD and assigned IDs still match. Any mismatch halts dispatch.
+   Quote this persisted receipt in the handoff alongside the round and blockers.
+   Only then call the fixer described below, carrying that persisted ledger and counter.
 
 - **Fix** with one subagent on the same PR branch, carrying verbatim blocker texts or review
   URLs/finding IDs, authorization, prior reviewed SHA and repair counter. Its brief says:
@@ -340,7 +367,20 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   reviewer; mechanical deltas require explicit self-verification evidence, not another review.
   For a focused review, prepare one fresh reviewer-owned worktree at NEW and a unique base ref
   at OLD. Record paths/SHAs before install; use an independent install and preflighted TMPDIR.
-  First apply shipping policy §3's ancestry check and history-rewrite rule.
+  First resolve both endpoints to full commit IDs, then require unequal commits and OLD
+  ancestor of NEW. Run this gate successfully before worktree creation or reviewer launch;
+  retain the resolved OLD/NEW for preparation, review provenance and coverage records.
+
+  ```sh
+  # Focused delta gate
+  OLD=$(git rev-parse --verify "$OLD^{commit}") || exit 1
+  NEW=$(git rev-parse --verify "$NEW^{commit}") || exit 1
+  [ "$OLD" != "$NEW" ] || exit 1
+  git merge-base --is-ancestor "$OLD" "$NEW" || exit 1
+  ```
+
+  A same-head re-read is not a focused delta review and cannot close a blocker.
+  Apply shipping policy §3's history-rewrite rule for non-ancestry.
   Derive BRANCH, OLD, NEW and a unique BASE inside the preparation call; fetch the PR branch.
   Then `WT=$(mktemp -d); OUT=$(mktemp -d); git worktree add --detach "$WT" "$NEW";
   git -C "$WT" branch "$BASE" "$OLD"; REVHEAD=$NEW`.

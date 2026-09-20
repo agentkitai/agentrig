@@ -28,6 +28,8 @@ No alternate heading is valid for posting,
 acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
 elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
 
+The Claude Code initial heading model must equal `claude-opus-5`; any other Claude model is a missing required initial review, not a receipt that satisfies the pair.
+
 ## Review scratch cleanup
 
 Human cleanup contract (verbatim):
@@ -69,6 +71,7 @@ for a worktree; remove the owned proof TMPDIR separately.
 
 ## 2. Review, independently
 
+- Invoke Claude with `--model claude-opus-5` verbatim in the topic §2 step 4 command (`claude -p --model claude-opus-5`); do not use a default or alias.
 - Run the external review pass exactly as `topic` §2 step 4 prescribes: two external reviewers
   (Claude Code pinned to `claude-opus-5`, and Codex) in parallel in separate reviewer-owned worktrees you prepare, the
   model asserted from `modelUsage`, both reviews posted as PR comments, findings tagged and merged.
@@ -110,7 +113,20 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    `Repair round: N/3` (at most 3, never reset on restart), recording OLD and assigned blocker IDs.
    Update `## Residuals` with deferred defect issue links or none. Require edit success before proceeding;
    a private note or an instruction for the fixer to update it later is not persistence.
-2. Only then call the fixer described below, carrying that persisted ledger and counter.
+2. Only then perform this read-back gate. Read back `gh pr view NN --json body` BEFORE
+   spawning the fixer subagent; verify the
+   persisted `Repair round: N/3` and assigned ledger blocker IDs match the intended handoff.
+   Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim in the fixer handoff.
+   Dispatch only ledger-blocking findings. Nonblocking defects go to residual issues; advisory
+   notes are not repairs. Record any reclassification in the ledger first with its rationale, then edit and read back
+   again before dispatch. Missing or mismatched persistence halts; never delegate its creation.
+3. Persist the verified read-back receipt in the GitHub PR body BEFORE dispatch:
+   `Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>`.
+   Fill it from step 2's actual read-back, with its UTC timestamp; retain earlier rounds' receipts.
+   Require edit success and read back the receipt with `gh pr view NN --json body`;
+   verify the receipt, round, OLD and assigned IDs still match. Any mismatch halts dispatch.
+   Quote this persisted receipt in the handoff alongside the round and blockers.
+   Only then call the fixer described below, carrying that persisted ledger and counter.
 
 - Spawn the fixer on the same branch with exact blocker texts/URLs. After its local proof and
   push, classify OLD..NEW under shipping policy §3: ONE independent focused reviewer for a
@@ -118,6 +134,15 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   for isolated preparation, installation, launch, provenance and cleanup. Never repeat the initial external pair
   for each fix. At most three repair rounds, preserving the counter on resumption; unresolved
   blockers or non-convergence halt, while new advisory notes do not open another round.
+Before invoking land in this session or spawning a land child, read `gh pr view NN --json body`.
+Fetch linked review comments too (for example `gh api repos/OWNER/REPO/issues/comments/ID`);
+verify both initial canonical headings in the actual comments, including the pinned Claude model,
+reviewed head and main provenance. Verify `## Review disposition` contains dispositions for every
+finding from both initial reviews and every focused review, and `## Residuals` has issue links or
+explicit `none`. Verify all blocker closures and delta coverage through current head. Missing
+headings, comments, dispositions or residual records halt BEFORE land-child spawning; a URL alone
+or a private summary is not verification. Persist edits then read back again if anything changes.
+
 - When scoped merge authorization is present, run the `land` skill's steps (in this session or a
   land subagent) without asking for a second approval. Pass the verbatim human quote, task scope
   and PR number; require green exact-head CI and watch post-merge CI before reporting completion.

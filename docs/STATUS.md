@@ -1,5 +1,21 @@
 # Status
 
+## Review-gate contracts (#374, #377, #382)
+
+Instruction-only tightening: pinned Claude initial headings, non-empty ancestral focused deltas,
+evidence-only blocker closure, persisted/read-back fixer and land handoffs, and bounded fail-closed
+SHA claim grammar. Executable instruction contracts cover stale aliases, overlong tokens and prior
+reviewed-commit mentions; deletion/reversion mutants pin each gate. No runtime changes.
+Builder verification and review/landing ownership are recorded in the task PR; parent owns review
+and landing, and the builder cannot merge.
+
+PR #383 repair round 1/3 implements only blocking C1/C2, pending independent focused review:
+ship/topic persist the verified read-back receipt before fixer dispatch; land checks the same
+GitHub-visible record. Focused delta gates resolve refs/abbreviations to full commit IDs before
+inequality and ancestry checks. Fail-first instruction tests, deletion mutants and executable
+same-commit/forward/reverse probes pin both repairs. Deferred C3/C4/C5/C7 and advisory C6 are
+unchanged; review and landing remain parent-owned.
+
 ## Skill wording follow-ups (#367, #368, #369)
 
 Instruction-only follow-up to PR #366: ship/dogfood now explicitly share topic's
