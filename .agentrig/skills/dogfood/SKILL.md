@@ -208,7 +208,10 @@ while CI runs; join the gates at landing.
 
 ## 8. Independent reviews — standalone only
 
-If this is a child run, **skip this step** and hand off to the conductor at step 10.
+If this is a child run, **skip this step** and hand off to the conductor at step 10;
+the conductor runs every declared reviewer slot itself.
+After §7's persisted phase handoff and builder cleanup, the standalone conductor runs
+this pass outside the removed builder tree; a later repair reattaches the branch under §1.
 Standalone runs use the **declared reviewer slots** in `.agentrig/config.json` as the
 sole selection authority; never infer reviewers from CLI names or credentials.
 Zero slots: record the no-review outcome and launch/post/clean no reviewer artifacts.
@@ -223,6 +226,7 @@ receipt, launch through `scripts/reviewer-adapters.mjs`, wait for all declared j
 validate each verdict into `<PREFIX>.validated.md`, then post **that validated file**
 through `scripts/post-review-comment.mjs` with provenance and receipt attachments.
 Every validation or posting failure exits 2 before any success or merge gate.
+The canonical helper must execute its `head -1` assertion before posting.
 Use each returned slot-specific comment URL; never fabricate a fixed pair of URLs.
 Apply the shared Review scratch cleanup contract below to all declared slots only,
 including API jobs and scratch artifacts. For zero slots record cleanup as not applicable.
