@@ -1,5 +1,15 @@
 # Status
 
+## Dogfood policy references (#423) — implemented, pending review
+
+Corrected the dogfood introduction to cite shipping policy §3’s existing declared
+reviewer slots and check ordering rule, and replaced the stale cleanup direction
+with its named **Review scratch cleanup** heading. Dedicated fail-first instruction
+assertions pin both references; independent stale-citation and cleanup-direction
+mutants plus LF/CRLF-copy proof accompany declared checks in the PR. Documentation
+and instruction tests only; no workflow behavior or roadmap continuation changes.
+Repair round 0/3; ledger pending independent review; residuals none.
+
 ## Finding-index prose and path-separator residuals (#450, #451, #453, #454)
 
 - Anchored unsupported F-number/priority detection to finding openings: inline grammar examples
