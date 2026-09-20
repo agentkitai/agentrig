@@ -72,3 +72,25 @@ it.each([
   const heading = "### LOW: Actual finding";
   expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
 });
+
+it.each([
+  'An ordinary sentence quoting `### HIGH title` is not a heading.',
+  'An ordinary sentence quoting `### HIGH — title` must not halt fallback.',
+  "- **#444** — `unsupportedOpening` is ATX-scoped; P1 proves the new prose test is non-vacuous, P2 proves delimiter-less ALL-CAPS ATX headings still fail closed. The #431 exclusions, quoted/fenced exclusions, bare `F1 — HIGH —` grammar and exact-heading-bytes tests are all still present and green. Bare severity-with-delimiter prose (`HIGH: …`) still indexes, so the loosening is confined to delimiter-less non-heading lines — the design choice #444 explicitly authorized.",
+  'The example `[P4]` is inline prose, not a finding.',
+])("M-inline-fallback: ignores grammar examples in prose: %s", prose => {
+  const headings = ["### LOW: First", "### LOW: Second", "### LOW: Third", "### LOW: Fourth"];
+  expect(findingIndex(url, { html_url: url, body: [...headings, prose].join("\n") }))
+    .toEqual(headings.map(heading => ({ comment: url, heading })));
+});
+
+it.each([
+  "**F1 — HIGH, blocking** — Real defect",
+  "- **F1** — HIGH — Real defect", "- [P1] Real defect",
+  "1. [P1] Real defect", "2) __[P4]__ Real defect",
+  "* F2 — MEDIUM — Real defect", "+ **[P1]** Real defect",
+  "- F2: HIGH — Real defect", "- [P4] Unknown priority",
+  "- **HIGH:** Real defect", "__F3 — LOW — Real defect__",
+])("R1-F1 unsupported Markdown opening fails closed: %s", body => {
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow("unindexed finding");
+});

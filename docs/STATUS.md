@@ -1,5 +1,24 @@
 # Status
 
+## Finding-index prose and path-separator residuals (#450, #451, #453, #454)
+
+- Anchored unsupported F-number/priority detection to finding openings: inline grammar examples
+  in ordinary prose, including the live #446 `- **#444**` paragraph, no longer halt fallback.
+  Real delimiterless ALL-CAPS ATX finding attempts and unsupported list/emphasis openings
+  still fail closed; heading bytes stay exact. Repair round 1 addresses ledger F1–F3 only.
+- Made missing-override diagnostic assertions separator-portable and simulated Windows-style
+  relative paths with host filesystem lookups, preserving both missing-file and root checks.
+- Repair round 2 addresses only F3 using the CLI workspace's existing `marked` tokenizer.
+  The shared literal-echo guard permits only blockquote and fenced/indented code-block
+  tokens within a finding section. Inline code (including wrapped spans) is now explicitly
+  echo-checked per operator direction; list continuation paragraphs remain prose. Blank lines
+  separate paragraphs without ending the section; thematic breaks, new headings and explicit
+  summary labels end permission. Lazy indented prose/list continuations remain echo-checked.
+  Literal echoes outside that scope remain refused after LF/CRLF/space/tab normalization.
+- Tests/helper script only; no product or skill text changes. Fail-first cases and seven named
+  killed mutants are recorded in the PR, alongside exact-head declared checks and external
+  CRLF-copy loader-override proof. Independent review/landing remains the conductor's work.
+
 ## Reviewer-slot residuals, third batch (#441–445) — implemented, pending review
 
 Testing policy positively pins current declared-slot wording with the actual stale
