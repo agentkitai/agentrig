@@ -69,7 +69,14 @@ it("testing policy resolves named checks and zero reviewer slots", () => {
   expect(policy).toContain("External review: none declared");
   expect(policy).toMatch(/zero[^\n]*slots/i);
   expect(policy).toMatch(/resolved[^\n]*bootstrap/);
-  expect(policy).not.toContain("PRs list those checks and the two independent reviews");
+  const current = "same-head receipts **before** launching declared reviewer slots.";
+  const stale = "same-head receipts **before** launching the review pair. Reviewers inspect code and targeted\nmutants, not a duplicate full suite. The operative sections in dogfood/topic/review/arbiter\nsupersede shipping policy §3's reviewer-trio rule; ship/land and shipping policy are unchanged.";
+  const check = (value: string) => expect(value).toContain(current);
+  check(policy);
+  // M-actual-stale-433: restore the actual pre-440 sentence, not invented wording.
+  expect(() => check(policy.replace(current, stale))).toThrow();
+  expect(policy).toContain("declared check receipts");
+  expect(policy).toContain("Zero, one or many named steps");
 });
 
 it("pins Markdown-only LF policy and explains Windows tooling tradeoff", () => {

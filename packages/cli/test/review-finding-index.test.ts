@@ -51,7 +51,7 @@ it.each([" ### HIGH: Actual", "  ### F1 — HIGH — Actual", "   ### [P1] Actua
 // Unsupported severity openings must not vanish from the disposition ledger.
 it.each([
   "### HIGH Something", "### MEDIUM Something else", "## LOW Vacuous assertion",
-  "HIGH", "### LOW", "### CRITICAL", "### P1", "P1 Unsanitized tool emit",
+  "### HIGH", "### LOW", "### CRITICAL", "### P1", "### P1 Unsanitized tool emit",
   "### P1 prose following", "   ### **HIGH** Unsupported", "### HIGH: indexed\n### LOW Missing delimiter",
 ])("C1 fails closed on unsupported severity opening %s", body => {
   expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
@@ -62,4 +62,13 @@ it.each([
   "> ### HIGH Unsupported", "```md\n### HIGH Unsupported\n```",
 ])("C1 preserves ordinary prose and example exclusion %s", body => {
   expect(findingIndex(url, { html_url: url, body })).toEqual([]);
+});
+
+it.each([
+  "HIGH confidence in the implementation.", "LOW risk remains after verification.",
+  "MEDIUM is a severity token, not a finding here.", "CRITICAL issues were not observed.",
+  "P1 work is scheduled next.", "HIGH", "P1 Unsanitized tool emit",
+])("M-severity-prose: ordinary severity-token prose does not halt the index: %s", prose => {
+  const heading = "### LOW: Actual finding";
+  expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
 });

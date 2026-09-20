@@ -21,7 +21,7 @@ export function readSkillText(path: string | URL, _encoding: "utf8" = "utf8"): s
     for (const entry of readdirSync(skills, { recursive: true, withFileTypes: true })) {
       if (!entry.isFile()) continue;
       const file = relative(skills, resolve(entry.parentPath, entry.name));
-      if (!statSync(resolve(override, file)).isFile()) throw new Error(`incomplete skills override: ${file}`);
+      if (!statSync(resolve(override, file), { throwIfNoEntry: false })?.isFile()) throw new Error(`incomplete skills override: ${file} in ${resolve(override)}`);
     }
   }
   const target = isSkill && override !== undefined ? resolve(override, within) : absolute;

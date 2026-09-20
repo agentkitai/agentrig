@@ -1,5 +1,18 @@
 # Status
 
+## Reviewer-slot residuals, third batch (#441–445) — implemented, pending review
+
+Testing policy positively pins current declared-slot wording with the actual stale
+sentence restoration mutant; CRLF proof instructions name declared check receipts
+and explicitly support zero, one or many named steps. Incomplete skill overrides
+name both the missing file and override root. Finding indexing permits ordinary
+severity-token prose while delimiter-less ALL-CAPS ATX headings still fail closed.
+The test-only instruction guard follows object-property root and full-path taint,
+with pinned cfg.dir bypasses and generated-fixture/scope exceptions.
+No product code or roadmap continuation changes. Fail-first, named mutation,
+CRLF and declared-check receipts are recorded in the PR; independent review and
+exact-head hosted CI remain pending. Repair round: 0/3; residuals: none.
+
 ## Reviewer-slot residuals, second batch (#430–433, #436–439) — implemented, pending review
 
 Ship and shipping policy define the exact-head adapter checkout via topic preparation.
