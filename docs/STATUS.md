@@ -12,6 +12,12 @@ gates. Dogfood network-free fake ModelProvider/injected fetchFn and macOS tmpdir
 realpath fixture guidance was absent at the fresh base and is restored. No runtime
 or roadmap continuation changes. Fail-first, named mutants, CRLF and declared-check
 receipts accompany the PR; independent conductor review and exact-head CI remain.
+Repair round 1 addresses only F1/F2: posting heading collection no longer inherits
+strict live-index refusals or synthetic comment provenance; live indexing stays
+strict. Codex transcript extraction consumes tolerated blank lines before the
+verdict so the actual topic head gate accepts LF/CRLF artifacts. Real posting and
+posting-shell fail-first regressions and named mutant receipts accompany the repair.
+F3/F4 remain nonblocking follow-ups #453/#454.
 
 ## Reviewer-slot residuals, second batch (#430–433, #436–439) — implemented, pending review
 

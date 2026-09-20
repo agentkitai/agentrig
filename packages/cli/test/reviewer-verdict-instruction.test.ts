@@ -27,7 +27,7 @@ describe.each(skills)("%s actual posting shell", skill => {
     expect(text).toContain("REVIEW_LARGE_BODY_LEDGER");
     expect(text).toContain("40 KiB");
   });
-  it.each(["pass", "echo", "stale", "markerless-stale", "codex-tail", "claude-json", "quote"])("executes real helpers: %s", mode => {
+  it.each(["pass", "echo", "stale", "markerless-stale", "codex-tail", "codex-blank-lf", "codex-blank-crlf", "claude-json", "quote"])("executes real helpers: %s", mode => {
     expect(start, "posting block must use shared helper").toBeGreaterThan(0);
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "verdict-gates-")));
     try {
@@ -40,6 +40,10 @@ describe.each(skills)("%s actual posting shell", skill => {
       if (mode === "echo") body += "A pass verdict lists what you probed and which mutants you ran\n";
       if (mode === "markerless-stale") body += "Full review comments:\n### HIGH: Regression\nGate is broken.\n";
       if (mode === "codex-tail") body = `OpenAI Codex\nuser\nInstructions\ncodex\n${body}codex\nTail evidence.\n`;
+      if (mode.startsWith("codex-blank-")) {
+        const eol = mode === "codex-blank-crlf" ? "\r\n" : "\n";
+        body = `OpenAI Codex\nuser\nInstructions\ncodex\n\n \t\n${body}codex\nTail evidence.\n`.replaceAll("\n", eol);
+      }
       if (mode === "quote") body += "### LOW: Contract mismatch\nscripts/post-review-comment.mjs:30 fix the gate. Contract says:\n> A pass verdict lists what you probed and which mutants you ran\n";
       writeFileSync(join(dir, "codex.md"), body);
       const claude = `Reviewed head: ${head}\nVERDICT: PASS\nProbed the gate.\n`;
@@ -58,6 +62,11 @@ describe.each(skills)("%s actual posting shell", skill => {
         expect(result.status, result.stderr).toBe(0);
         expect(readFileSync(join(dir, "gh.log"), "utf8").trim().split("\n")).toHaveLength(2);
         if (mode === "codex-tail") expect(readFileSync(join(dir, "codex.comment.md"), "utf8")).toContain("codex\nTail evidence.");
+        if (mode.startsWith("codex-blank-")) {
+          const extracted = readFileSync(join(dir, "codex.verdict.md"), "utf8");
+          expect(extracted.split(/\r?\n/)[0]).toBe(`Reviewed head: ${head}`);
+          expect(readFileSync(join(dir, "codex.comment.md"), "utf8")).toMatch(/codex\r?\nTail evidence/);
+        }
       }
     } finally { rmSync(dir, {recursive:true,force:true}); }
   });

@@ -16,7 +16,7 @@ export function reviewerVerdict(raw, adapter) {
   if (adapter === "codex-cli" && /^OpenAI Codex\b/.test(raw)) {
     // Only a role marker followed by the verdict's opening is a boundary. A standalone
     // 'codex' inside a finding is content, not another role marker (never lastIndexOf).
-    const boundary = /^codex\r?\n(?=(?:[ \t]*\r?\n)*(?:VERDICT:|Reviewed head|\*\*Findings\*\*|#{1,3} Findings|Full review comments:))/m.exec(raw);
+    const boundary = /^codex\r?\n(?:[ \t]*\r?\n)*(?=(?:VERDICT:|Reviewed head|\*\*Findings\*\*|#{1,3} Findings|Full review comments:))/m.exec(raw);
     if (boundary) return raw.slice(boundary.index + boundary[0].length);
   }
   // In particular, keep VERDICT/Reviewed head before markerless Full review comments.
@@ -29,8 +29,8 @@ export const instructionEchoSentences = [
   "Report which of the PR body's claims you verified, and any you could not.",
 ];
 export function assertReviewerVerdict(body) {
-  const url = "https://github.com/agentkitai/agentrig/pull/1#issuecomment-1";
-  const headings = new Set(findingIndex(url, { html_url: url, body }).map(f => f.heading));
+  // Posting checks literal echoes, not live finding-index completeness or identity.
+  const headings = new Set(findingHeadings(body));
   let inFinding = false;
   for (const line of body.split(/\r?\n/)) {
     if (/^ {0,3}#{1,6} /.test(line)) inFinding = headings.has(line);
@@ -53,9 +53,17 @@ export function findingIndex(url, comment) {
   commentSource(url);
   if (comment?.html_url !== url) throw new Error('live comment identity mismatch');
   if (typeof comment.body !== 'string') throw new Error('live comment body missing');
+  return findingHeadings(comment.body, line => {
+    throw new Error(`unindexed finding in ${url}: ${line}`);
+  }).map(heading => ({ comment: url, heading }));
+}
+
+// Share heading recognition without fabricating live provenance for unposted text.
+// Only the live index rejects recognizable unsupported finding openings.
+function findingHeadings(body, unsupported = () => {}) {
   const findings = [];
   let fence;
-  for (const line of comment.body.split(/\r?\n/)) {
+  for (const line of body.split(/\r?\n/)) {
     const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
     if (fence) {
       if (marker?.[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
@@ -72,9 +80,9 @@ export function findingIndex(url, comment) {
     const unsupportedOpening = /^(?:\*\*)?(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])\b/.test(candidate)
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
     if (finding) {
-      findings.push({ comment: url, heading: line });
+      findings.push(line);
     } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
-      throw new Error(`unindexed finding in ${url}: ${line}`);
+      unsupported(line);
     }
   }
   return findings;

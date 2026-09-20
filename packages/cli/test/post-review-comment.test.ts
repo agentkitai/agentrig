@@ -416,3 +416,22 @@ it("counts UTF-8 bytes at the 40 KiB body boundary and records the size rational
   expect(result.status, result.stderr).toBe(0);
   expect(JSON.parse(result.receipt!).sizeExplanation).toBe("Conductor ledger: intentional 40 KiB boundary fixture.");
 });
+
+it.each([
+  "LOW risk overall; no blocking defects.",
+  "P1 follow-ups tracked separately.",
+  "MEDIUM confidence in the claimed counts.",
+])("F1: posts legitimate severity-opening prose without synthetic provenance: %s", prose => {
+  const body = `VERDICT: PASS\nReviewed head ${head}\n${prose}\n`;
+  const result = run(body);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).toBe(`${heading}\n\n${body}`);
+  expect(result.args).toBeDefined();
+  expect(result.stderr).not.toContain("pull/1#issuecomment-1");
+  const url = "https://github.com/agentkitai/agentrig/pull/452#issuecomment-5752094526";
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow(`unindexed finding in ${url}: ${prose}`);
+  // Prose must neither disable the echo guard nor discard a supported finding's escape.
+  expect(run(body + echoPhrases[0]).stderr).toContain("reviewer body echoes instructions; not a verdict");
+  const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
+  expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
+});
