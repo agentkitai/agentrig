@@ -64,7 +64,7 @@ it.each(["valid", "stale", "overlong", "heading", "missing-checks", "missing-pro
     chmodSync(join(dir, "gh"), 0o755);
     writeFileSync(join(dir, "config.json"), JSON.stringify({ reviewers: { Custom: { adapter: "api:peer", model: "pin" } } }));
     writeFileSync(`${prefix}.model.txt`, "pin");
-    const body = mode === "stale" ? `Reviewed at ${main}` : mode === "overlong" ? `head ${head}a` : mode === "heading" ? "## title\n" : `Reviewed at ${head}\nVERDICT: PASS\n`;
+    const body = mode === "stale" ? `Reviewed head: ${head}\nReviewed at ${main}` : mode === "overlong" ? `Reviewed head: ${head}a\nVERDICT: PASS` : mode === "heading" ? "## title\n" : `Reviewed head: ${head}\nVERDICT: PASS\n`;
     writeFileSync(`${prefix}.md`, body);
     if (mode !== "missing-checks") writeFileSync(join(dir, "checks.md"), "green checks");
     if (mode !== "missing-provenance") writeFileSync(`${prefix}.provenance.json`, "{}");

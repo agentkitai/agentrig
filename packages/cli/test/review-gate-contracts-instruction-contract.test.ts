@@ -7,7 +7,7 @@ const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.m
 const skill = (name: string) => `.agentrig/skills/${name}/SKILL.md`;
 const checks: Array<[string, string, string, string[]]> = [
  ["M-lander-fixer-receipt",skill("land"),"## 1.",["quote `Repair round: N/3`", "ledger blocker IDs", "`gh pr view NN --json body` read-back receipt BEFORE", "Reject a missing quote", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "match that line against the round, OLD and assigned blockers", "counter repaired by the fixer afterwards cannot retroactively satisfy it"]],
- ["M-claim-documentation",skill("topic"),"## 2.",["Reject 41-or-more hex tokens", "stale `head_sha:`", "stale `Reviewed at`", "fails closed on a prior `reviewed commit <stale>` discussion mention"]],
+ ["M-claim-documentation",skill("topic"),"## 2.",["Only standalone 7–40 hex tokens", "stale `head_sha:`", "stale `Reviewed at`", "discussion mention outside code"]],
  ["M-mechanical-closure", "docs/SHIPPING-WORKFLOW.md", "## 3.",["it cannot replace independent focused review to close a blocker"]],
  ...["topic", "ship", "land"].map(name => ["M-model-heading", skill(name), "## Initial full review heading contract", ["initial heading model must equal the slot's pinned model", "missing required initial review, not a receipt"]] as [string,string,string,string[]]),
  ["M-topic-pin",skill("topic"),"## 2.",["scripts/reviewer-adapters.mjs", "slot's pinned model"]],
@@ -113,30 +113,7 @@ it("M-section-boundary rejects a delta requirement moved to the next section", (
  const mutant = s.replace(phrase, "REMOVED").replace("## 4. Conditional land and continue", `## 4. Conditional land and continue\n\n${phrase}`);
  expect(() => checkRow(mutant, row)).toThrow();
 });
-it("C4 removes redundant length guards from both topic validators", () => {
- expect(read(skill("topic"))).not.toContain("c.length>40 ||");
-});
-for(const reviewer of ["Slot"]) {
- const source=()=>read(skill("topic")).split(`# ${reviewer} posting gate\n`)[1]!.split("\n")[0]!;
- const run=(body:string, mutant=false)=>{
-  const dir=mkdtempSync(join(tmpdir(),"claim-gate-"));
-  try { const input=join(dir,"input"); writeFileSync(input,body);
-   let program=source().match(/node -e '([^']+)'/)![1]!;
-   if(mutant) {
-    if(body.startsWith("head ")) program=program.replace('[0-9a-f]{7,}', '[0-9a-f]{7,40}');
-    else if(body.startsWith("head_sha:")) program=program.replace('headsha|','');
-    else program=program.replace('|at','');
-   }
-   return spawnSync(process.execPath,["-e",program,input,"a".repeat(40)],{env:{...process.env,GIT_TRACE2_EVENT:"0"}}).status;
-  } finally {rmSync(dir,{recursive:true,force:true});}
- };
- for(const [id,claim] of [["M-41hex",`head ${"a".repeat(41)}`],["M-head-sha",`head_sha: ${"c".repeat(40)}`],["M-reviewed-at",`Reviewed at ${"c".repeat(40)}`]]) {
-  it(`${reviewer} ${id} rejects`,()=>expect(run(`${claim}\nverdict`)).toBe(2));
-  it(`${reviewer} ${id} grammar-reversion mutant`,()=>expect(run(`${claim}\nverdict`,true)).toBe(0));
- }
- it(`${reviewer} prior-reviewed-commit discussion fails closed`,()=>expect(run(`Reviewed head ${"a".repeat(40)}\nPreviously reviewed commit ${"c".repeat(40)} had a defect.\nverdict`)).toBe(2));
- it(`${reviewer} current supported claims pass`,()=>expect(run(`head_sha: ${"a".repeat(40)}\nReviewed at ${"a".repeat(7)}\nverdict`)).toBe(0));
-}
+// SHA posting-gate probes live in sha-claim-instruction-contract.test.ts (#424).
 
 // Execute the actual documented shell gate, not a duplicate predicate.
 for (const path of [skill("topic"), "docs/SHIPPING-WORKFLOW.md"]) {
