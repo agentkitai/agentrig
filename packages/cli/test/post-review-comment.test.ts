@@ -383,7 +383,7 @@ it("M-quoted-contract: allows explicit contract quotation inside a real finding 
   const body = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\nscripts/post-review-comment.mjs:30 lacks evidence; fix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body).posted).toBe(`${heading}\n\n${body}`);
   expect(run(`VERDICT: PASS\n> ${echoPhrases[1]}\n`).args).toBeUndefined();
-  expect(run(body + echoPhrases[0]).args).toBeUndefined();
+  expect(run(body + "\n" + echoPhrases[0]).args).toBeUndefined();
 });
 it("M-size-gate: large genuine review requires nonempty conductor ledger before gh", () => {
   const body = `VERDICT: PASS\nReviewed head ${head}\n` + "Evidence from targeted probe.\n".repeat(2000);
@@ -436,17 +436,15 @@ it.each([
     { comment: url, heading: atx },
   ]);
   // Prose must neither disable the echo guard nor discard a supported finding's escape.
-  expect(run(body + echoPhrases[0]).stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(run(body + "\n" + echoPhrases[0]).stderr).toContain("reviewer body echoes instructions; not a verdict");
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
 });
 
-it.each(["blockquote", "inline", "wrapped-inline", "fence", "indent"])("M-bounded-quote: posts %s citations only inside a finding", form => {
+it.each(["blockquote", "fence", "indent"])("M-bounded-quote: posts %s citations only inside a finding", form => {
   const phrase = echoPhrases[1];
   const wrapped = phrase.replace("probed and", "probed\n and");
   const citation = form === "blockquote" ? wrapped.split("\n").map(line => `> ${line}`).join("\n")
-    : form === "inline" ? `Contract: \`${phrase}\``
-    : form === "wrapped-inline" ? `Contract: \`${wrapped}\``
     : form === "fence" ? `\`\`\`text\n${wrapped}\n\n\`\`\``
     : `    ${phrase}`;
   const prefix = "VERDICT: FAIL\n### LOW: Citation contract\nFix the missing contract evidence.\n\n";
@@ -469,8 +467,8 @@ it.each(["\n", "\r\n", " \t "])("M-normalized-echo: refuses literal whitespace r
   }
 });
 
-it.each(["> ", "    ", "\t", "`", "```text\n"])("R1-F2 blank lines preserve finding section citation: %j", marker => {
-  const citation = marker + echoPhrases[0] + (marker === "`" ? "`" : marker.startsWith("```") ? "\n```" : "");
+it.each(["> ", "    ", "\t", "```text\n"])("R1-F2 blank lines preserve finding section citation: %j", marker => {
+  const citation = marker + echoPhrases[0] + (marker.startsWith("```") ? "\n```" : "");
   const body = `### LOW: Evidence\n\nScenario and proposed fix.\n\n${citation}\n`;
   const result = run(body);
   expect(result.status, result.stderr).toBe(0);
@@ -490,4 +488,27 @@ it.each(["Summary:", "Unrelated summary", "**Summary**", "## Evidence", "---"])(
   const result = run(`### LOW: Evidence\n\nFinding prose.\n\n${boundary}\n\n> ${echoPhrases[0]}\n`);
   expect(result.status).not.toBe(0);
   expect(result.args).toBeUndefined();
+});
+
+// Round 2 operator contract: inline spans are prose, not code-block permission.
+it.each(["- List paragraph.", "1. Ordered paragraph."])("R2-F3 list blank continuation refuses: %s", list => {
+  for (const indent of ["    ", "\t"]) {
+    const result = run(`### LOW: Evidence\n\n${list}\n\n${indent}${echoPhrases[0]}\n`);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+    expect(result.args).toBeUndefined();
+  }
+});
+it.each([false, true])("R2-F3 inline spans remain echo checked, wrapped=%s", wrapped => {
+  const phrase = wrapped ? echoPhrases[0].replace("not the author", "not\nthe author") : echoPhrases[0];
+  const result = run(`### LOW: Evidence\n\nContract: \`${phrase}\`\n`);
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(result.args).toBeUndefined();
+});
+it.each(["      ", "        "])("R2-F3 actual nested list code passes: %j", indent => {
+  const body = `### LOW: Evidence\n\n- List paragraph.\n\n${indent}${echoPhrases[0]}\n`;
+  const result = run(body);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).toBe(`${heading}\n\n${body}`);
 });

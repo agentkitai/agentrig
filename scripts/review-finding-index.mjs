@@ -4,6 +4,10 @@ import { cliAdapters } from "./reviewer-adapters.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+
+// Resolve the existing dependency through its declaring workspace package.
+const { lexer } = createRequire(new URL('../packages/cli/package.json', import.meta.url))('marked');
 
 // Current adapters already return verdict-only text (.last for Codex, .result for Claude).
 // Also support old transcript artifacts without cutting a markerless verdict's provenance.
@@ -32,53 +36,30 @@ export function assertReviewerVerdict(body) {
   // Posting checks literal echoes, not live finding-index completeness or identity.
   const headings = new Set(findingHeadings(body));
   let inFinding = false;
-  let fence;
-  let fenceQuoted = false;
-  let prose = [];
   const unquoted = [];
-  const flush = () => {
-    const text = prose.join("\n");
-    // Backtick citations may wrap, but never cross a paragraph/section boundary.
-    unquoted.push(inFinding ? text.replace(/(`+)([\s\S]*?)\1/g, " ") : text);
-    prose = [];
+  const visit = tokens => {
+    for (const token of tokens) {
+      // Only block tokens confer citation permission. In particular, a blank
+      // list continuation is still a paragraph, and inline code is still prose.
+      if (token.type === "code" || token.type === "blockquote") {
+        if (!inFinding) unquoted.push(token.raw);
+        continue;
+      }
+      if (token.type === "list") {
+        for (const item of token.items) visit(item.tokens);
+        continue;
+      }
+      if (token.type === "heading" || token.type === "hr") inFinding = false;
+      for (const line of token.raw.split(/\r?\n/)) {
+        if (/^ {0,3}#{1,6}\s/.test(line) || headings.has(line) ||
+            /^ {0,3}(?:\*\*|__)?(?:unrelated summary|summary)(?:(?:\*\*|__)?\s*:|(?:\*\*|__)?\s*$)/i.test(line)) {
+          inFinding = headings.has(line);
+        }
+        unquoted.push(line);
+      }
+    }
   };
-  for (const line of body.split(/\r?\n/)) {
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
-    if (fence) {
-      if (!fenceQuoted) unquoted.push(line);
-      if (marker?.[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
-      continue;
-    }
-    if (marker) {
-      flush();
-      fence = marker;
-      fenceQuoted = inFinding;
-      if (!fenceQuoted) unquoted.push(line);
-      continue;
-    }
-    // Paragraph breaks end inline spans, not the finding SECTION. Fences own
-    // their internal breaks. Explicit summary labels, headings and thematic
-    // breaks revoke permission; ordinary spaced finding prose does not.
-    if (!line.trim()) {
-      flush();
-      continue;
-    }
-    if (/^ {0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$/.test(line) ||
-        /^ {0,3}#{1,6}\s/.test(line) || headings.has(line) ||
-        /^ {0,3}(?:\*\*|__)?(?:unrelated summary|summary)(?:(?:\*\*|__)?\s*:|(?:\*\*|__)?\s*$)/i.test(line)) {
-      flush();
-      inFinding = headings.has(line);
-      unquoted.push(line);
-      continue;
-    }
-    // Indented code cannot interrupt a prose/list paragraph (CommonMark).
-    if (inFinding && ((prose.length === 0 && /^(?: {4}|\t)/.test(line)) || /^ {0,3}>/.test(line))) {
-      flush();
-      continue;
-    }
-    prose.push(line);
-  }
-  flush();
+  visit(lexer(body));
   // Literal echoes remain literal under whitespace-only LF/CRLF reflow.
   const text = unquoted.join("\n").replace(/^(?: {0,3}>[ \t]?)+/gm, "").replace(/\s+/g, " ");
   if (instructionEchoSentences.some(sentence => text.includes(sentence))) {

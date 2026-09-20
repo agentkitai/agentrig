@@ -8,8 +8,10 @@
   still fail closed; heading bytes stay exact. Repair round 1 addresses ledger F1–F3 only.
 - Made missing-override diagnostic assertions separator-portable and simulated Windows-style
   relative paths with host filesystem lookups, preserving both missing-file and root checks.
-- The posting helper's shared literal-echo guard permits blockquote, inline-code (including
-  wrapped), fenced and actual indented-code citations within a finding section. Blank lines
+- Repair round 2 addresses only F3 using the CLI workspace's existing `marked` tokenizer.
+  The shared literal-echo guard permits only blockquote and fenced/indented code-block
+  tokens within a finding section. Inline code (including wrapped spans) is now explicitly
+  echo-checked per operator direction; list continuation paragraphs remain prose. Blank lines
   separate paragraphs without ending the section; thematic breaks, new headings and explicit
   summary labels end permission. Lazy indented prose/list continuations remain echo-checked.
   Literal echoes outside that scope remain refused after LF/CRLF/space/tab normalization.
