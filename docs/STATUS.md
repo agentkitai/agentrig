@@ -13,6 +13,25 @@ No product code or roadmap continuation changes. Fail-first, named mutation,
 CRLF and declared-check receipts are recorded in the PR; independent review and
 exact-head hosted CI remain pending. Repair round: 0/3; residuals: none.
 
+## Reviewer body verdict validation (#410, #411) — implemented, pending review
+
+Posting extracts adapter verdicts through the shared finding-index helper and rejects
+a small literal review-contract echo denylist; blockquoted contract citations inside
+indexed findings remain valid. Markerless comments retain verdict/head provenance,
+and standalone codex lines do not truncate genuine verdicts. Bodies above 40 KiB
+require a conductor ledger size explanation recorded in the posting receipt; bounded
+chunks remain lossless. Topic/ship posting guidance and real-helper tests cover the
+gates. Dogfood network-free fake ModelProvider/injected fetchFn and macOS tmpdir
+realpath fixture guidance was absent at the fresh base and is restored. No runtime
+or roadmap continuation changes. Fail-first, named mutants, CRLF and declared-check
+receipts accompany the PR; independent conductor review and exact-head CI remain.
+Repair round 1 addresses only F1/F2: posting heading collection no longer inherits
+strict live-index refusals or synthetic comment provenance; live indexing stays
+strict. Codex transcript extraction consumes tolerated blank lines before the
+verdict so the actual topic head gate accepts LF/CRLF artifacts. Real posting and
+posting-shell fail-first regressions and named mutant receipts accompany the repair.
+F3/F4 remain nonblocking follow-ups #453/#454.
+
 ## Reviewer-slot residuals, second batch (#430–433, #436–439) — implemented, pending review
 
 Ship and shipping policy define the exact-head adapter checkout via topic preparation.
