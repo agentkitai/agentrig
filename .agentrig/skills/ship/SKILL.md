@@ -83,6 +83,17 @@ for a worktree; remove the owned proof TMPDIR separately.
 Follow topic §2 step 4's conductor trio and shipping policy §3: the independently run,
 same-head conductor checks supply the Codex trio evidence in the initial comment provenance.
 
+Codex posting extracts the final findings/verdict block after the last standalone `codex`
+marker (or final `Full review comments:` block), never the transcript. If the CLI format
+lacks either marker, save only its final
+findings/verdict block to `codex.md`; do not copy the transcript. Claude's body comes only
+from its JSON `result` field. The helper refuses literal review-contract echoes with
+`reviewer body echoes instructions; not a verdict`.
+A reviewer body over 40,000 UTF-8 bytes (about 40KB) requires conductor inspection and a
+written explanation in the conductor ledger before posting. Set `REVIEW_LARGE_BODY_LEDGER`
+to that ledger file's path; absent/empty explanations refuse posting. Genuine large verdicts
+still post losslessly in chunks. Never use the exception to post instructions or transcripts.
+
 For initial posting, preserve topic's stale SHA/verdict validation gates and validated model
 files, then invoke these helper commands verbatim (replace only shell arguments NN, HEAD,
 MAIN, <WT> and <OUT> with the recorded values; never globally substitute validator source):

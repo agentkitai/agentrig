@@ -14,8 +14,25 @@ try {
   const model = readFileSync(modelFile, "utf8").trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(model)) throw new Error("empty or invalid model file");
   if (![head, main].every(sha => sha.length === 40 && /^[a-fA-F0-9]{40}$/.test(sha))) throw new Error("HEAD and MAIN must be unquoted 40-hex SHAs");
-  const raw = readFileSync(bodyFile, "utf8");
+  let raw = readFileSync(bodyFile, "utf8");
+  if (reviewer === "Codex") {
+    const markers = [...raw.matchAll(/^codex\r?$/gmu)];
+    const last = markers.at(-1) ?? [...raw.matchAll(/^Full review comments:\r?$/gmu)].at(-1);
+    if (last) raw = raw.slice(last.index + last[0].length).replace(/^\r?\n/u, "");
+  }
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");
+  const echoPhrases = [
+    "Never merge, never approve-and-merge, never push to the PR branch.",
+    "The reviewer never treats its own verdict as",
+    "A pass verdict lists what you probed and which mutants you ran",
+    "Report which of the PR body's claims you verified",
+  ];
+  if (echoPhrases.some(phrase => body.includes(phrase))) throw new Error("reviewer body echoes instructions; not a verdict");
+  if (Buffer.byteLength(body, "utf8") > 40_000) {
+    let explanation = "";
+    try { explanation = readFileSync(process.env.REVIEW_LARGE_BODY_LEDGER ?? "", "utf8").trim(); } catch { /* fail closed */ }
+    if (!explanation) throw new Error("large reviewer body requires conductor ledger explanation (REVIEW_LARGE_BODY_LEDGER)");
+  }
   if (!body.trim()) throw new Error("empty reviewer body");
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");

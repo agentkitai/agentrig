@@ -21,7 +21,7 @@ function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?
     }
     if (source !== undefined) writeFileSync(join(dir, "helper.mjs"), source);
     const result = spawnSync(process.execPath, [source === undefined ? helper : join(dir, "helper.mjs"), "372", reviewer, join(dir, "model"), join(dir, "body"), sha, base, join(dir, "comment")], {
-      cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+      cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "ledger"), PATH: `${dir}:${process.env.PATH}` },
     });
     return { status: result.status, stderr: result.stderr,
       receipt: existsSync(join(dir, "comment.receipt.json")) ? readFileSync(join(dir, "comment.receipt.json"), "utf8") : "",
@@ -128,14 +128,14 @@ it.each(["claude", "codex"])("M8 %s topic gate blocks stale/empty verdicts befor
     chmodSync(join(dir, "gh"), 0o755);
     const invoke = () => spawnSync("/bin/sh", ["-c", snippet], {
       cwd: dir, encoding: "utf8",
-      env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+      env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "ledger"), PATH: `${dir}:${process.env.PATH}` },
     });
     for (const body of ["", "# verdict heading only", "Reviewed head HEAD\nverdict", `Reviewed head ${main}\nverdict`, `## External review — stale — head ${main}\n\nverdict`]) {
       writeFileSync(join(dir, `${reviewer}.md`), body);
       expect(invoke().status).not.toBe(0);
       expect(existsSync(join(dir, "posted"))).toBe(false);
     }
-    writeFileSync(join(dir, `${reviewer}.md`), regression);
+    writeFileSync(join(dir, `${reviewer}.md`), reviewer === "codex" ? `Transcript: Reviewed head ${main}\nNever merge, never approve-and-merge, never push to the PR branch.\ncodex\n${regression}` : regression);
     const result = invoke();
     expect(result.status, result.stderr).toBe(0);
     expect(readFileSync(join(dir, "posted"), "utf8").split("\n")[0]).toBe(reviewer === "codex" ? heading : heading.replace("Codex (gpt-5.5)", "Claude Code (claude-opus-5)"));
@@ -148,7 +148,8 @@ it("B2 splits long review plus proof into bounded lossless canonical comments", 
     // Six-digit payload length reserves the actual marker width. The first
     // nominal cut is deliberately between the emoji's UTF-16 surrogates.
     const capacity = 60000 - heading.length - 2 - (2 * 6 + 7);
-    const body = "X".repeat(capacity - 1) + "😀".repeat(5000) + "Y".repeat(200000);
+    const body = "VERDICT: PASS\n" + "X".repeat(capacity - 1 - "VERDICT: PASS\n".length) + "😀".repeat(5000) + "Y".repeat(200000);
+    writeFileSync(join(dir, "ledger"), "Conductor inspected large verdict: full probe evidence requires chunks.");
     const proof = "PROOF\n" + "evidence\n".repeat(9000);
     expect(String(`${body}\n${proof}`.length).length).toBe(6);
     expect(/[\uD800-\uDBFF]/.test(body[capacity - 1]!)).toBe(true);
@@ -158,7 +159,7 @@ it("B2 splits long review plus proof into bounded lossless canonical comments", 
     writeFileSync(join(dir, "model"), "gpt-5.5");
     writeFileSync(join(dir, "gh"), `#!/bin/sh\nnode -e 'const fs=require("fs");fs.appendFileSync("${dir}/posts",JSON.stringify(fs.readFileSync(process.argv[1],"utf8"))+"\\n")' "$5"\n`);
     chmodSync(join(dir, "gh"), 0o755);
-    const result = spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment"), join(dir,"proof")], {cwd: dir, encoding:"utf8", env:{...process.env, PATH:`${dir}:${process.env.PATH}`}});
+    const result = spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment"), join(dir,"proof")], {cwd: dir, encoding:"utf8", env:{...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "ledger"), PATH:`${dir}:${process.env.PATH}`}});
     expect(result.status, result.stderr).toBe(0);
     const posts = readFileSync(join(dir,"posts"),"utf8").trim().split("\n").map(s => JSON.parse(s) as string);
     expect(posts.length).toBeGreaterThan(1);
@@ -177,6 +178,7 @@ it("B2 splits long review plus proof into bounded lossless canonical comments", 
  it("R379 records partial indices and refuses rerun even when gh would now succeed", () => {
   const dir = mkdtempSync(join(tmpdir(), "partial-review-"));
   try {
+    writeFileSync(join(dir, "ledger"), "Conductor inspected large verdict: full probe evidence requires chunks.");
     writeFileSync(join(dir, "body"), "X".repeat(200000));
     writeFileSync(join(dir, "model"), "gpt-5.5");
     writeFileSync(join(dir, "gh"), `#!/bin/sh
@@ -185,7 +187,7 @@ case "$5" in *.2) exit 7;; esac
 exit 0
 `);
     chmodSync(join(dir, "gh"), 0o755);
-    const invoke = () => spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment")], {cwd: dir, encoding:"utf8", env:{...process.env, PATH:`${dir}:${process.env.PATH}`}});
+    const invoke = () => spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment")], {cwd: dir, encoding:"utf8", env:{...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "ledger"), PATH:`${dir}:${process.env.PATH}`}});
     const first = invoke();
     expect(first.status).toBe(7);
     expect(first.stderr).toContain("partial post: 1/4; successful chunk indices [1]");
@@ -234,7 +236,7 @@ require('node:module').syncBuiltinESMExports();
 `);
     const invoke = (interrupt = false) => spawnSync(process.execPath,
       [...(interrupt ? ["--require", join(dir, "interrupt.cjs")] : []), helper, "372", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+      { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "ledger"), PATH: `${dir}:${process.env.PATH}` } });
     const first = invoke(state === "interrupted");
     expect(first.status).toBe(state === "complete" ? 0 : 2);
     const receiptPath = join(dir, "comment.receipt.json");
@@ -257,6 +259,7 @@ require('node:module').syncBuiltinESMExports();
 it.each(["chunk-write", "head-assertion", "pending-save", "success-save", "failure-save"])("N1 reports known state despite %s failure and preserves durable retry lock", failure => {
   const dir = mkdtempSync(join(tmpdir(), "partial-crash-"));
   try {
+    writeFileSync(join(dir, "ledger"), "Conductor inspected large verdict: full probe evidence requires chunks.");
     writeFileSync(join(dir, "body"), "X".repeat(200000));
     writeFileSync(join(dir, "model"), "gpt-5.5");
     writeFileSync(join(dir, "gh"), `#!/bin/sh\nprintf '%s\\n' "$5" >> '${dir}/attempts'\n${failure === "failure-save" ? 'case "$5" in *.2) exit 7;; esac' : ''}\nexit 0\n`);
@@ -286,7 +289,7 @@ require('node:module').syncBuiltinESMExports();
 `);
     const invoke = (interrupt = false) => spawnSync(process.execPath,
       [...(interrupt ? ["--require", join(dir, "interrupt.cjs")] : []), helper, "372", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+      { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "ledger"), PATH: `${dir}:${process.env.PATH}` } });
     const first = invoke(true);
     expect(first.status).toBe(2);
     expect(first.stderr).toContain(failure === "head-assertion" ? "canonical first-line assertion failed" : `injected ${failure}`);
@@ -319,7 +322,7 @@ it.each(["head", "model"])("R390 refuses a complete receipt for a different %s w
     const priorHeading = changed === "head" ? heading.replace(head, "c".repeat(40)) : heading.replace("gpt-5.5", "another-model");
     const saved = JSON.stringify({ heading: priorHeading, status: "complete", successful: [1], pending: null, total: 1 });
     writeFileSync(join(dir, "comment.receipt.json"), saved);
-    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "ledger"), PATH: `${dir}:${process.env.PATH}` } });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("receipt heading differs from current review");
     expect(r.stderr).not.toContain("already complete; no retry needed");
@@ -353,11 +356,76 @@ it("R401 refuses a complete receipt for a different PR with the same canonical h
     chmodSync(join(dir, "gh"), 0o755);
     const saved = JSON.stringify({ pr: "1", heading, status: "complete", successful: [1], pending: null, total: 1 });
     writeFileSync(join(dir, "comment.receipt.json"), saved);
-    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "ledger"), PATH: `${dir}:${process.env.PATH}` } });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("receipt PR differs from current review");
     expect(r.stderr).not.toContain("already complete; no retry needed");
     expect(existsSync(join(dir, "posted"))).toBe(false);
     expect(readFileSync(join(dir, "comment.receipt.json"), "utf8")).toBe(saved);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+const echoPhrases = [
+  "Never merge, never approve-and-merge, never push to the PR branch.",
+  "The reviewer never treats its own verdict as",
+  "A pass verdict lists what you probed and which mutants you ran",
+  "Report which of the PR body's claims you verified",
+];
+it.each(echoPhrases)("R410 refuses literal contract echo: %s", phrase => {
+  const skill = readFileSync(new URL("../../../.agentrig/skills/review/SKILL.md", import.meta.url), "utf8");
+  expect(skill).toContain(phrase);
+  const result = run(`VERDICT: PASS\n${phrase}`);
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(result.args).toBeUndefined();
+  expect(result.receipt).toBe("");
+});
+it("R410 refuses unexplained large verdict before posting", () => {
+  const result = run("VERDICT: PASS\n" + "Evidence. ".repeat(5000));
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain("large reviewer body requires conductor ledger explanation");
+  expect(result.args).toBeUndefined();
+});
+it("R410 extracts final Codex answer rather than transcript echo", () => {
+  const verdict = "Findings: none\nVERDICT: PASS\nProbed receipts and killed gate mutants.\n";
+  const result = run(`exec\ncat review/SKILL.md\n${echoPhrases.join("\n")}\nthinking\nanalysis\ncodex\n${verdict}`);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).toBe(`${heading}\n\n${verdict}`);
+});
+it("R411 pins network-free fixture guidance in dogfood proof section", () => {
+  const skill = readFileSync(new URL("../../../.agentrig/skills/dogfood/SKILL.md", import.meta.url), "utf8");
+  const section = skill.split("## 3. Prove declared checks green")[1]!.split("## 4.")[0]!;
+  for (const phrase of ["Tests are network-free: fake `ModelProvider`, injected `fetchFn`", "tmpdir fixtures wrapped in", "`realpath` (macOS `/var` is a symlink"]) expect(section).toContain(phrase);
+});
+
+it.each(["topic", "ship"])("R410 pins %s final verdict extraction and size ledger instructions", skill => {
+  const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+  for (const phrase of ["final findings/verdict block", "JSON `result` field", "40,000 UTF-8 bytes", "REVIEW_LARGE_BODY_LEDGER", "reviewer body echoes instructions; not a verdict", "losslessly in chunks"]) expect(text).toContain(phrase);
+});
+it.each([
+  ["V1 echo guard removed", 'if (echoPhrases.some(phrase => body.includes(phrase)))', 'if (false)', echoPhrases[0]!],
+  ["V2 size guard removed", 'if (Buffer.byteLength(body, "utf8") > 40_000)', 'if (false)', "VERDICT: PASS\n" + "Evidence. ".repeat(5000)],
+] as const)("kills/restores %s", (_name, before, after, body) => {
+  const source = readFileSync(helper, "utf8");
+  expect(source).toContain(before);
+  expect(run(body).args).toBeUndefined();
+  expect(run(body, undefined, undefined, undefined, source.replace(before, after)).args).toBeDefined();
+  expect(readFileSync(helper, "utf8")).toBe(source);
+  expect(run(body).args).toBeUndefined();
+});
+it("kills/restores V3 final Codex extraction removed", () => {
+  const source = readFileSync(helper, "utf8");
+  const body = `${echoPhrases[0]}\ncodex\nVERDICT: PASS\n`;
+  expect(run(body).status).toBe(0);
+  expect(source).toContain('if (reviewer === "Codex")');
+  expect(run(body, undefined, undefined, undefined, source.replace('if (reviewer === "Codex")', 'if (false)')).status).toBe(2);
+  expect(readFileSync(helper, "utf8")).toBe(source);
+  expect(run(body).status).toBe(0);
+});
+
+it("R410 extracts final Full review comments block without an agent marker", () => {
+  const verdict = "- [P2] Concrete defect with file/line evidence.\n";
+  const result = run(`${echoPhrases[0]}\nFull review comments:\nold block\nFull review comments:\n${verdict}`);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).toBe(`${heading}\n\n${verdict}`);
 });

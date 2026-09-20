@@ -142,6 +142,8 @@ dropped acceptance criterion, a wider scope), you may propose a change but never
 Apply the operative policy above: run bootstrap, optional preflight and ordered named steps
 with individual exit-code receipts. Never pipe away a failing exit. Run full suites in a
 background job with command-local TMPDIR outside Git ancestry; join all jobs before cleanup.
+Tests are network-free: fake `ModelProvider`, injected `fetchFn`, tmpdir fixtures wrapped in
+`realpath` (macOS `/var` is a symlink — CI has a macOS leg and this exact mismatch has failed it).
 Never skip, disable or quarantine tests to get green.
 
 ## 4. Tests carry the proof

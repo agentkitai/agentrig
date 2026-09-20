@@ -1,5 +1,13 @@
 # Status
 
+## Reviewer body verdict validation (#410, #411)
+
+Posting extracts the final Codex answer, refuses literal review-contract echoes, and requires
+a conductor ledger explanation above about 40KB while retaining lossless multi-comment
+verdicts. Claude extraction remains pinned to JSON `result`. Dogfood network-free provider,
+fetch injection and macOS realpath fixture guidance is restored and pinned. Exact-head checks
+and fail-first/mutation evidence are recorded in the PR.
+
 ## Declared project checks (#395)
 
 Project config now validates ordered named checks, required bootstrap, optional preflight and
