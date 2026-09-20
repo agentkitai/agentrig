@@ -1,5 +1,12 @@
 # Status
 
+## Review-gate residuals (#384–#387)
+
+- Topic §4 repeats ship §3’s full pre-land body/comment persistence gate before land-child dispatch: canonical model/head/main headings, all initial/focused dispositions, residuals, blocker closure and current-head delta coverage; missing evidence halts before spawn.
+- Removed both redundant `c.length>40 ||` topic guards. Length rejection is pinned by the `{7,}` → `{7,40}` grammar-reversion probe, not a claimed length-guard mutation kill.
+- Instruction assertions stop at the next section heading; ship/topic placement probes reject EOF relocation, after-spawn relocation and lazy-list continuation. Ship’s gate now starts a standalone paragraph.
+- Fail-first focused run: 22 failed / 113 passed; fixed run: 135 passed, including named deletion, relocation and isolated grammar mutants. Full build/test/typecheck verification belongs to the task PR; independent review and landing remain conductor-owned. No runtime or roadmap advancement.
+
 ## Review-posting helper residuals (#379, #380)
 
 PR #389 repair round 1 (N1 only): every posting-loop exception now reports successful

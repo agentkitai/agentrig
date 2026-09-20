@@ -136,6 +136,7 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   for isolated preparation, installation, launch, provenance and cleanup. Never repeat the initial external pair
   for each fix. At most three repair rounds, preserving the counter on resumption; unresolved
   blockers or non-convergence halt, while new advisory notes do not open another round.
+
 Before invoking land in this session or spawning a land child, read `gh pr view NN --json body`.
 Fetch linked review comments too (for example `gh api repos/OWNER/REPO/issues/comments/ID`);
 verify both initial canonical headings in the actual comments, including the pinned Claude model,

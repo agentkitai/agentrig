@@ -14,22 +14,63 @@ const checks: Array<[string, string, string, string[]]> = [
  ["M-ship-pin",skill("ship"),"## 2.",["`--model claude-opus-5` verbatim", "`claude -p --model claude-opus-5`"]],
  ...[skill("topic"),"docs/SHIPPING-WORKFLOW.md"].map(path => ["M-delta-closure",path,"## 3.", ['git rev-parse --verify "$OLD^{commit}"','git rev-parse --verify "$NEW^{commit}"','[ "$OLD" != "$NEW" ]','git merge-base --is-ancestor "$OLD" "$NEW"',"fixer delta plus independent focused review","ledger rebuttal quoting a reproducible command and its result","arbiter verdict","prohibit re-prompting the raising reviewer under the","conductor’s contract reading as closure"]] as [string,string,string,string[]]),
  ...["topic","ship"].map(name => ["M-fixer-readback",skill(name),"Before calling a fixer",["Read back `gh pr view NN --json body` BEFORE spawning", "Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim", "Dispatch only ledger-blocking findings", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "Require edit success and read back the receipt", "Record any reclassification in the ledger first with its rationale", "Nonblocking defects go to residual issues; advisory"]] as [string,string,string,string[]]),
- ["M-land-persistence",skill("ship"),"Before invoking land",["`gh pr view NN --json body`","Fetch linked review comments too","verify both initial canonical headings", "dispositions for every", "`## Residuals` has issue links or", "explicit `none`", "halt BEFORE land-child spawning"]],
+ ...["ship", "topic"].map(name => ["M-land-persistence",skill(name),"Before invoking land",["`gh pr view NN --json body`","Fetch linked review comments too","verify both initial canonical headings", "dispositions for every", "`## Residuals` has issue links or", "explicit `none`", "halt BEFORE land-child spawning", "including the pinned Claude model", "reviewed head and main provenance", "every focused review", "Verify all blocker closures and delta coverage through current head", "Persist edits then read back again if anything changes"]] as [string,string,string,string[]]),
 ];
+// Preserve section boundaries before normalizing whitespace for phrase comparisons.
+const sectionFrom = (s: string, start: string) => {
+ const i = s.indexOf(start);
+ expect(i).toBeGreaterThanOrEqual(0);
+ const tail = s.slice(i);
+ const next = tail.search(/\n## /);
+ return next < 0 ? tail : tail.slice(0, next);
+};
 for (const [id,path,start,phrases] of checks) {
- const check = (s: string) => { expect(s).toContain(start); const part=s.slice(s.indexOf(start)).replace(/\s+/g," "); for(const phrase of phrases) expect(part).toContain(phrase); };
+ const check = (s: string) => { const part=sectionFrom(s,start).replace(/\s+/g," "); for(const phrase of phrases) expect(part).toContain(phrase); };
  it(`${id} ${path}`,()=>check(read(path)));
  for (const phrase of phrases) it(`${id} deletion mutant: ${path} ${phrase}`,()=>{
-  const s=read(path); check(s); const flat=s.replace(/\s+/g," "); expect(()=>check(flat.replaceAll(phrase,"REMOVED"))).toThrow();
+  const s=read(path); check(s);
+  const pattern = new RegExp(phrase.split(/\s+/).map(word => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"), "g");
+  expect(()=>check(s.replace(pattern,"REMOVED"))).toThrow();
  });
 }
+const landGate = (s: string, name: string) => {
+ const section = sectionFrom(s, name === "ship" ? "## 3." : "## 4.");
+ const anchor = "Before invoking land";
+ const start = section.indexOf(anchor);
+ expect(start).toBeGreaterThanOrEqual(0);
+ expect(section.slice(start - 2, start)).toBe("\n\n");
+ const spawn = section.indexOf(name === "ship" ? "- When scoped merge authorization" : "Then spawn a land subagent");
+ expect(spawn).toBeGreaterThan(start);
+ expect(section.slice(start, spawn)).toContain("Persist edits then read back again if anything changes.");
+};
+for (const name of ["ship", "topic"]) {
+ it(`M-land-placement ${name} standalone gate before spawn in section`, () => landGate(read(skill(name)), name));
+ for (const mutation of ["EOF", "after-spawn", "lazy-continuation"]) it(`M-land-placement ${name} ${mutation} mutant`, () => {
+  const s = read(skill(name)); landGate(s, name);
+  const gate = s.match(/Before invoking land[\s\S]*?Persist edits then read back again if anything changes\./)![0];
+  let mutant = s.replace(gate, "");
+  if (mutation === "EOF") mutant += `\n\n${gate}\n`;
+  else if (mutation === "after-spawn") {
+   const next = name === "ship" ? "## 4. Budget" : "## 5. Halt";
+   mutant = mutant.replace(next, `${gate}\n\n${next}`);
+  } else mutant = s.replace(`\n\n${gate}`, `\n${gate}`);
+  expect(() => landGate(mutant, name)).toThrow();
+ });
+}
+it("C4 removes redundant length guards from both topic validators", () => {
+ expect(read(skill("topic"))).not.toContain("c.length>40 ||");
+});
 for(const reviewer of ["Claude", "Codex"]) {
  const source=()=>read(skill("topic")).split(`# ${reviewer} posting gate\n`)[1]!.split("\n")[0]!;
  const run=(body:string, mutant=false)=>{
   const dir=mkdtempSync(join(tmpdir(),"claim-gate-"));
   try { const input=join(dir,"input"); writeFileSync(input,body);
    let program=source().match(/node -e '([^']+)'/)![1]!;
-   if(mutant) program=program.replace('c.length>40 ||','').replace('[0-9a-f]{7,}', '[0-9a-f]{7,40}').replace('headsha|','').replace('|at','');
+   if(mutant) {
+    if(body.startsWith("head ")) program=program.replace('[0-9a-f]{7,}', '[0-9a-f]{7,40}');
+    else if(body.startsWith("head_sha:")) program=program.replace('headsha|','');
+    else program=program.replace('|at','');
+   }
    return spawnSync(process.execPath,["-e",program,input,"a".repeat(40)],{env:{...process.env,GIT_TRACE2_EVENT:"0"}}).status;
   } finally {rmSync(dir,{recursive:true,force:true});}
  };
