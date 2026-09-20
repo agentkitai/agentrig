@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Usage: node scripts/post-review-comment.mjs PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]
 // The caller must run the existing verdict/stale-head gates before handing us BODY_FILE.
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 try {
@@ -34,18 +35,67 @@ try {
       start = end;
     }
   }
-  for (const [index, piece] of pieces.entries()) {
-    const path = pieces.length === 1 ? outputFile : `${outputFile}.${index + 1}`;
-    const marker = pieces.length === 1 ? "" : `(${index + 1}/${pieces.length})\n\n`;
-    const comment = `${heading}\n\n${marker}${piece}`;
-    if (comment.length > 60000) throw new Error("review comment exceeds limit");
-    writeFileSync(path, comment);
-    // Assert the exact first line of EVERY emitted body immediately before posting.
-    const first = spawnSync("head", ["-1", path], { encoding: "utf8" });
-    if (first.status !== 0 || first.stdout !== `${heading}\n`) throw new Error("canonical first-line assertion failed");
-    const posted = spawnSync("gh", ["pr", "comment", pr, "--body-file", path], { stdio: "inherit" });
-    if (posted.error) throw posted.error;
-    if (posted.status !== 0) { process.exitCode = posted.status ?? 2; break; }
+  // A receipt is an exclusive attempt lock as well as durable evidence. Refuse
+  // every rerun (including uncertain/crashed attempts) rather than duplicate posts.
+  const receiptPath = `${outputFile}.receipt.json`;
+  if (existsSync(receiptPath)) {
+    const saved = readFileSync(receiptPath, "utf8");
+    let advice = "reconcile prior attempt (including pending/uncertain chunks) before manual recovery";
+    try {
+      const prior = JSON.parse(saved);
+      if (prior.status === "complete") advice = "already complete; no retry needed";
+      else if (prior.status === "posting" && prior.pending === null && Array.isArray(prior.successful) && prior.successful.length === 0)
+        advice = "no posting attempt recorded; inspect receipt before manual recovery";
+    } catch { /* Invalid receipts still refuse; never infer permission to retry. */ }
+    throw new Error(`refusing rerun; ${advice}; receipt ${receiptPath}:\n${saved}`);
+  }
+  const receipt = { pr, heading, total: pieces.length, successful: [], pending: null, status: "posting" };
+  const save = () => {
+    // Same-directory rename preserves the last complete receipt on failed writes.
+    const temporary = `${receiptPath}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporary, JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
+      renameSync(temporary, receiptPath);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
+  };
+  writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
+  // Reporting must not depend on another successful filesystem write. The
+  // durable lock can conservatively lag a known gh result when save() fails.
+  const reportPartial = () => {
+    console.error(`partial post: ${receipt.successful.length}/${receipt.total}; successful chunk indices ${JSON.stringify(receipt.successful)}; receipt ${receiptPath}; failed/uncertain chunk ${receipt.pending}; refusing automatic retry`);
+    console.error(`in-memory receipt (durable receipt may lag): ${JSON.stringify(receipt)}`);
+  };
+  try {
+    for (const [index, piece] of pieces.entries()) {
+      const path = pieces.length === 1 ? outputFile : `${outputFile}.${index + 1}`;
+      const marker = pieces.length === 1 ? "" : `(${index + 1}/${pieces.length})\n\n`;
+      const comment = `${heading}\n\n${marker}${piece}`;
+      if (comment.length > 60000) throw new Error("review comment exceeds limit");
+      writeFileSync(path, comment);
+      // Assert the exact first line of EVERY emitted body immediately before posting.
+      const first = spawnSync("head", ["-1", path], { encoding: "utf8" });
+      if (first.status !== 0 || first.stdout !== `${heading}\n`) throw new Error("canonical first-line assertion failed");
+      receipt.pending = index + 1;
+      save();
+      const posted = spawnSync("gh", ["pr", "comment", pr, "--body-file", path], { stdio: "inherit" });
+      if (posted.error || posted.status !== 0) {
+        receipt.status = "failed";
+        save();
+        reportPartial();
+        if (posted.error) console.error(posted.error.message);
+        process.exitCode = posted.status || 2;
+        break;
+      }
+      receipt.successful.push(index + 1);
+      receipt.pending = null;
+      receipt.status = receipt.successful.length === receipt.total ? "complete" : "posting";
+      save();
+    }
+  } catch (error) {
+    reportPartial();
+    throw error;
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
