@@ -69,6 +69,8 @@ model from CLI provenance and posts both independent reviews with the complete h
 
 ## 2. Isolate
 
+Skip this section when the brief says a conductor prepared the worktree only after verifying
+its prepared state, exact PR head and receipts; otherwise stop and return to the conductor.
 Standalone review also requires conductor-prepared dependencies, build outputs and exact-head receipts.
 Do not create an unprepared tree or install dependencies yourself. If no conductor supplied
 an exclusive clean tree at the current PR head with that state, stop and return to the conductor.

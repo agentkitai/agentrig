@@ -185,18 +185,21 @@ For each recorded row, in order:
      PR head)` (remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before stopping), and record
      `MAIN=$(git rev-parse origin/main)`. Require `git merge-base --is-ancestor "$MAIN" "$HEAD"`.
      If main integration would advance HEAD, stop: update the PR branch and re-prove its new head before review.
-     Conflicts are findings for §3, never permission to review an integration-only commit as PR HEAD.
-     Remove recorded owned scratch resources before returning for repair. A conflict-stopped pass
-     is not complete; restart the incomplete full pair on the new PR head.
-     `WT` belongs exclusively to Claude. Set `REVHEAD=$HEAD`; REVHEAD must equal the current PR HEAD.
+     A conflict is a finding to fix in §3, never permission to review an integration-only commit as PR HEAD.
+     Remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root,
+     `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before returning for repair.
+     A pass that stopped on conflict is not complete; its restart is a full pass on the new head, never a delta.
+     `WT` belongs exclusively to Claude. Set `REVHEAD=$(git -C "$WT" rev-parse HEAD)`;
+     require `[ "$REVHEAD" = "$HEAD" ]`; REVHEAD must equal the current PR HEAD.
      Create Codex's independent tree at that exact commit: `CODEX_WT=$(mktemp -d)`;
      `echo "$CODEX_WT" "$REVHEAD"`; `git worktree add --detach "$CODEX_WT" "$REVHEAD"`.
      Assert both trees have the same HEAD and are clean before launching either reviewer.
      `OUT=$(mktemp -d)`
      holds every output file; never write review artifacts inside either tree. Create independent
      temporary roots with `mkdir "$OUT/claude-tmp" "$OUT/codex-tmp"`; pass the corresponding
-     command-local `TMPDIR` below. Record these paths and the actual PR review SHA BEFORE
-     installing dependencies. The conductor executes bootstrap and preflight in separate calls, each with `timeoutMs` at least 600000; empty declarations execute neither. Reviewers do not bootstrap or preflight. Record all paths
+     command-local `TMPDIR` below. Record these paths and the post-merge review SHA BEFORE
+     installing dependencies. Here “post-merge” means the actual PR head after any required
+     main integration was pushed to the PR and re-proved, never a scratch integration SHA. The conductor executes bootstrap and preflight in separate calls, each with `timeoutMs` at least 600000; empty declarations execute neither. Reviewers do not bootstrap or preflight. Record all paths
      and REVHEAD before any conductor execution; keep reviewer trees read-only except
      restored targeted mutation probes. Dependency preparation belongs to the conductor.
      End preparation with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"` so each path is recorded.
@@ -269,7 +272,7 @@ For each recorded row, in order:
      Require exit zero before composing a comment. Retain stderr as provenance and record the
      validated model with the job receipt. Join jobs and clean owned trees before halting.
    - **Provenance.** Join both jobs and their subprocesses, then confirm both reviewer trees have
-     the recorded `<REVHEAD>` (actual PR HEAD on a full pass; NEW on a delta) and clean tracked/index state. Any unrestored mutant, changed
+     the recorded `<REVHEAD>` (post-merge on a full pass; NEW on a delta) — always the actual PR head, as defined in Prepare and clean tracked/index state. Any unrestored mutant, changed
      HEAD or unfinished writer invalidates that review; record it explicitly and use the existing
      dead-job retry rule, never clean away the evidence and count the pass. The conductor owns
      cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,
