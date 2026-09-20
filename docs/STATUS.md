@@ -1,5 +1,14 @@
 # Status
 
+## PR #429 repair round 1 — assigned C1/C2/C3/C7
+
+API reviewer cap refusal checks schema-valid top-level `config.dailyCap` before provider construction.
+Live finding indexing includes Codex plain `F<n> — SEVERITY` and priority headings and refuses recognizable omissions while retaining fence/quote and identity guards.
+Every review-disposition row (including deferred/advisory) requires live verbatim heading plus anchor independently of fixer dispatch.
+Topic initial preparation explicitly creates/records its owned `review-base-NN`; focused `BASE` and cleanup ownership remain symmetric, independent of Codex exec vs dedicated review mode.
+Fail-first regressions cover each assigned blocker; named deletion/reversion mutants and exact-head declared-check receipts are recorded in the PR body. Other findings remain deferred/advisory, not repaired here.
+
+
 ## SHA-claim validator false positive (#424)
 
 The shared topic initial-review posting gate for Claude Code and Codex requires the

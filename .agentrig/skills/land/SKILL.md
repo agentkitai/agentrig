@@ -46,6 +46,8 @@ reviewed config path; never compose an alternate heading inline. Persist per-ada
 Never infer the asserted model from reviewer prose. Truncation, failed runs, ambiguous assertion,
 empty output or pin mismatch are not completed reviews. Retry once with fresh artifacts, then halt.
 
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch every source comment live and compare exact bytes before accepting the ledger, even when no fixer is dispatched.
+
 For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.
 
 With zero slots skip external reviews and record `External review: none declared` in the ledger:
@@ -111,7 +113,7 @@ Read the PR body and match that line against the round, OLD and assigned blocker
 persisted handoff; verify its timestamp precedes the dispatch. Private session notes do not
 substitute for this GitHub-visible receipt. Missing or mismatched evidence blocks landing;
 a receipt added after dispatch cannot retroactively authorize that dispatch.
-Fetch every assigned source comment live. Compare its exact verbatim finding heading and
+Fetch every ledger source comment live. Compare its exact verbatim finding heading and
 comment URL/anchor against the ledger, pre-dispatch receipt and persisted fixer task, not the
 conductor's paraphrase. Require the fixer's recorded precondition comparison before editing.
 A missing, edited or mismatched heading/anchor blocks landing even when the local finding ID

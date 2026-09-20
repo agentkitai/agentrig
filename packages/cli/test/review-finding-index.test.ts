@@ -22,3 +22,21 @@ describe("live posted finding index", () => {
     expect(() => findingIndex("https://evil.example/" , { html_url: url, body: "" })).toThrow(/URL/);
   });
 });
+
+it("M-non-ATX-omission: indexes the live PR414 Codex finding and priority forms", () => {
+  const headings = [
+    "F1 — HIGH, blocking — Standalone `dogfood` still hard-codes the old two-reviewer flow, so valid declared-slot configs fail or are ignored.",
+    "[P1] Preserve this exact priority title",
+    "### [P2] Preserve ATX priority too",
+  ];
+  const codexUrl = "https://github.com/agentkitai/agentrig/pull/414#issuecomment-5749760055";
+  expect(findingIndex(codexUrl, { html_url: codexUrl, body: "**Findings**\n\n" + headings.join("\n\n") })).toEqual(headings.map(heading => ({ comment: codexUrl, heading })));
+});
+it("M-recognizable-omission: refuses unsupported recognizable findings even after a valid finding", () => {
+  for (const body of ["F2: HIGH — unsupported numbered finding", "[P4] Unknown priority", "### HIGH: indexed\nF2: LOW — omitted"]) {
+    expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+  }
+});
+it("clean verdict and fenced/quoted non-ATX examples are not omissions", () => {
+  expect(findingIndex(url, { html_url: url, body: "VERDICT: PASS\nNo findings.\n~~~md\nF1: HIGH example\n~~~\n> [P4] quoted" })).toEqual([]);
+});

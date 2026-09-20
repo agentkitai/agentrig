@@ -195,7 +195,13 @@ For each recorded row, in order:
      Record every owned path before use; assert each tree HEAD equals current PR HEAD and is clean.
      Require `git merge-base --is-ancestor "$MAIN" "$HEAD"`. If integration advances HEAD or
      conflicts, stop, update the PR and re-prove its new head; never review a scratch integration SHA.
-     A conflict-stopped initial pass restarts as full, not delta. Keep unique base refs and an OUT
+     A conflict-stopped initial pass restarts as full, not delta. Create the initial pass base with
+     `git branch "review-base-NN" "$MAIN"` (replace NN with the PR number; refuse an existing ref).
+     Record this exact ref as conductor-owned before launching jobs; never reuse/delete an unowned ref.
+     Cleanup removes that recorded ref only after joining jobs. Focused passes instead create and record
+     their unique `BASE` and remove only that owned ref. These refs pin the prompt's comparison base:
+     `codex exec` consumes the assembled prompt/artifact protocol, not dedicated `codex review` mode;
+     neither mode implicitly creates or owns this conductor ref. Keep an OUT
      directory outside all trees; never write review artifacts inside either tree. Create one independent TMPDIR outside Git ancestry per job.
      For nonempty steps the conductor runs declared bootstrap and optional preflight separately
      in every reviewer tree (separate calls with timeoutMs at least 600000). Require each command's
@@ -291,6 +297,8 @@ This disagreement rule does not reclassify blocking findings: all HIGH findings,
   If that allowance is already used, halt for the human; do not spawn a second arbiter.
   Focused non-blocking classification disagreement follows the ledger/accept-or-halt rule above,
   not another arbitration under shipping policy §2.
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch every source comment live and compare exact bytes before accepting the ledger, even when no fixer is dispatched.
+
 Before calling a fixer, perform this ordered persistence gate (including on resumption):
 
 1. Persist the PR body with `gh pr edit NN --body-file <ledger-file>`: update

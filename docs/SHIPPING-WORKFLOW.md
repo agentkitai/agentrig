@@ -197,3 +197,11 @@ small index from the live GitHub body (not a conductor summary). The ledger, pre
 and fixer task retain that exact pair for every assigned finding. Conductor rationale stays
 separate. Before dispatch, before fixer edits and before landing fetch the live comments and
 compare all three copies; absent/edited/mismatched identity halts, never silently relabels a fix.
+
+### Repair ledger and comparison-ref invariants
+
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch all source comments live and compare exact bytes even when no fixer is dispatched; landing checks every row, not only assigned IDs.
+
+Initial review preparation creates `git branch "review-base-NN" "$MAIN"` (NN is the PR number), refusing an existing ref, and records ownership; cleanup removes exactly that recorded ref after jobs join. Focused preparation/cleanup uses its recorded unique `BASE` instead. Neither `codex exec` nor dedicated `codex review` mode creates or owns these refs implicitly. The exec adapter uses the assembled prompt/artifact protocol, not dedicated review mode.
+
+The API adapter refuses top-level `config.dailyCap` before provider invocation because it has no spend ledger; choose an explicitly uncapped review config or a CLI slot, never silently strip the cap. Finding indexing supports plain `F<n> — SEVERITY` and `[P<n>]` lines in addition to ATX headings. Recognizable unsupported findings fail closed rather than silently disappearing; fenced and quoted examples remain excluded.

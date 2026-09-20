@@ -127,6 +127,8 @@ to improve its verdict. Failure/staleness/retry cleanup follows topic's Review s
   defects with issue links and advisory polish to the roadmap when useful. Contract or
   authorization findings still go to an arbiter before the fixer.
   A fixable verdict does not wait for the human: perform authorized blocking repairs unasked.
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch every source comment live and compare exact bytes before accepting the ledger, even when no fixer is dispatched.
+
 Before calling a fixer, perform this ordered persistence gate (including on resumption):
 
 1. Persist the PR body with `gh pr edit NN --body-file <ledger-file>`: update

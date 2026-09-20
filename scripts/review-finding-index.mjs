@@ -22,8 +22,11 @@ export function findingIndex(url, comment) {
     }
     if (marker) { fence = marker; continue; }
     // Review skill requires per-finding headings. Other section headings are not findings.
-    if (/^#{2,6} (?:[A-Z]\d+ [—–-] )?(?:\*\*)?(?:\[(?:HIGH|MEDIUM|LOW|P[0-3])\]|(?:HIGH|MEDIUM|LOW|P[0-3])\b)/i.test(line)) {
+    const plainFinding = /^(?:F\d+\s+—\s+(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P[0-3]\]\s+\S)/i.test(line);
+    if (plainFinding || /^#{2,6} (?:[A-Z]\d+ [—–-] )?(?:\*\*)?(?:\[(?:HIGH|MEDIUM|LOW|P[0-3])\]|(?:HIGH|MEDIUM|LOW|P[0-3])\b)/i.test(line)) {
       findings.push({ comment: url, heading: line });
+    } else if (!/^\s*>/.test(line) && /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line)) {
+      throw new Error(`unindexed finding in ${url}: ${line}`);
     }
   }
   return findings;
