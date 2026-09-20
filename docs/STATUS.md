@@ -2,9 +2,10 @@
 
 ## Windows evalset hook budget (#405)
 
-Current roadmap row: user-directed Windows evalset hook timeout repair (#405),
-implemented pending review and exact-head CI. No next row authorized; continuation
-order remains ROADMAP §5.
+Current roadmap row: user-directed Windows hookTimeout regression guard (#407),
+following the Windows evalset hook timeout repair (#405). Implemented pending
+review and exact-head CI. No next row authorized; continuation order remains
+ROADMAP §5.
 
 The Windows include-list config gives hooks the same bounded 30-second default as
 tests. Run [35497704578, attempt 1](https://github.com/agentkitai/agentrig/actions/runs/35497704578)
@@ -13,6 +14,12 @@ assertions, dependency-copy ownership, explicit deadlines, and Linux/macOS defau
 are unchanged. Local timeout discrimination and full-trio proof are recorded in the
 task PR; independent review and exact-head Windows CI remain conductor-owned.
 No product changes or roadmap advancement.
+
+Follow-up #407 adds exact Windows `hookTimeout: 30_000` and unset shared
+`hookTimeout` assertions beside the existing timeout/worker guards. Copy-only
+mutation probes kill removal and lowering to `10_000`; configuration and product
+behavior remain unchanged. Timestamped local full-trio proof is recorded in the
+follow-up PR; independent review and exact-head CI remain conductor-owned.
 
 ## Posting receipt and abort-test residuals (#401, #403)
 
