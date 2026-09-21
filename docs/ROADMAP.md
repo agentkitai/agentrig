@@ -60,7 +60,54 @@ Implementation and independent reviews are complete; the user's original lock st
 requires explicit recovery after all writers stop. One corrective PR;
 the completed R17g sweep below is not reopened or expanded into nested milestones.
 
-## Current checkpoint — R17g delivered; real-task validation incomplete
+## Current checkpoint — R17a dogfood evidence (2026-09-19 to 2026-09-21)
+
+**R17a acceptance is now met for the drained work.** AgentRig drove the follow-up
+and issue-drain trains: child builders, independent reviews, bounded repairs and
+serialized landings with post-merge CI. Earlier R17b–g batches remain operator-built;
+this checkpoint does not retroactively relabel their history or claim unattended autonomy.
+
+Verified local receipts: `~/.agentrig/trains/followups-2026-09-19/logs/train.log`
+records six landed rows, PRs [#323](https://github.com/agentkitai/agentrig/pull/323),
+[#325](https://github.com/agentkitai/agentrig/pull/325),
+[#327](https://github.com/agentkitai/agentrig/pull/327),
+[#330](https://github.com/agentkitai/agentrig/pull/330),
+[#332](https://github.com/agentkitai/agentrig/pull/332) and
+[#335](https://github.com/agentkitai/agentrig/pull/335), each with green post-merge CI.
+`~/.agentrig/trains/drain/logs/drain.log` starts at **2026-09-19 15:23Z** and first
+reports queue empty at **2026-09-21 00:06Z**: **30 DONE dispositions** (29 literal
+DONE lines plus the operator's row-107 reclassification) and **18 HALTED attempts**.
+Operator continuation rows resolved the halted shipments; row 107 was reclassified
+after a successful post-merge CI rerun, while row 060 was deliberately rejected by
+its experiment, not shipped ([#321 disposition](https://github.com/agentkitai/agentrig/issues/321#issuecomment-5745730188)).
+Every queued issue is closed; the empty-queue log still names untracked #320,
+so this is not a claim that every repository issue was closed.
+
+The date-window cross-check `gh pr list --state merged --search 'merged:>=2026-09-19'`
+returned **40 merged PRs, #311–#459**, including work outside these trains; do not
+add this count to the train counts. Verified spot checks of canonical `External review`
+headings, `Repair round: N/3` ledgers and landing receipts include
+[#378 initial review](https://github.com/agentkitai/agentrig/pull/378#issuecomment-5746820248),
+[#414 ledger and completed landing](https://github.com/agentkitai/agentrig/pull/414),
+[#446 landing](https://github.com/agentkitai/agentrig/pull/446#issuecomment-5752593012),
+[#455 landing](https://github.com/agentkitai/agentrig/pull/455#issuecomment-5753223870) and
+[#459 landing](https://github.com/agentkitai/agentrig/pull/459#issuecomment-5753714968).
+These are repository/ledger receipts, not invented session identities.
+
+The halts exposed bookkeeping and cross-PR sequencing, not a count of code defects:
+ledger receipts before fixer dispatch, canonical review headings, residual-issue
+metadata, conflicts with advancing main, a reopened blocker and the reviewer's
+own-first-line gate. Code/test repairs still occurred within review; this is not a
+claim of defect-free execution. The operator queued rows, wrote resumes, decided
+design conflicts (notably #446 versus #452) and closed advisory residuals. LOW
+wording/test-quality observations remain advisories, not new residual issues.
+
+The #307 overlap/review-round advisories now have live drain evidence (#414/#446
+and #455), not a new milestone band. **The next band is a product decision.**
+September 10 limits and R17f measurements below are history, not instructions to
+rerun or defer the completed drain.
+
+## History — September 10 checkpoint (not current instructions)
 
 Roadmap work has resumed under the user's latest authorization. R17e is complete: PR #289 merged
 at main `2a8ea59` with green post-merge CI 34276366300 and structure 34276366380
@@ -1074,7 +1121,7 @@ strong and their feel numbers were fought over; this band does the same, in meas
 | R17f *(done in [PR #290](https://github.com/agentkitai/agentrig/pull/290))* | **Tune or default off**: [96-attempt results](R17f-RESULTS.md) do not demonstrate the required benefit; recommended injection defaults off, ingest/retrieval/heuristics stay on and LLM review stays opt-in. Interrupted collection and unknown usage remain disclosed; landing/CI receipts are on the PR | supervisor + memory + docs |
 | R17g *(done — PRs #291–#294; final main `c047637` green)* | **Follow-ups sweep**: four package batches, every END fragment implemented/already delivered or explicitly declined with a reason. The active queue is reset; original history and complete outcome tables remain linked at END. Delivery checks and final merge receipts are recorded per package PR; this is not a claim of AgentRig dogfood success | all |
 
-Acceptance: R17a — STATUS names `agentrig` as the builder for every R17 PR, or the `feel`
+Acceptance: R17a — met for the drained work in the [current checkpoint](#current-checkpoint--r17a-dogfood-evidence-2026-09-19-to-2026-09-21); earlier R17 batches remain operator-built. The per-row rule remains: STATUS names `agentrig` as the builder for every R17 PR, or the `feel`
 issue that blocked it. R17b — a fresh clone with no config runs a task and the transcript shows
 rendered Markdown, a diagnostics line after an edit, a checkpoint event, and an ingest at session
 end; `agentrig --help` lists fewer than 40 top-level options. R17c — a deliberately slowed startup
@@ -1283,7 +1330,7 @@ the original failures, caveats, links and partial-delivery notes.
 | Core / final integration | Done: [PR #294](https://github.com/agentkitai/agentrig/pull/294), `c047637`, green exact-head and post-merge CI. [Outcomes, integrations and review repairs](plans/R17g-core.md); [final receipt](https://github.com/agentkitai/agentrig/pull/294#issuecomment-5608346600). |
 
 **Original follow-up queue: closed by this delivery.** Optional declined expansions
-remain documented in the package tables, not silently rescheduled. This closeout
+remain documented in the package tables, not silently rescheduled. This historical closeout
 does not claim R17a dogfood success: these batches were built by Claude/Codex and
 operator helpers outside AgentRig, with no invented conductor or routing data.
 
@@ -1297,8 +1344,8 @@ cleanup must prove ownership and preserve unknown/replaced contents, not blindly
 unlink after a failed acquisition. This does not block ordinary-session delivery
 and is not another repair train or newly opened issue.
 
-Shipping-workflow advisory followups from PR #307: validate overlap and review-round
-counts on a subsequent live AgentRig shipment; consider a separate rule for unassigned
+Shipping-workflow advisory followups from PR #307: overlap and review-round counts
+now have live drain evidence in the [current checkpoint](#current-checkpoint--r17a-dogfood-evidence-2026-09-19-to-2026-09-21); consider a separate rule for unassigned
 material pushes during a frozen review batch and explicit counting for coverage-only
 passes. These are optional workflow clarifications, not new acceptance criteria or
 another repair train. Current scope, review coverage, and merge gates remain binding.

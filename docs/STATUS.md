@@ -1,5 +1,16 @@
 # Status
 
+## R17a dogfood evidence checkpoint — 2026-09-21
+
+Builder: AgentRig (documentation-only ship child). [ROADMAP current checkpoint](ROADMAP.md#current-checkpoint--r17a-dogfood-evidence-2026-09-19-to-2026-09-21)
+records six follow-up landings, 30 drain DONE dispositions (including one operator
+reclassification), 18 halted attempts resolved by continuation or explicit disposition,
+and 40 merged PRs in the September 19–21 date-window cross-check. R17a acceptance
+is met for the drained work, not retroactively for operator-built R17 batches.
+Operator queueing, resumes, design decisions and advisory closure remain explicit.
+September 10/R17f limits stay history; #307 advisories now have live drain receipts.
+No new milestone band; the next band is a product decision. No runtime behavior changed.
+
 ## Reviewer first-line robustness and arbiter citation (#456, #458)
 
 Extraction now canonicalizes only a missing `Reviewed head` colon and the exact
