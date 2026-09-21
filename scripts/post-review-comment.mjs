@@ -1,25 +1,32 @@
 #!/usr/bin/env node
-// Usage: node scripts/post-review-comment.mjs PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]
-// The caller must run the existing verdict/stale-head gates before handing us BODY_FILE.
+// Usage: node scripts/post-review-comment.mjs PR CONFIG SLOT BODY_FILE HEAD OUTPUT_FILE [PROOF_FILE]
+// SLOT is the zero-based configured reviewer slot. The adapter must validate the actual model first.
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 try {
   const args = process.argv.slice(2);
-  if (args.length !== 7 && args.length !== 8) throw new Error("expected PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]");
-  const [pr, reviewer, modelFile, bodyFile, head, main, outputFile, proofFile] = args;
+  if (args.length !== 6 && args.length !== 7) throw new Error("expected PR CONFIG SLOT BODY_FILE HEAD OUTPUT_FILE [PROOF_FILE]");
+  const [pr, configFile, slotText, bodyFile, head, outputFile, proofFile] = args;
   if (!/^[1-9][0-9]*$/.test(pr)) throw new Error("invalid PR number");
-  if (!["Claude Code", "Codex"].includes(reviewer)) throw new Error("invalid reviewer");
-  const model = readFileSync(modelFile, "utf8").trim();
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(model)) throw new Error("empty or invalid model file");
-  if (![head, main].every(sha => sha.length === 40 && /^[a-fA-F0-9]{40}$/.test(sha))) throw new Error("HEAD and MAIN must be unquoted 40-hex SHAs");
+  if (!/^(?:0|1)$/.test(slotText)) throw new Error("slot must be 0 or 1");
+  const config = JSON.parse(readFileSync(configFile, "utf8"));
+  const slots = config.reviewers;
+  if (!Array.isArray(slots) || slots.length > 2) throw new Error("invalid reviewers declaration");
+  const slot = slots[Number(slotText)];
+  if (!slot || typeof slot.name !== "string" || typeof slot.model !== "string" || typeof slot.adapter !== "string") throw new Error("missing or invalid reviewer slot");
+  const reviewer = slot.name.trim();
+  const model = slot.model.trim();
+  if (!reviewer || /[\r\n]/.test(reviewer)) throw new Error("invalid reviewer name");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(model)) throw new Error("empty or invalid model pin");
+  if (head.length !== 40 || !/^[a-fA-F0-9]{40}$/.test(head)) throw new Error("HEAD must be an unquoted 40-hex SHA");
   const raw = readFileSync(bodyFile, "utf8");
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");
   if (!body.trim()) throw new Error("empty reviewer body");
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");
-  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full`;
+  const heading = `## External review — ${reviewer} (${model}) — head ${head} — full`;
   const payload = `${body}${proofFile === undefined ? "" : `\n${proof}`}`;
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;

@@ -70,11 +70,9 @@ describe("declared project checks", () => {
   });
 });
 
-it.each(["dogfood", "topic", "review", "arbiter"])("%s pins operative declared-checks policy", async (skill) => {
-  const text = await readFile(resolve(".agentrig/skills", skill, "SKILL.md"), "utf8");
-  expect(text).not.toMatch(/pnpm/i);
-  const policy = text.split("## Operative declared-checks policy (issue #395)")[1]?.split("\n## ")[0] ?? "";
-  for (const required of ["shipping policy §3", "supersedes", "GREEN BEFORE launching", "must be", "reviewers do NOT run checks", "name, command, exit code, UTC start/end, counts", "declared checks: none", "exact-head CI plus human merge authorization", "permission", "project-checks.js", "bootstrap and preflight"]) expect(policy).toContain(required);
+it.each(["dogfood", "topic", "review"])("%s pins exact-head conductor checks before declared review", async (skill) => {
+  const text = (await readFile(resolve(".agentrig/skills", skill, "SKILL.md"), "utf8")).replace(/\s+/g, " ");
+  for (const required of ["Before any reviewer launch", "complete declared checks", "exact HEAD", "Record source", "ordered step names and commands", "exits", "UTC start/end", "parsed counts", "restored tracked/index state", "never rerun project checks"]) expect(text).toContain(required);
 });
 
 // Independent cases: one rejection cannot mask a later missing validator.
@@ -97,28 +95,13 @@ it("accepts bounded shell syntax without interpreting it", () => {
     steps: Array.from({ length: 64 }, (_, i) => ({ name: `${i}`.padEnd(256, "x"), command, countsParser: "vitest" })) }).checks?.steps).toHaveLength(64);
 });
 it("pins actual review flow and exact PR-head preparation", async () => {
-  const review = await readFile(resolve(".agentrig/skills/review/SKILL.md"), "utf8");
-  const isolate = review.split("## 2. Isolate")[1]?.split("\n## ")[0] ?? "";
-  expect(isolate).toContain("Standalone review also requires conductor-prepared dependencies, build outputs and exact-head receipts");
-  expect(isolate).not.toContain("otherwise create");
-  const proof = review.split("## 3. Inspect independent proof, then review code")[1]?.split("\n## ")[0] ?? "";
-  for (const required of ["head against the review head", "all declared step names and order", "individual exit codes, times and counts", "missing or failed proof", "return to the conductor"]) expect(proof).toContain(required);
-  const topic = await readFile(resolve(".agentrig/skills/topic/SKILL.md"), "utf8");
-  expect(topic).toContain("REVHEAD must equal the current PR HEAD");
-  expect(topic).toContain("update the PR branch and re-prove its new head before review");
-  expect(topic).not.toContain('git -C "$WT" merge --no-edit origin/main');
+  const review = (await readFile(resolve(".agentrig/skills/review/SKILL.md"), "utf8")).replace(/\s+/g, " ");
+  for (const required of ["Review only the supplied exact PR head", "conductor receipts name that same SHA", "all declared checks in order", "Missing or stale receipts block", "Never run the project's"]) expect(review).toContain(required);
 });
 
-it("gates both reviewer launches on each tree's conductor preparation", async () => {
-  const topic = await readFile(resolve(".agentrig/skills/topic/SKILL.md"), "utf8");
-  const prepare = topic.split("- **Prepare.**")[1]?.split("- **Independent conductor checks")[0]?.replace(/\s+/g, " ") ?? "";
-  for (const required of [
-    "For non-empty steps, the conductor executes the project's declared bootstrap and optional preflight separately in `WT` and in `CODEX_WT`",
-    "Require each command's exit code zero in each reviewer tree before launching either reviewer job",
-    "If any preparation command fails, halt before either launch",
-    "join all owned jobs and remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before returning",
-    "Empty steps run no commands, including bootstrap and preflight",
-    "A separate conductor proof tree does not satisfy either reviewer tree's dependency preparation",
-    "Reviewers do not run the declared suite, bootstrap or preflight",
-  ]) expect(prepare).toContain(required);
+it("gates every configured launch on one independent conductor pass", async () => {
+  const topic = (await readFile(resolve(".agentrig/skills/topic/SKILL.md"), "utf8")).replace(/\s+/g, " ");
+  expect(topic).toContain("run independent conductor checks before any launch");
+  expect(topic).toContain("pass receipts to adapters");
+  expect(topic).toContain("never ask reviewers to run project checks");
 });

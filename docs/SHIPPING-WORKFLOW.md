@@ -10,9 +10,10 @@ are model-facing instructions, not a runtime enforcement mechanism.
 Builders and fixers run the local green trio, fail-first regressions, and meaningful
 mutations before pushing. After opening/updating the PR, report its head and current
 CI state immediately; do not wait for hosted CI or run private external reviews.
-The conductor (or standalone dogfood author) starts the initial Claude Code and
-Codex reviews in separate owned worktrees while hosted CI runs. Record both review
-job IDs, the reviewed SHA, and the CI run IDs; monitor all three tracks together.
+The conductor resolves zero, one, or two ordered reviewer slots from project config. Before any
+launch it runs the complete declared checks independently on the exact PR head and records receipts.
+It then launches only declared slots through their adapters while hosted CI runs. Record adapter job
+IDs, the reviewed SHA, conductor-check receipts, and CI run IDs; monitor the active tracks together.
 
 Reviewers report pending CI as pending and return their code verdict without waiting
 for CI. A code-review pass is not permission to merge. Only the lander joins the
@@ -23,8 +24,7 @@ environment-limited checks, explicitly preserving each reviewer's limitations.
 
 Freeze the author branch during a review batch. If it changes anyway, retain the
 old review as evidence for its SHA, inspect OLD..NEW, and apply §3; do not discard
-valid reviews and restart the whole pair solely because the head moved. An aborted
-initial pass is incomplete: both initial reviews must finish before landing.
+valid reviews and restart the whole pair solely because the head moved. An aborted declared-slot launch is incomplete: every configured initial review must finish before landing.
 
 ## 2. Disposition every finding once
 
@@ -88,7 +88,7 @@ Require successful edit and read-back of that receipt before dispatch and quote 
 Land checks the same persisted receipt against the handoff and requires its timestamp before
 dispatch; private notes or retroactive receipt creation do not satisfy the gate.
 
-Collect both initial verdicts before one repair batch. Give the fixer all blocking
+Collect every configured initial verdict before one repair batch. Give the fixer all blocking
 finding texts/URLs, not the advisory list as new requirements. Keep the same PR.
 Re-run the local trio after repairs, retain fail-first and mutation evidence, push,
 then return immediately so CI overlaps any necessary focused review.
@@ -97,14 +97,14 @@ Classify the complete delta since the last reviewed SHA, including CI/conflict f
 
 For conflict repairs, merge main into the branch; never rebase or force-push. Before
 preparing a focused pass, verify OLD is an ancestor of NEW. If history was externally
-rewritten, the old coverage chain is invalid: require the initial full pair on the
+rewritten, the old coverage chain is invalid: require the configured initial full review set on the
 rewritten head, preserving the repair counter rather than certifying a false delta.
 
 - **Material:** changes to executable behavior, security/authority, public interfaces,
   dependencies, task/skill workflow rules, or meaningful test expectations/coverage.
   Uncertain deltas are material. Use ONE independent reviewer over OLD..NEW and its
   direct interactions, normally the reviewer who raised the blocker. State the
-  selected reviewer and reason. No fresh dual/full pass for each fix or commit.
+  selected reviewer and reason. No fresh full pass for each fix or commit. With one slot, that slot owns focused deltas; with two, select one declared slot.
 - **Mechanical:** only spelling/formatting, broken links, or factual PR/STATUS receipts
   without changed guarantees. Record the diff, relevant checks and why it is mechanical
   as `self-verified mechanical delta; not independently re-reviewed`. A small executable
@@ -114,19 +114,10 @@ rewritten head, preserving the repair counter rather than certifying a false del
 A focused reviewer verifies closure of the assigned blockers, tests the changed
 behavior and relevant mutations, and checks direct regressions. Do not re-audit
 unchanged code or demand optional cleanup. Newly discovered real blockers still
-count; non-blocking observations go to §2, not another repair batch. Initial full
-reviews keep the green trio; focused reviews run the affected checks and mutations,
-with the author's full trio and exact-head hosted CI still required for landing.
-
-The conductor trio is the Codex trio evidence for the initial full pass, provided it
-runs independently of the author on the same reviewed head using topic §2 step 4's
-install, preflight, exit-code and comment-provenance procedure. Reviewer sandbox
-limitations such as denied sockets, npm cache or GitHub access are an environment limitation
-per docs/TESTING.md, not a blocker when the author's trio, this independent same-head trio
-and exact-head CI are green. Never halt solely because Codex cannot run the suite.
-This evidence does not erase the reviewer's limitation or recast its failed attempt as passing;
-keep that limitation alongside the conductor's results. Real test failures, missing independent
-proof, unresolved review blockers and non-green exact-head CI still prevent landing.
+count; non-blocking observations go to §2, not another repair batch. Reviewers receive the independent conductor receipts and perform code review only. They never run
+project checks; optional reviewer-owned targeted probes or named mutants must be recorded and restored.
+The author's declared checks, independent exact-head conductor checks, and exact-head hosted CI remain
+required for landing. With zero slots, record `External review: none declared` and skip review launch.
 
 Per PR, at most THREE repair rounds, not a target. Normally there is one batched fix
 and at most one focused review. Each round must close its assigned blockers without
@@ -137,7 +128,7 @@ PRs recover the ledger and review history. Never land unresolved blockers to mee
 
 ## 4. Final join and receipt
 
-The lander checks the initial review pair, every material delta's focused verdict,
+The lander checks the configured initial review set, every material delta's focused verdict,
 mechanical-delta evidence, and each finding's disposition. Preserve explicit task
 merge authorization and later revocations. Require green exact-head CI, then merge
 one PR at a time and watch CI on the actual merge commit before continuing.

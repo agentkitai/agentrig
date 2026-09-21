@@ -1,5 +1,18 @@
 # Status
 
+## Declared reviewer slots (#396)
+
+Project config now declares zero, one, or two ordered named external-review slots. Every slot
+binds an adapter id and pinned model; API slots bind an existing named provider entry with the
+same model instead of duplicating provider routing. Skill-side adapters own launch details, actual-
+model assertions, and empty/failed-output detection. Shipping roles are vendor-neutral: independent
+same-head conductor checks precede every launch, reviewers receive receipts and review code without
+rerunning project checks, and landing gates exactly the configured slot count and pins. Zero slots
+record an explicit no-review ledger receipt; one slot also owns focused deltas; two require both
+initial reviews. Hosted CI may overlap review but remains required on the landing head. AgentRig's
+project declaration pins two CLI-backed slots. This issue-only contract does not advance a roadmap
+row.
+
 ## Declared project checks (#395)
 
 Project config now validates ordered named checks, required bootstrap, optional preflight and

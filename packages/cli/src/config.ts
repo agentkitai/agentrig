@@ -59,7 +59,7 @@ const RolesSchema = z
 export type Roles = z.output<typeof RolesSchema>;
 
 const ENTRY_NAME = /^[a-z][a-z0-9-]*$/;
-const providersSetting = z.record(ProviderEntrySchema).superRefine((entries, ctx) => {
+export const providersSetting = z.record(ProviderEntrySchema).superRefine((entries, ctx) => {
   for (const name of Object.keys(entries)) {
     if (name === "default") {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: 'the entry name "default" is reserved for the flat provider/model keys' });
@@ -99,6 +99,30 @@ export const ProjectChecksSchema = z.object({
   });
 });
 export type ProjectChecks = z.output<typeof ProjectChecksSchema>;
+
+const reviewerText = (label: string) => z.string().trim().min(1, `${label} must not be empty`).max(128)
+  .regex(/^[^\u0000-\u001f\u007f]+$/u, `${label} must be control-free`);
+const cliReviewerSlot = z.object({
+  name: reviewerText("reviewer name"),
+  adapter: z.enum(["claude-cli", "codex-cli"]),
+  model: providerModelName,
+}).strict();
+const apiReviewerSlot = z.object({
+  name: reviewerText("reviewer name"),
+  adapter: z.literal("api"),
+  provider: z.string().regex(ENTRY_NAME, "provider binding must name an existing provider entry"),
+  model: providerModelName,
+}).strict();
+/** Ordered, named external-review slots. They declare provenance, never permission to run checks. */
+export const ReviewerSlotSchema = z.discriminatedUnion("adapter", [cliReviewerSlot, apiReviewerSlot]);
+export const ReviewersSchema = z.array(ReviewerSlotSchema).max(2).superRefine((slots, ctx) => {
+  const names = new Set<string>();
+  slots.forEach((slot, index) => {
+    if (names.has(slot.name)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [index, "name"], message: "reviewer slot names must be unique" });
+    names.add(slot.name);
+  });
+});
+export type ReviewerSlot = z.output<typeof ReviewerSlotSchema>;
 
 const ConfigValuesSchema = z
   .object({
@@ -181,10 +205,26 @@ const ConfigValuesSchema = z
 export type ConfigValues = z.output<typeof ConfigValuesSchema>;
 
 // Declarations are file metadata, not runtime launch/evaluation settings.
-const ConfigDeclarationSchema = ConfigValuesSchema.extend({ checks: ProjectChecksSchema.optional() });
-const ConfigFileSchema = ConfigDeclarationSchema.extend({
-  profiles: z.record(ConfigDeclarationSchema).optional(),
+const ConfigDeclarationObject = ConfigValuesSchema.extend({
+  checks: ProjectChecksSchema.optional(),
+  reviewers: ReviewersSchema.optional(),
 });
+type ConfigDeclarationInput = z.output<typeof ConfigDeclarationObject>;
+function validateReviewerBindings(declaration: ConfigDeclarationInput, ctx: z.RefinementCtx): void {
+  declaration.reviewers?.forEach((slot, index) => {
+    if (slot.adapter !== "api") return;
+    const entry = declaration.providers?.[slot.provider];
+    if (entry === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["reviewers", index, "provider"], message: "API reviewer must reference an existing providers entry" });
+    } else if (entry.model !== slot.model) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["reviewers", index, "model"], message: "reviewer model pin must equal the bound provider entry model" });
+    }
+  });
+}
+const ConfigDeclarationSchema = ConfigDeclarationObject.superRefine(validateReviewerBindings);
+const ConfigFileSchema = ConfigDeclarationObject.extend({
+  profiles: z.record(ConfigDeclarationSchema).optional(),
+}).superRefine(validateReviewerBindings);
 export type ConfigFile = z.output<typeof ConfigFileSchema>;
 
 const CONFIG_KEYS = new Set(Object.keys(ConfigValuesSchema.shape));
@@ -289,7 +329,7 @@ export interface ResolveConfigInput<T extends Record<string, unknown>> {
 
 function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   if (file === undefined) return {};
-  const { profiles: _profiles, checks: _checks, ...values } = file;
+  const { profiles: _profiles, checks: _checks, reviewers: _reviewers, ...values } = file;
   return values;
 }
 

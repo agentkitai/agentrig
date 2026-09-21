@@ -386,51 +386,32 @@ describe("skillTool", () => {
     expect(body).toContain("Report the exact head SHA you reviewed");
     expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
     expect(body).toContain("restate it in your own reply text in that same turn");
-    // R3.5b: the review is two external CLIs the conductor runs, never a child and never itself
-    expect(body).toContain("two reviewers that share nothing with the builder, in parallel with each other AND hosted CI, in separate reviewer-owned worktrees you prepare");
-    expect(body).toContain("--model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write'");
-    expect(body).toContain("--output-format json --no-session-persistence");
-    expect(body).toContain("not claude-opus-5");
-    expect(body).toContain("codex review --base review-base");
-    expect(body).toContain("both reviewers dead on the same head halts the train");
-    expect(body).toContain("gh pr comment");
-    expect(body).toContain("## External review —");
-    expect(body).toContain("runs on the main entry, never the child default");
-    expect(body).toContain("Material deltas require ONE independent focused reviewer");
-    expect(body).toContain("never write review artifacts inside");
-    // R3.5b residual fix: the delta pass reuses the full pass's worktree but never its main merge
-    expect(body).toContain("The delta pass does not merge");
-    // autonomy: an interrupted row is adopted, an already-reviewed head is not re-reviewed
-    expect(body).toContain("adopt it instead of halting");
-    expect(body).toContain("do not run the pass again");
-    expect(body).toContain("carrying verbatim blocker texts or review URLs/finding IDs");
-    // R3.5b final-review fixes: bash has no cwd field, file-backed jobs, per-pass base branch
-    expect(body).toContain("env -u CLAUDECODE");
-    expect(body).toContain("< /dev/null");
-    expect(body).toContain('[ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD" ]');
-    expect(body).toContain("gh pr view NN --json headRefOid");
-    expect(body).toContain("head HEAD — merged with origin/main MAIN — full");
-    expect(body).toContain("one surviving review is not a pass");
-    expect(body).toContain("is a full pass on the new head, never a delta");
+    // Declared reviewer slots are configuration-driven and vendor-neutral in role text.
+    expect(body).toContain("zero, one, or two uniquely named slots");
+    expect(body).toContain("Before any reviewer launch");
+    expect(body).toContain("scripts/reviewer-adapter.mjs");
+    expect(body).toContain("## External review — <slot> (<model>) — head <SHA> — full");
+    expect(body).toContain("External review: none declared");
+    expect(body).toContain("With one slot, that slot supplies the full review and every later focused-delta review");
+    expect(body).toContain("With two, both slots supply initial full reviews");
+    expect(body).not.toMatch(/claude|codex|anthropic|openai/i);
 
     const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
-    expect(land.body).toContain("authorized its fixed roadmap band by invoking `topic`");
+    expect(land.body).toContain("invoked the `topic` skill to authorize the fixed");
     expect(land.body).toContain("include the human's exact authorization quote");
     expect(land.body).toContain("Residuals are issues, not prose");
     expect(land.body).toContain("An unmarked row is a row the next train rebuilds");
 
     const reviewText = await readFile(".agentrig/skills/review/SKILL.md", "utf8");
     const review = parseSkill(reviewText, ".agentrig/skills/review/SKILL.md");
-    expect(review.body).toContain("`topic` conductor executing the human's already-authorized fixed band");
-    expect(review.body).toContain("A deviation without that record is a HIGH finding");
-    // R3.5b: ship delegates the review pass to topic; dogfood children still skip it; review knows a prepared worktree
-    expect(review.body).toContain("Skip this section when the brief says a conductor prepared the worktree");
+    expect(review.body).toContain("Review only the supplied exact PR head");
+    expect(review.body).toContain("Never run the project's");
+    expect(review.body).toContain("tiny reviewer-owned probe or");
     const shipText = await readFile(".agentrig/skills/ship/SKILL.md", "utf8");
     const ship = parseSkill(shipText, ".agentrig/skills/ship/SKILL.md");
-    expect(ship.body).toContain("exactly as `topic` §2 step 4 prescribes");
-    expect(ship.body).toContain("Never review in this session");
-    expect(ship.body).toContain("A fixable verdict does not wait for the human");
+    expect(ship.body).toContain("independently check out the PR HEAD");
+    expect(ship.body).toContain("before launching any reviewer");
 
     const arbiter = found.find((candidate) => candidate.name === "arbiter");
     expect(arbiter).toBeDefined();
@@ -441,10 +422,8 @@ describe("skillTool", () => {
     const dogfood = parseSkill(dogfoodText, ".agentrig/skills/dogfood/SKILL.md");
     expect(dogfood.body).toContain("Never edit the row you are implementing without");
     expect(dogfood.body).toContain("`DEVIATION REQUESTED` heading");
-    expect(dogfood.body).toContain("the conductor runs the same two external reviews itself");
-    expect(dogfood.body).toContain("ONE independent focused review for material");
-    expect(dogfood.body).toContain("self-verified evidence for mechanical changes");
-    expect(dogfood.body).toContain("Deferred non-blocking defects require issues");
+    expect(dogfood.body).toContain("conductor checks are mandatory before any launch");
+    expect(dogfood.body).toContain("configured zero-, one-, or two-slot path");
     expect(body).toContain("A surviving assigned blocker, reopened blocker, or blockers at the cap halts");
   });
 });

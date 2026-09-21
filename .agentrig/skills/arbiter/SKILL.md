@@ -5,7 +5,7 @@ description: Judge one proposed deviation from a contract (roadmap row, issue, t
 
 ## Operative declared-checks policy (issue #395)
 
-This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
+This policy supersedes shipping policy §3's legacy fixed-reviewer rule and conflicting inherited
 ship/land check instructions for this task. Workflow decisions stay in skills, never core or
 a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
 selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
@@ -20,7 +20,7 @@ steps, each judged by its exit code. Stop on nonzero; do not infer success from 
 Record name, command, exit code, UTC start/end, counts (N/A if unavailable), exact head,
 runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional countsParser
 metadata never overrides the exit code. Receipts, conductor reports and fixer handoffs list
-steps by name, not a hard-coded trio. A changed head invalidates prior same-head receipts.
+steps by name, not a hard-coded check list. A changed head invalidates prior same-head receipts.
 
 Empty steps means NO local checks, including bootstrap and preflight: do not execute either.
 Record `declared checks: none`; land fallback is exact-head CI plus human merge authorization,

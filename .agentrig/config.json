@@ -3,9 +3,31 @@
     "bootstrap": "pnpm install --frozen-lockfile",
     "preflight": "pnpm test:preflight",
     "steps": [
-      { "name": "build", "command": "pnpm build" },
-      { "name": "test", "command": "pnpm test", "countsParser": "vitest" },
-      { "name": "typecheck", "command": "pnpm typecheck" }
+      {
+        "name": "build",
+        "command": "pnpm build"
+      },
+      {
+        "name": "test",
+        "command": "pnpm test",
+        "countsParser": "vitest"
+      },
+      {
+        "name": "typecheck",
+        "command": "pnpm typecheck"
+      }
     ]
-  }
+  },
+  "reviewers": [
+    {
+      "name": "Claude Code",
+      "adapter": "claude-cli",
+      "model": "claude-opus-5"
+    },
+    {
+      "name": "Codex",
+      "adapter": "codex-cli",
+      "model": "gpt-5.5"
+    }
+  ]
 }

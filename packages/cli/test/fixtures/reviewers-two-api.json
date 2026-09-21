@@ -1,0 +1,10 @@
+{
+  "providers": {
+    "first": { "provider": "anthropic", "model": "model-one" },
+    "second": { "provider": "openai", "model": "model-two" }
+  },
+  "reviewers": [
+    { "name": "Alpha", "adapter": "api", "provider": "first", "model": "model-one" },
+    { "name": "Beta", "adapter": "api", "provider": "second", "model": "model-two" }
+  ]
+}
