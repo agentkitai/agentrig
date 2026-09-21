@@ -31,16 +31,27 @@ export const instructionEchoSentences = [
 export function assertReviewerVerdict(body) {
   // Posting checks literal echoes, not live finding-index completeness or identity.
   const headings = new Set(findingHeadings(body));
+  const unquoted = [];
   let inFinding = false;
+  let fence;
   for (const line of body.split(/\r?\n/)) {
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) {
+      if (marker?.[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+      continue;
+    }
     if (/^ {0,3}#{1,6} /.test(line)) inFinding = headings.has(line);
     else if (headings.has(line)) inFinding = true;
-    // Narrow escape hatch: a Markdown blockquote inside an indexed finding. The
-    // unquoted surrounding finding must still state the scenario and proposed fix.
-    if (inFinding && /^ {0,3}> /.test(line)) continue;
-    if (instructionEchoSentences.some(sentence => line.includes(sentence))) {
-      throw new Error("reviewer body echoes instructions; not a verdict");
-    }
+    else if (inFinding && line.trim() === "") inFinding = false;
+    if (inFinding && marker) { fence = marker; continue; }
+    // Contract quotations are evidence only inside an indexed finding. Support
+    // ordinary Markdown quote forms while leaving their surrounding prose checked.
+    if (inFinding && (/^ {0,3}> ?/.test(line) || /^ {4}\S/.test(line))) continue;
+    unquoted.push(inFinding ? line.replace(/`[^`\r\n]+`/g, "") : line);
+  }
+  const normalized = unquoted.join("\n").replace(/\s+/g, " ");
+  if (instructionEchoSentences.some(sentence => normalized.includes(sentence.replace(/\s+/g, " ")))) {
+    throw new Error("reviewer body echoes instructions; not a verdict");
   }
 }
 
@@ -82,7 +93,7 @@ function findingHeadings(body, unsupported = () => {}) {
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
     if (finding) {
       findings.push(line);
-    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /^\s*(?:(?:F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b)|(?:\[P\d+\])|(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
       unsupported(line);
     }
   }

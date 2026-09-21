@@ -41,6 +41,16 @@ it("clean verdict and fenced/quoted non-ATX examples are not omissions", () => {
   expect(findingIndex(url, { html_url: url, body: "VERDICT: PASS\nNo findings.\n~~~md\nF1: HIGH example\n~~~\n> [P4] quoted" })).toEqual([]);
 });
 
+it("M-inline-finding-grammar: ignores grammar examples embedded in ordinary prose", () => {
+  const heading = "### LOW: Actual finding  with exact bytes";
+  const body = [
+    heading,
+    "A sentence quoting `### HIGH — title` is documentation, not another finding.",
+    "- **#444** prose mentioning `F1 — HIGH —` remains ordinary prose.",
+  ].join("\n");
+  expect(findingIndex(url, { html_url: url, body })).toEqual([{ comment: url, heading }]);
+});
+
 it.each(["## High-level summary", "## Low-risk observations", "### P1 planning notes"])("does not index prose section %s", body => {
   expect(findingIndex(url, { html_url: url, body })).toEqual([]);
 });

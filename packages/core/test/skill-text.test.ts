@@ -1,6 +1,6 @@
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { readSkillText } from "../../../test/skill-text.js";
 
@@ -9,6 +9,9 @@ afterEach(() => {
   vi.unstubAllEnvs();
   for (const path of owned.splice(0)) rmSync(path, { recursive: true, force: true });
 });
+function incompleteOverride(root: string, skill: string, pathJoin = join) {
+  return `incomplete skills override: ${pathJoin(skill, "SKILL.md")} in ${root}`;
+}
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "skill-text-"));
   owned.push(root);
@@ -28,7 +31,11 @@ it("does not silently fall back to checkout skills when the override is incomple
   const root = fixture();
   rmSync(join(root, "dogfood", "SKILL.md"));
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: dogfood/SKILL.md in ${root}`);
+  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(incompleteOverride(root, "dogfood"));
+});
+
+it("M-windows-override-diagnostic: builds the expected skill path portably", () => {
+  expect(incompleteOverride("C:\\proof", "dogfood", win32.join)).toBe("incomplete skills override: dogfood\\SKILL.md in C:\\proof");
 });
 
 it("keeps non-skill document bytes and paths unchanged", () => {
@@ -47,7 +54,7 @@ it("rejects an incomplete tree even when the requested skill exists", () => {
   const root = fixture();
   rmSync(join(root, "topic"), { recursive: true });
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: topic/SKILL.md in ${root}`);
+  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(incompleteOverride(root, "topic"));
 });
 it("preserves generated SKILL.md raw bytes including line-ending-only edits", () => {
   const path = join(fixture(), "SKILL.md");

@@ -379,11 +379,28 @@ it.each(echoPhrases)("M-echo-gate: rejects instruction echo before gh: %s", phra
   expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
   expect(result.args).toBeUndefined();
 });
-it("M-quoted-contract: allows explicit contract quotation inside a real finding only", () => {
-  const body = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\nscripts/post-review-comment.mjs:30 lacks evidence; fix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
-  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+it("M-quoted-contract: allows supported contract citations inside a finding only", () => {
+  const citations = [
+    `> ${echoPhrases[1]}`,
+    `Contract citation: \`${echoPhrases[1]}\``,
+    `> A pass verdict lists what you probed\n> and which mutants you ran`,
+    `~~~text\n${echoPhrases[1]}\n~~~`,
+    `    ${echoPhrases[1]}`,
+  ];
+  for (const citation of citations) {
+    const body = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\nscripts/post-review-comment.mjs:30 lacks evidence; fix the receipt. Contract quotation:\n${citation}\n`;
+    expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+  }
   expect(run(`VERDICT: PASS\n> ${echoPhrases[1]}\n`).args).toBeUndefined();
-  expect(run(body + echoPhrases[0]).args).toBeUndefined();
+  const unrelated = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\nFix it.\n\n> ${echoPhrases[1]}\n`;
+  expect(run(unrelated).args).toBeUndefined();
+});
+
+it("M-wrapped-echo: rejects a literal contract echo split across lines", () => {
+  const body = `VERDICT: PASS\nReviewed head ${head}\nA pass verdict lists what you probed\nand which mutants you ran\n`;
+  const result = run(body);
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(result.args).toBeUndefined();
 });
 it("M-size-gate: large genuine review requires nonempty conductor ledger before gh", () => {
   const body = `VERDICT: PASS\nReviewed head ${head}\n` + "Evidence from targeted probe.\n".repeat(2000);
