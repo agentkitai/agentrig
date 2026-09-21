@@ -178,6 +178,55 @@ describe("train", () => {
     expect(f.calls.some(call => call.startsWith("run --headless"))).toBe(false);
     expect(JSON.parse(await readFile(join(f.root, "logs/1.halt.json"), "utf8"))).toMatchObject({ phase: "checkout" });
   });
+  it("refuses a train directory inside its checkout before running the child", async () => {
+    const f = await fixture();
+    const checkout = f.root;
+    await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, environment: { ...row.environment, checkout } }));
+    const command: TrainCommand = async request => {
+      const result = await f.command(request);
+      if (request.argv.includes("--show-toplevel")) result.stdout = checkout;
+      return result;
+    };
+    expect(await runTrain(f.root, { command })).toBe("halted");
+    expect(f.calls).toEqual(["rev-parse --show-toplevel"]);
+    expect(await readdir(join(f.root, "done"))).toEqual([]);
+    expect(JSON.parse(await readFile(join(f.root, "logs/1.halt.json"), "utf8"))).toMatchObject({
+      phase: "checkout", reason: "train directory must be outside checkout",
+    });
+  });
+  it("refuses a stale result receipt without overwriting it or running the child", async () => {
+    const f = await fixture(); await mkdir(join(f.root, "logs"));
+    const path = join(f.root, "logs/1.result.json"); const stale = '{"pr":17}\n';
+    await writeFile(path, stale);
+    expect(await runTrain(f.root, { command: f.command })).toBe("halted");
+    expect(f.calls.some(call => call.startsWith("run --headless"))).toBe(false);
+    expect(await readFile(path, "utf8")).toBe(stale);
+    expect(await readdir(join(f.root, "done"))).toEqual([]);
+    expect(JSON.parse(await readFile(join(f.root, "logs/1.halt.json"), "utf8"))).toMatchObject({
+      phase: "run", reason: "stale result receipt; use a new row id for resume",
+    });
+  });
+  it("refuses a receipt that changes the operator-pinned resume PR before landing", async () => {
+    const f = await fixture();
+    await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, resume: { session: "old", pr: 17 } }));
+    expect(await runTrain(f.root, { command: f.command })).toBe("halted");
+    expect(f.calls.filter(call => call.startsWith("run --headless"))).toHaveLength(1);
+    expect(f.calls.some(call => call.startsWith("pr view"))).toBe(false);
+    expect(await readdir(join(f.root, "done"))).toEqual([]);
+    expect(JSON.parse(await readFile(join(f.root, "logs/1.halt.json"), "utf8"))).toMatchObject({
+      phase: "run", reason: "resume receipt changed pinned PR", pr: 17,
+    });
+  });
+  for (const folder of ["done", "halted"]) it(`refuses a reused ${folder} row identity without consuming the queue`, async () => {
+    const f = await fixture(); await mkdir(join(f.root, folder));
+    const prior = "prior row evidence\n";
+    await writeFile(join(f.root, folder, "1.json"), prior);
+    await expect(runTrain(f.root, { command: f.command })).rejects.toThrow("row identity already used: 1.json");
+    expect(f.calls).toEqual([]);
+    expect(await readFile(join(f.root, folder, "1.json"), "utf8")).toBe(prior);
+    expect(await readFile(join(f.root, "queue/1.json"), "utf8")).toBe(JSON.stringify(row));
+    expect(await readdir(join(f.root, "active"))).toEqual([]);
+  });
   for (const name of ["1.txt", "README", "bad.json.tmp"]) it(`rejects invalid queue name ${name}`, async () => {
     const f = await fixture(0); await writeFile(join(f.root, "queue", name), "{}");
     await expect(runTrain(f.root, { command: f.command })).rejects.toThrow(/row names/u);
