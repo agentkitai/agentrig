@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Usage: node scripts/post-review-comment.mjs PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]
-// The caller must run the existing verdict/stale-head gates before handing us BODY_FILE.
+// Validate the structured verdict and caller binding before any remote side effect.
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
+import { START, END } from "./review-verdict.mjs";
 import { reviewerVerdict, assertReviewerVerdict } from "./review-finding-index.mjs";
 
 try {
@@ -30,7 +31,7 @@ try {
   const raw = reviewerVerdict(readFileSync(bodyFile, "utf8"), slots[reviewer].adapter);
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");
   if (!body.trim()) throw new Error("empty reviewer body");
-  assertReviewerVerdict(body);
+  const verdict = assertReviewerVerdict(body, { reviewedHead: head, assertedModel: model, slot: reviewer });
   let sizeExplanation;
   if (Buffer.byteLength(body, "utf8") > 40 * 1024) {
     const ledger = process.env.REVIEW_LARGE_BODY_LEDGER;
@@ -45,6 +46,9 @@ try {
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;
   const capacity = 60000 - heading.length - 2 - (2 * digits + 7);
+  const blockStart = verdict ? payload.indexOf(START) : -1;
+  const blockEnd = verdict ? payload.indexOf(END, blockStart) + END.length : -1;
+  if (verdict && blockEnd - blockStart > capacity) throw new Error("structured verdict block exceeds comment capacity");
   const pieces = [];
   if (`${heading}\n\n${payload}`.length <= 60000) pieces.push(payload);
   else {
@@ -55,6 +59,9 @@ try {
         const newline = payload.lastIndexOf("\n", end - 1);
         if (newline >= start) end = newline + 1;
       }
+      // The schema-bearing source comment must remain independently parseable.
+      if (blockStart >= start && blockStart < end && blockEnd > end) end = blockStart;
+      if (end === start && blockStart === start) end = blockEnd;
       // Never split a surrogate pair; UTF-16 length is a conservative character bound.
       if (end < payload.length && /[\uD800-\uDBFF]/.test(payload[end - 1])) end--;
       pieces.push(payload.slice(start, end));
@@ -77,7 +84,7 @@ try {
     } catch { /* Invalid receipts still refuse; never infer permission to retry. */ }
     throw new Error(`refusing rerun; ${advice}; receipt ${receiptPath}:\n${saved}`);
   }
-  const receipt = { ...(sizeExplanation === undefined ? {} : { sizeExplanation }), pr, heading, total: pieces.length, successful: [], pending: null, status: "posting" };
+  const receipt = { verdict, legacyProseFallback: verdict === null, ...(sizeExplanation === undefined ? {} : { sizeExplanation }), pr, heading, total: pieces.length, successful: [], pending: null, status: "posting" };
   const save = () => {
     // Same-directory rename preserves the last complete receipt on failed writes.
     const temporary = `${receiptPath}.${randomUUID()}.tmp`;

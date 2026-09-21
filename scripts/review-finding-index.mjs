@@ -4,15 +4,13 @@ import { cliAdapters, normalizeReviewerHead } from "./reviewer-adapters.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { createRequire } from 'node:module';
-
-// Resolve the existing dependency through its declaring workspace package.
-const { lexer } = createRequire(new URL('../packages/cli/package.json', import.meta.url))('marked');
+import { START, END, hasVerdictBlock, parseVerdict } from "./review-verdict.mjs";
 
 // Current adapters already return verdict-only text (.last for Codex, .result for Claude).
 // Also support old transcript artifacts without cutting a markerless verdict's provenance.
 export function reviewerVerdict(raw, adapter) {
-  return normalizeReviewerHead(rawReviewerVerdict(raw, adapter)).text;
+  const text = rawReviewerVerdict(raw, adapter);
+  return hasVerdictBlock(text) ? text : normalizeReviewerHead(text).text;
 }
 
 function rawReviewerVerdict(raw, adapter) {
@@ -31,44 +29,10 @@ function rawReviewerVerdict(raw, adapter) {
   return raw;
 }
 
-export const instructionEchoSentences = [
-  "You are the reviewer of record, not the author and not the merger.",
-  "A pass verdict lists what you probed and which mutants you ran",
-  "Report which of the PR body's claims you verified, and any you could not.",
-];
-export function assertReviewerVerdict(body) {
-  // Posting checks literal echoes, not live finding-index completeness or identity.
-  const headings = new Set(findingHeadings(body));
-  let inFinding = false;
-  const unquoted = [];
-  const visit = tokens => {
-    for (const token of tokens) {
-      // Only block tokens confer citation permission. In particular, a blank
-      // list continuation is still a paragraph, and inline code is still prose.
-      if (token.type === "code" || token.type === "blockquote") {
-        if (!inFinding) unquoted.push(token.raw);
-        continue;
-      }
-      if (token.type === "list") {
-        for (const item of token.items) visit(item.tokens);
-        continue;
-      }
-      if (token.type === "heading" || token.type === "hr") inFinding = false;
-      for (const line of token.raw.split(/\r?\n/)) {
-        if (/^ {0,3}#{1,6}\s/.test(line) || headings.has(line) ||
-            /^ {0,3}(?:\*\*|__)?(?:unrelated summary|summary)(?:(?:\*\*|__)?\s*:|(?:\*\*|__)?\s*$)/i.test(line)) {
-          inFinding = headings.has(line);
-        }
-        unquoted.push(line);
-      }
-    }
-  };
-  visit(lexer(body));
-  // Literal echoes remain literal under whitespace-only LF/CRLF reflow.
-  const text = unquoted.join("\n").replace(/^(?: {0,3}>[ \t]?)+/gm, "").replace(/\s+/g, " ");
-  if (instructionEchoSentences.some(sentence => text.includes(sentence))) {
-    throw new Error("reviewer body echoes instructions; not a verdict");
-  }
+export function assertReviewerVerdict(body, expected = {}, log = console.warn) {
+  if (hasVerdictBlock(body)) return parseVerdict(body, expected);
+  log("review-verdict: legacy prose fallback (nonfatal); structured verdict required for landing");
+  return null;
 }
 
 function commentSource(url) {
@@ -80,14 +44,29 @@ export function findingIndex(url, comment) {
   commentSource(url);
   if (comment?.html_url !== url) throw new Error('live comment identity mismatch');
   if (typeof comment.body !== 'string') throw new Error('live comment body missing');
+  assertReviewerVerdict(comment.body);
   return findingHeadings(comment.body, line => {
-    throw new Error(`unindexed finding in ${url}: ${line}`);
+    console.warn(`review-verdict: prose divergence (nonfatal), unindexed finding or verdict inconsistency in ${url}: ${line}`);
   }).map(heading => ({ comment: url, heading }));
 }
 
 // Share heading recognition without fabricating live provenance for unposted text.
-// Only the live index rejects recognizable unsupported finding openings.
-function findingHeadings(body, unsupported = () => {}) {
+// Legacy unsupported openings are logged, not fatal; only schema can authorize landing.
+export function findingHeadings(body, unsupported = () => {}) {
+  if (hasVerdictBlock(body)) {
+    const verdict = parseVerdict(body);
+    const headings = verdict.findings.map(f => f.heading);
+    // Inspect only surrounding prose, never JSON string values in the wire block.
+    const prose = body.slice(0, body.indexOf(START)) + body.slice(body.indexOf(END) + END.length);
+    for (const heading of proseFindings(prose, unsupported, verdict.verdict)) {
+      if (!headings.includes(heading)) unsupported(heading);
+    }
+    return headings;
+  }
+  return proseFindings(body, unsupported);
+}
+
+function proseFindings(body, unsupported, verdict) {
   const findings = [];
   let fence;
   for (const line of body.split(/\r?\n/)) {
@@ -97,11 +76,15 @@ function findingHeadings(body, unsupported = () => {}) {
       continue;
     }
     if (marker) { fence = marker; continue; }
+    // Blockquotes and indented code are evidence/data, not review assertions.
+    if (/^(?: {4}|\t| {0,3}>)/.test(line)) continue;
+    const proseVerdict = /^ {0,3}(?:#{1,6} +)?(?:\*\*)?VERDICT:\s*(PASS|FAIL)\b/i.exec(line);
+    if (verdict && proseVerdict && proseVerdict[1].toUpperCase() !== verdict) unsupported(line);
     // Review skill requires per-finding headings. Other section headings are not findings.
     // Explicit delimiters distinguish severity labels from High-level prose.
     // Strip only Markdown's permitted ATX indentation; preserve original bytes.
     const candidate = line.replace(/^ {0,3}#{1,6} +/, '');
-    const finding = /^(?:[A-Z]\d+\s+[—–-]\s+)?(?:\*\*)?(?:(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])(?:\*\*)?\s*(?::|—|–|-(?=\s)|,\s*(?:blocking|non-blocking)\s*—)|\[(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])\](?:\*\*)?\s+\S)/i.test(candidate);
+    const finding = /^(?:[A-Z]\d+\s+[—–-]\s+|F\d+:?\s+(?=\[))?(?:\*\*)?(?:(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])(?:\*\*)?\s*(?::|—|–|-(?=\s)|,\s*(?:blocking|non-blocking)\s*—)|\[(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])\](?:\*\*)?\s+\S)/i.test(candidate);
     // ALL-CAPS ATX headings are finding attempts even without a supported delimiter.
     // Bare severity-token prose is not a heading; explicit finding syntax still indexes.
     // Priority planning sections are the explicit prose exception, not all P1 prose.
@@ -117,10 +100,16 @@ function findingHeadings(body, unsupported = () => {}) {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    if (process.argv[2] === "--extract") {
+    if (process.argv[2] === "--validate") {
+      const [, , , input, reviewedHead, slot, assertedModel] = process.argv;
+      if (process.argv.length !== 7) throw new Error("usage: --validate FILE HEAD SLOT MODEL");
+      const verdict = parseVerdict(readFileSync(input, "utf8"), { reviewedHead, slot, assertedModel });
+      console.log(JSON.stringify(verdict, null, 2));
+    } else if (process.argv[2] === "--extract") {
       const [, , , adapter, input, output] = process.argv;
       if (process.argv.length !== 6) throw new Error("usage: review-finding-index.mjs --extract ADAPTER INPUT OUTPUT");
-      const extracted = normalizeReviewerHead(rawReviewerVerdict(readFileSync(input, "utf8"), adapter));
+      const raw = rawReviewerVerdict(readFileSync(input, "utf8"), adapter);
+      const extracted = hasVerdictBlock(raw) ? { text: raw, tolerances: [] } : normalizeReviewerHead(raw);
       const body = extracted.text;
       if (!body.trim()) throw new Error("empty review");
       assertReviewerVerdict(body);

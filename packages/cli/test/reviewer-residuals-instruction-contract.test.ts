@@ -5,7 +5,7 @@ const read = (skill: string) => readSkillText(new URL(`../../../.agentrig/skills
 const contracts: Array<[string, string, string]> = [
   ["arbiter", "M-arbiter-slots", "Missing `reviewers` or `{}` means zero slots"],
   ["arbiter", "M-arbiter-checks", "named same-head receipts"],
-  ["topic", "M-unbuilt-repo", "successful declared build output at that same head"],
+  ["topic", "M-unbuilt-repo", "Prepare any required dist from this same base commit"],
   ["topic", "M-mutable-repo", "Never use the author tree, stale main dist"],
   ["topic", "M-empty-checks-build", "halt rather than run undeclared checks"],
   ...["ship", "topic"].flatMap(skill => [
@@ -51,16 +51,16 @@ it("M-base-creation: topic explicitly creates and records the cleanup-owned base
   expect(preparation).toContain("Record this exact ref as conductor-owned");
 });
 
-it("defines the exact-head adapter REPO checkout before ship examples and links topic", () => {
+it("defines the base-pinned adapter REPO checkout before ship examples and links topic", () => {
   const ship = read("ship");
   const policy = readFileSync(new URL("../../../docs/SHIPPING-WORKFLOW.md", import.meta.url), "utf8");
   for (const text of [ship, policy]) {
-    expect(text).toMatch(/<REPO>[^\n]*exact PR head/i);
+    expect(text).toMatch(/<REPO>[^\n]*separate clean checkout/i);
     expect(text).toMatch(/topic[^\n]*§2 step 4/);
-    expect(text).toMatch(/not[^\n]*author[^\n]*main/i);
+    expect(text).toMatch(/Never use the author tree[^\n]*main/i);
   }
   const topic = read("topic");
-  expect(topic).toMatch(/<REPO>[^\n]*exact PR head/i);
+  expect(topic).toMatch(/<REPO>[^\n]*separate clean checkout/i);
 });
 
 it("testing policy resolves named checks and zero reviewer slots", () => {

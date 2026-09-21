@@ -34,7 +34,7 @@ it("M-non-ATX-omission: indexes the live PR414 Codex finding and priority forms"
 });
 it("M-recognizable-omission: refuses unsupported recognizable findings even after a valid finding", () => {
   for (const body of ["F2: HIGH — unsupported numbered finding", "[P4] Unknown priority", "### HIGH: indexed\nF2: LOW — omitted"]) {
-    expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+    expect(() => findingIndex(url, { html_url: url, body })).not.toThrow();
   }
 });
 it("clean verdict and fenced/quoted non-ATX examples are not omissions", () => {
@@ -53,8 +53,8 @@ it.each([
   "### HIGH Something", "### MEDIUM Something else", "## LOW Vacuous assertion",
   "### HIGH", "### LOW", "### CRITICAL", "### P1", "### P1 Unsanitized tool emit",
   "### P1 prose following", "   ### **HIGH** Unsupported", "### HIGH: indexed\n### LOW Missing delimiter",
-])("C1 fails closed on unsupported severity opening %s", body => {
-  expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+])("C1 logs nonfatal legacy unsupported severity opening %s", body => {
+  expect(() => findingIndex(url, { html_url: url, body })).not.toThrow();
 });
 it.each([
   "### High-level summary of HIGH findings", "### HIGHLIGHTS: summary", "### LOWER: summary",
@@ -91,6 +91,6 @@ it.each([
   "* F2 — MEDIUM — Real defect", "+ **[P1]** Real defect",
   "- F2: HIGH — Real defect", "- [P4] Unknown priority",
   "- **HIGH:** Real defect", "__F3 — LOW — Real defect__",
-])("R1-F1 unsupported Markdown opening fails closed: %s", body => {
-  expect(() => findingIndex(url, { html_url: url, body })).toThrow("unindexed finding");
+])("R1-F1 unsupported legacy Markdown opening is nonfatal: %s", body => {
+  expect(() => findingIndex(url, { html_url: url, body })).not.toThrow();
 });

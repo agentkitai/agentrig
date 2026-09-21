@@ -8,7 +8,7 @@ const read = (path: string) => readSkillText(new URL(`../../../${path}`, import.
 const skill = (name: string) => `.agentrig/skills/${name}/SKILL.md`;
 const checks: Array<[string, string, string, string[]]> = [
  ["M-lander-fixer-receipt",skill("land"),"## 1.",["quote `Repair round: N/3`", "ledger blocker IDs", "`gh pr view NN --json body` read-back receipt BEFORE", "Reject a missing quote", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "match that line against the round, OLD and assigned blockers", "counter repaired by the fixer afterwards cannot retroactively satisfy it"]],
- ["M-claim-documentation",skill("topic"),"## 2.",["Only standalone 7–40 hex tokens", "stale `head_sha:`", "stale `Reviewed at`", "discussion mention outside code"]],
+ ["M-claim-documentation",skill("topic"),"## 2.",["delimited JSON", "No first-line head gate", "Prose quotations and range expressions", "fallback cannot satisfy a landing review"]],
  ["M-mechanical-closure", "docs/SHIPPING-WORKFLOW.md", "## 3.",["it cannot replace independent focused review to close a blocker"]],
  ...["topic", "ship", "land"].map(name => ["M-model-heading", skill(name), "## Initial full review heading contract", ["initial heading model must equal the slot's pinned model", "missing required initial review, not a receipt"]] as [string,string,string,string[]]),
  ["M-topic-pin",skill("topic"),"## 2.",["scripts/reviewer-adapters.mjs", "slot's pinned model"]],

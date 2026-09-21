@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseVerdict, verdictPrompt } from "./review-verdict.mjs";
 
 // Presentation tolerance only, before the conductor's unchanged head/stale-claim gate.
 // Never search for a later head line or discard arbitrary SHA-bearing prose.
@@ -79,10 +80,14 @@ export async function main(args) {
   const config = parseConfigText(configPath, readFileSync(configPath, "utf8"));
   if (!Object.hasOwn(config.reviewers ?? {}, slot)) throw new Error("undeclared reviewer slot");
   const binding = config.reviewers[slot];
-  const prompt = readFileSync(promptPath, "utf8");
+  let prompt = readFileSync(promptPath, "utf8");
   if (!prompt.trim()) throw new Error("empty review prompt");
   if (resolve(prefix) !== prefix) throw new Error("output prefix must be absolute");
-  for (const suffix of ["stdout", "stderr", "last", "md", "model.txt", "provenance.json"]) if (existsSync(`${prefix}.${suffix}`)) throw new Error("output already exists; use a fresh attempt prefix");
+  for (const suffix of ["stdout", "stderr", "last", "md", "model.txt", "provenance.json", "verdict.json"]) if (existsSync(`${prefix}.${suffix}`)) throw new Error("output already exists; use a fresh attempt prefix");
+  const gitHead = spawnSync("git", ["-C", cwd, "rev-parse", "HEAD"], { encoding: "utf8" });
+  if (gitHead.status !== 0) throw new Error("cannot resolve reviewed worktree head");
+  const reviewedHead = gitHead.stdout.trim();
+  prompt += `\n\n${verdictPrompt({ reviewedHead, assertedModel: binding.model, slot, modelSource: "reviewer assertion; transport provenance recorded separately" })}`;
   const started = new Date().toISOString();
   let result, launch;
   if (binding.adapter.startsWith("api:")) {
@@ -103,9 +108,10 @@ export async function main(args) {
     result = validateResult(binding, adapter.extract(run.stdout, run.stderr, existsSync(`${prefix}.last`) ? readFileSync(`${prefix}.last`, "utf8") : ""), run.status);
     result.modelSource = adapter.modelSource;
   }
-  const normalized = normalizeReviewerHead(result.text);
-  writeFileSync(`${prefix}.md`, normalized.text);
+  const verdict = parseVerdict(result.text, { reviewedHead, assertedModel: result.model, slot });
+  writeFileSync(`${prefix}.md`, result.text);
+  writeFileSync(`${prefix}.verdict.json`, JSON.stringify(verdict, null, 2) + "\n");
   writeFileSync(`${prefix}.model.txt`, result.model + "\n");
-  writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ headExtraction: { tolerances: normalized.tolerances }, slot, adapter: binding.adapter, model: result.model, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
+  writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ verdict, reviewedHead, slot, adapter: binding.adapter, model: result.model, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
 }
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = 2; });
