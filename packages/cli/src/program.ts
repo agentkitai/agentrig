@@ -1,3 +1,4 @@
+import { registerTrainCommand } from "./train.js";
 import { Command, InvalidArgumentError } from "commander";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
@@ -159,6 +160,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   const executeRun = dependencies.run ?? runCommand;
   const executeTui = dependencies.tui ?? startTui;
   const program = new Command();
+  registerTrainCommand(program);
   program.name("agentrig").version(packageVersion).description("AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory");
   /**
    * `--profile` is ALSO registered on the root, so it can precede a subcommand — the shape an

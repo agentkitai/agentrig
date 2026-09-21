@@ -1,5 +1,16 @@
 # Status
 
+## R18c — train as a command (builder handoff; review/landing pending)
+
+`agentrig train <dir>` now drains strict JSON rows via a core queue transport and
+the existing headless run path. Each row validates and rebuilds its checkout; done
+requires verified PR merge plus required push CI on the exact merge commit. Halts
+retain phase/reason/PR/head/session identifiers, and status follows every row.
+STOP/PAUSE, same-session resume pointers and interrupted-active refusal are covered
+by fake-command fixtures. See [operations](TRAIN-OPERATIONS.md#agentrig-train-dir-r18c)
+and [R18 contract](plans/R18.md#r18c-implementation). Review disposition pending;
+no claim of the separate 30-row live drain acceptance or R18d/R18e completion.
+
 R18b complete — PR #481: prior code reviews resolved; operator-sanctioned final completion marker recorded. Final marker delta review and exact-head CI remain landing gates.
 
 Current roadmap row: R18b — done (PR #481), pending landing. R18a landed; next: (R18c ∥ R18d) → R18e under ROADMAP §5.
