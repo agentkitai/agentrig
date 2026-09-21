@@ -72,3 +72,11 @@ it.each([
   const heading = "### LOW: Actual finding";
   expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
 });
+it.each([
+  'The grammar example is `### HIGH — title`, not a finding.',
+  'Use `F1 — HIGH —` as the example prefix.',
+  'An F1 — HIGH — example in ordinary prose is not a heading.',
+  'The unsupported priority example is [P4].',
+])('M-inline-grammar: accepts ordinary prose %s', body => {
+  expect(findingIndex(url, { html_url: url, body })).toEqual([]);
+});

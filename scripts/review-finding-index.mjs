@@ -29,18 +29,61 @@ export const instructionEchoSentences = [
   "Report which of the PR body's claims you verified, and any you could not.",
 ];
 export function assertReviewerVerdict(body) {
-  // Posting checks literal echoes, not live finding-index completeness or identity.
   const headings = new Set(findingHeadings(body));
   let inFinding = false;
-  for (const line of body.split(/\r?\n/)) {
-    if (/^ {0,3}#{1,6} /.test(line)) inFinding = headings.has(line);
-    else if (headings.has(line)) inFinding = true;
-    // Narrow escape hatch: a Markdown blockquote inside an indexed finding. The
-    // unquoted surrounding finding must still state the scenario and proposed fix.
-    if (inFinding && /^ {0,3}> /.test(line)) continue;
-    if (instructionEchoSentences.some(sentence => line.includes(sentence))) {
-      throw new Error("reviewer body echoes instructions; not a verdict");
+  let paragraphBoundary = false;
+  let fence;
+  let inline = false;
+  const checked = [];
+  const lines = body.split(/\r?\n/);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    const quoted = fence !== undefined || marker !== undefined
+      || /^ {0,3}>/.test(line) || /^(?: {4}|\t)/.test(line);
+    if (!quoted && !inline && !line.trim()) paragraphBoundary = true;
+    else {
+      if (!quoted && !inline) {
+        if (headings.has(line)) inFinding = true;
+        else if (/^ {0,3}#{1,6} /.test(line)
+          || /^ {0,3}(?:---+|\*\*\*+|___+)\s*$/.test(line)
+          || (paragraphBoundary && !/^\s*(?:Evidence:\s*)?`/.test(line))) inFinding = false;
+      }
+      // A separated quotation still belongs to the finding; a new unheaded
+      // prose paragraph closes it rather than lending authority to later quotes.
+      paragraphBoundary = false;
     }
+    // Only quotation spans inside a supported finding are exempt. Keep
+    // unquoted analysis subject to the guard, including on inline-code lines.
+    if (inFinding && quoted) checked.push("\n[quoted evidence]\n");
+    else if (inFinding) {
+      const parts = line.split(/(`+)/);
+      let text = "";
+      for (let i = 0; i < parts.length; i++) {
+        if (i % 2) {
+          if (!inline) {
+            // An unmatched backtick is prose, not a citation extending to EOF.
+            const rest = parts.slice(i + 1).join("") + "\n" + lines.slice(lineIndex + 1).join("\n");
+            const paragraph = rest.split(/\n[ \t]*\n|\n {0,3}#{1,6} /, 1)[0];
+            if (paragraph.split(/(`+)/).some((part, index) => index % 2 && part === parts[i])) inline = parts[i];
+          }
+          else if (inline === parts[i]) inline = false;
+          text += " [quoted evidence] ";
+        } else if (!inline) text += parts[i];
+      }
+      checked.push(text);
+    } else checked.push(line);
+    if (marker) {
+      if (!fence) fence = marker;
+      else if (marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+    }
+  }
+  // Reflow must not defeat literal echo detection. Markdown quote syntax is
+  // not an exception outside a finding, so strip it before normalization.
+  const text = checked.join("\n").replace(/^ {0,3}>[ \t]?/gm, "")
+    .replace(/`+/g, "").replace(/\s+/g, " ");
+  if (instructionEchoSentences.some(sentence => text.includes(sentence.replace(/\s+/g, " ")))) {
+    throw new Error("reviewer body echoes instructions; not a verdict");
   }
 }
 
@@ -82,7 +125,7 @@ function findingHeadings(body, unsupported = () => {}) {
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
     if (finding) {
       findings.push(line);
-    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /^\s*(?:#{1,6}\s+)?(?:F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
       unsupported(line);
     }
   }

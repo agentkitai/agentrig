@@ -440,3 +440,33 @@ it.each([
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
 });
+it.each(['blockquote', 'inline', 'fenced', 'indented'].flatMap(form => [false, true].map(wrap => ({ form, wrap }))))('M-citation-form: posts $form contract evidence (wrapped=$wrap) inside a finding only', ({ form, wrap }) => {
+  const phrase = echoPhrases[1]!;
+  const wrapped = wrap ? phrase.replace('probed and', 'probed\nand') : phrase;
+  const quote = form === 'blockquote' ? wrapped.split('\n').map(line => `> ${line}`).join('\n')
+    : form === 'inline' ? `Evidence: \`${wrapped}\``
+    : form === 'fenced' ? `\`\`\`text\n${wrapped}\n\`\`\``
+    : wrapped.split('\n').map(line => `    ${line}`).join('\n');
+  const finding = '### LOW: Contract citation\nThe helper rejects valid evidence; accept this quotation.\n';
+  const body = `VERDICT: FAIL\n${finding}${quote}\n`;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+  const separated = `VERDICT: FAIL\n${finding}\n${quote}\n`;
+  expect(run(separated).posted).toBe(`${heading}\n\n${separated}`);
+  for (const prefix of ['', `${finding}## Summary\n`, `${finding}\n---\n`, `${finding}\nSummary:\n`]) {
+    const result = run(`VERDICT: PASS\n${prefix}${quote}\n`);
+    expect(result.status).not.toBe(0);
+    expect(result.args).toBeUndefined();
+  }
+});
+it.each(echoPhrases)('M-reflow-echo: rejects whitespace-reflowed literal echo %s', phrase => {
+  const result = run(`VERDICT: PASS\n${phrase.replaceAll(' ', '\n \t')}\n`);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('reviewer body echoes instructions; not a verdict');
+  expect(result.args).toBeUndefined();
+});
+
+it("M-unclosed-code: does not let an unmatched backtick hide a literal echo", () => {
+  const result = run(`VERDICT: FAIL\n### LOW: Citation\nUnclosed \` example\n${echoPhrases[0]}\n`);
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(result.args).toBeUndefined();
+});
