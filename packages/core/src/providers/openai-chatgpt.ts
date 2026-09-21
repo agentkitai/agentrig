@@ -201,6 +201,7 @@ export async function* parseResponsesSse(
   let sawRefusal = false;
   let stop: StopReason | null = null;
   let stopRaw: string | undefined;
+  let responseModel: string | undefined;
   let thinkingBytes = 0;
   let thinkingCount = 0;
 
@@ -263,6 +264,7 @@ export async function* parseResponsesSse(
       case "response.completed":
       case "response.incomplete": {
         const response = data.response as JsonObject | undefined;
+        if (typeof response?.model === "string" && response.model !== "") responseModel = response.model;
         usage = readUsage(response?.usage as JsonObject | undefined) ?? usage;
         if (data.type === "response.incomplete") {
           const mapped = mapIncompleteReason((response?.incomplete_details as JsonObject | undefined)?.reason);
@@ -303,7 +305,9 @@ export async function* parseResponsesSse(
 
   yield { type: "usage", usage: usage ?? { input: 0, output: 0 }, ...(usage === null ? { reported: false } : {}) };
   const finalStop: StopReason = stop ?? (sawToolUse ? "tool_use" : sawRefusal ? "refusal" : "end_turn");
-  yield stopRaw === undefined ? { type: "stop", reason: finalStop } : { type: "stop", reason: finalStop, raw: stopRaw };
+  yield stopRaw === undefined
+    ? { type: "stop", reason: finalStop, ...(responseModel === undefined ? {} : { model: responseModel }) }
+    : { type: "stop", reason: finalStop, raw: stopRaw, ...(responseModel === undefined ? {} : { model: responseModel }) };
 }
 
 export class OpenAIChatGPTProvider implements ModelProvider {

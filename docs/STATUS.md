@@ -9,7 +9,7 @@ model assertions, and empty/failed-output detection. Shipping roles are vendor-n
 same-head conductor checks precede every launch, reviewers receive receipts and review code without
 rerunning project checks, and landing gates exactly the configured slot count and pins. Zero slots
 record an explicit no-review ledger receipt; one slot also owns focused deltas; two require both
-initial reviews. Hosted CI may overlap review but remains required on the landing head. AgentRig's
+initial reviews. Initial full reviews remain valid across repairs when a contiguous focused OLD..NEW chain reaches the landing head. The API adapter selects an existing named entry through the CLI's provider routing and receipts the model reported by the response; Codex uses its exact model-banner token. Hosted CI may overlap review but remains required on the landing head. AgentRig's
 project declaration pins two CLI-backed slots. This issue-only contract does not advance a roadmap
 row.
 

@@ -72,10 +72,9 @@ On the actual PR head, verify explicit merge authorization, clean finding dispos
 review scratch, green independent conductor declared-check receipts, and required exact-head hosted
 CI. Confirm CI is green on the PR's CURRENT head SHA. Resolve the current reviewer declaration. For zero slots require the exact ledger line
 `External review: none declared` and no external-review headings. For one or two slots, require a
-complete canonical full-review heading for every and only configured slot; each heading's slot name
-and model must exactly equal its declaration pin and its SHA must equal PR HEAD. Require the proper
-focused-delta review after material repair (the sole slot for one; a declared slot for two). Never
-accept a stale, unconfigured, renamed, model-mismatched, heading-only, or partial chunk receipt.
+complete canonical initial full-review heading for every and only configured slot; each heading's
+slot name and model must exactly equal its declaration pin. The initial full-review headings remain valid at their reviewed SHA after repair; do not require them to equal current PR HEAD. After every material repair, require a contiguous OLD..NEW focused-delta chain (the sole slot for one; a declared slot for two) that begins at the previously reviewed head and ends at the current PR HEAD. Never
+accept an unconfigured, renamed, model-mismatched, heading-only, partial chunk, gapped, or stale-chain receipt.
 For a topic train, require the row's durable completion mark before continuing. An unmarked row is a row the next train rebuilds.
 
 ## 2. Merge

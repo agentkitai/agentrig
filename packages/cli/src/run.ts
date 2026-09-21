@@ -78,6 +78,8 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   resume?: string;
   /** Named config profile to overlay; may arrive from the subcommand flag or the root-level one. */
   profile?: string;
+  /** CLI-only binding of the main role to an existing named provider entry. */
+  providerEntry?: string;
   system?: string;
   allow?: string[];
   allowCommand?: string[][];
@@ -411,6 +413,14 @@ export interface RunCommandDependencies {
 }
 
 export async function runCommand(task: string, opts: RunOptions, dependencies: RunCommandDependencies = {}): Promise<RunSummary | void> {
+  if (opts.providerEntry !== undefined) {
+    if (opts.providerEntry === "" || opts.providerEntry.length > 128 || /[\s\u0000-\u001f\u007f]/u.test(opts.providerEntry)) {
+      console.error("--provider-entry must name one bounded configured entry");
+      process.exitCode = 1;
+      return;
+    }
+    opts = { ...opts, roles: { ...opts.roles, main: opts.providerEntry }, providerOverride: false };
+  }
   const printError = dependencies.quiet === true ? (..._values: unknown[]) => {} : console.error;
   const printOutput = dependencies.quiet === true ? (..._values: unknown[]) => {} : console.log;
   if (opts.heartbeat !== undefined) opts = { ...heartbeatBuildOptions(opts), supervise: false, supervisorReview: false, supervisorAbortRestores: false };

@@ -2,6 +2,7 @@
 // Skill-side external-review adapter. Vendor details stay here and in config, never in role skills.
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const fail = message => { console.error(message); process.exit(2); };
 const [configPath, slotText, worktree, baseRef, briefFile, rawFile, modelFile] = process.argv.slice(2);
@@ -27,7 +28,8 @@ if (slot.adapter === "claude-cli") {
   command = "codex";
   args = ["review", "--base", baseRef];
   assertion = (output, stderr) => {
-    const models = [...stderr.matchAll(/^model:[ \\t]*(.*)$/gm)].map(match => match[1].trim());
+    const matcher = /^model:\s*(\S+)\s*$/m;
+    const models = stderr.split(/\r?\n/).flatMap(line => { const match = line.match(matcher); return match ? [match[1]] : []; });
     if (models.length !== 1 || models[0] !== slot.model) fail("stderr model banner does not match configured pin");
     return output;
   };
@@ -35,9 +37,17 @@ if (slot.adapter === "claude-cli") {
   const entry = config.providers?.[slot.provider];
   if (!entry || entry.model !== slot.model) fail("API adapter must bind an existing provider entry with the same model pin");
   // API routing remains owned by AgentRig's named-provider path; this adapter does not copy endpoint/provider logic.
-  command = process.execPath;
-  args = ["packages/cli/dist/index.js", "run", "--provider-entry", slot.provider, brief];
-  assertion = output => output;
+  const cli = process.env.AGENTRIG_REVIEWER_CLI ?? fileURLToPath(new URL("../packages/cli/dist/index.js", import.meta.url));
+  command = cli.endsWith(".js") ? process.execPath : cli;
+  args = [...(command === process.execPath ? [cli] : []), "run", "--provider-entry", slot.provider, "--json", "--headless", "--trust", brief];
+  assertion = output => {
+    const events = output.split(/\r?\n/).filter(Boolean).map(line => {
+      try { return JSON.parse(line); } catch { fail("API adapter output is not JSON events"); }
+    });
+    const models = events.filter(event => event?.type === "model.response").map(event => event.model);
+    if (models.length === 0 || models.some(model => model !== slot.model)) fail("API response model does not match configured pin");
+    return events.filter(event => event?.type === "model.delta" && typeof event.text === "string").map(event => event.text).join("");
+  };
 } else fail("unknown reviewer adapter id");
 const result = spawnSync(command, args, { cwd: worktree, encoding: "utf8", env: process.env });
 if (result.error || result.status !== 0) fail(`review adapter failed (${result.status ?? result.error?.message})`);

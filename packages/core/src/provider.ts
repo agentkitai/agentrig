@@ -40,7 +40,7 @@ export type ModelEvent =
   /** reported:false marks synthesized/partial fallback counts, not a known zero-cost call. */
   | { type: "usage"; usage: Usage; reported?: boolean }
   /** `raw` carries the provider's verbatim stop reason when it doesn't map cleanly. */
-  | { type: "stop"; reason: StopReason; raw?: string }
+  | { type: "stop"; reason: StopReason; raw?: string; /** Actual model id reported by the response, when available. */ model?: string }
   /**
    * A transient failure was retried inside the provider (see `streamWithRetries`). Informational:
    * it carries no content, and the loop records it as a `model.retry` session event so the log

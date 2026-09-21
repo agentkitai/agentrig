@@ -217,6 +217,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--trust", "load project instructions and config for this run only")
       .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
       .option("--json", "emit raw event JSONL to stdout")
+      .option("--provider-entry <name>", "bind the main loop to one existing named provider entry")
       .option("--notification-idle-seconds <n>", "TUI input idle seconds before notifications (1–3600; default 30)", Number)
       .option("--memory <dir>", "inject this memory wiki's index into the system prompt", ".agentrig")
       .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)

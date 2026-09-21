@@ -109,6 +109,13 @@ describe("parseOpenAISse", () => {
     ]);
   });
 
+  it("carries the actual response model on the terminal event", async () => {
+    async function* response() {
+      yield sse([{ model: "actual-api-model", choices: [{ delta: {}, finish_reason: "stop" }] }]);
+    }
+    expect((await collect(parseOpenAISse(response()))).at(-1)).toEqual({ type: "stop", reason: "end_turn", model: "actual-api-model" });
+  });
+
   it("maps finish reasons: length, content_filter, unknown-with-raw", async () => {
     const single = (finish: string) =>
       (async function* () {

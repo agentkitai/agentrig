@@ -919,6 +919,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
         let sawStop = false;
         let stop: StopReason = "end_turn";
         let stopRaw: string | undefined;
+        let responseModel: string | undefined;
         try {
           abortController.signal.throwIfAborted();
           // Only an actual provider attempt is a continuation, never a staged retry that a
@@ -964,6 +965,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
                 stop = ev.reason;
                 sawStop = true;
                 stopRaw = ev.raw;
+                responseModel = ev.model;
                 break;
               case "retry":
                 usageRetried = true;
@@ -989,6 +991,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
         }
 
         await emit({ type: "model.response", usage, stop,
+          ...(responseModel === undefined ? {} : { model: responseModel }),
           usageComplete: usageReported && sawStop && stop !== "error" && !usageRetried });
         {
           // post_model: observe what came back; `inject` queues a follow-up user message

@@ -137,9 +137,14 @@ export async function* parseOpenAISse(body: AsyncIterable<Uint8Array | string>):
   let usage: Usage | null = null;
   let finishReason: unknown;
   let refused = false;
+  let responseModel: string | undefined;
 
   const handle = (data: JsonObject): ModelEvent[] => {
     const events: ModelEvent[] = [];
+    if (typeof data.model === "string" && data.model !== "") {
+      if (responseModel !== undefined && responseModel !== data.model) throw new Error("openai response changed model id within one stream");
+      responseModel = data.model;
+    }
     const choice = (data.choices as JsonObject[] | undefined)?.[0];
     if (choice) {
       const delta = choice.delta as JsonObject | undefined;
@@ -221,8 +226,8 @@ export async function* parseOpenAISse(body: AsyncIterable<Uint8Array | string>):
   yield { type: "usage", usage: usage ?? { input: 0, output: 0 }, ...(usage === null ? { reported: false } : {}) };
   const mapped = refused ? { reason: "refusal" as const } : mapFinishReason(finishReason ?? "stop");
   yield mapped.raw === undefined
-    ? { type: "stop", reason: mapped.reason }
-    : { type: "stop", reason: mapped.reason, raw: mapped.raw };
+    ? { type: "stop", reason: mapped.reason, ...(responseModel === undefined ? {} : { model: responseModel }) }
+    : { type: "stop", reason: mapped.reason, raw: mapped.raw, ...(responseModel === undefined ? {} : { model: responseModel }) };
 }
 
 export class OpenAICompatibleProvider implements ModelProvider {

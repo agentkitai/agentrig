@@ -109,10 +109,13 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
   let inputReported = false;
   let outputReported = false;
   let stopReason: unknown;
+  let responseModel: string | undefined;
 
   const handle = function* (data: JsonObject): Generator<ModelEvent> {
     switch (data.type) {
       case "message_start": {
+        const message = data.message as JsonObject | undefined;
+        if (typeof message?.model === "string" && message.model !== "") responseModel = message.model;
         const usage = (data.message as JsonObject | undefined)?.usage as JsonObject | undefined;
         inputTokens = Number(usage?.input_tokens ?? 0);
         inputReported = typeof usage?.input_tokens === "number";
@@ -215,8 +218,8 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
   yield { type: "usage", usage, ...(!inputReported || !outputReported ? { reported: false } : {}) };
   const mapped = mapStopReason(stopReason);
   yield mapped.raw === undefined
-    ? { type: "stop", reason: mapped.reason }
-    : { type: "stop", reason: mapped.reason, raw: mapped.raw };
+    ? { type: "stop", reason: mapped.reason, ...(responseModel === undefined ? {} : { model: responseModel }) }
+    : { type: "stop", reason: mapped.reason, raw: mapped.raw, ...(responseModel === undefined ? {} : { model: responseModel }) };
 }
 
 export class AnthropicProvider implements ModelProvider {

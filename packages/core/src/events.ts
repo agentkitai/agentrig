@@ -332,6 +332,8 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("budget.cap"), reason: z.enum(["exhausted", "uncertain", "unavailable", "unsupported"]), segment: z.string().min(1).max(256) }),
   z.object({ type: z.literal("model.delta"), text: z.string() }),
   z.object({ type: z.literal("model.response"), usage: Usage, stop: z.string(),
+    /** Actual model id carried by the provider response; absent means the adapter could not attest it. */
+    model: z.string().min(1).max(256).optional(),
     /** E2: missing on legacy logs means unknown, not a provider-reported zero. Retried,
      * synthesized, unclosed or errored calls cannot establish complete total consumption. */
     usageComplete: z.boolean().optional(),
