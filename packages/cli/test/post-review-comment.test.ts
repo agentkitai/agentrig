@@ -392,8 +392,22 @@ it("M-quoted-contract: allows supported contract citations inside a finding only
     expect(run(body).posted).toBe(`${heading}\n\n${body}`);
   }
   expect(run(`VERDICT: PASS\n> ${echoPhrases[1]}\n`).args).toBeUndefined();
-  const unrelated = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\nFix it.\n\n> ${echoPhrases[1]}\n`;
+  const unrelated = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\nFix it.\n\n## Claims verified\n> ${echoPhrases[1]}\n`;
   expect(run(unrelated).args).toBeUndefined();
+});
+
+it("M-blank-line-finding-section: keeps paragraph-separated citations inside a finding until the next heading", () => {
+  const body = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\n\nscripts/x.mjs:30 lacks evidence; fix the receipt.\n\nContract quotation:\n\n> ${echoPhrases[1]}\n`;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+  const outside = `${body}\n## Claims verified\n\n> ${echoPhrases[1]}\n`;
+  expect(run(outside).args).toBeUndefined();
+});
+
+it("M-unclosed-fenced-citation: does not hide an instruction echo through end of body", () => {
+  const body = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\nFix it.\n~~~text\n${echoPhrases[1]}\n`;
+  const result = run(body);
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(result.args).toBeUndefined();
 });
 
 it("M-wrapped-echo: rejects a literal contract echo split across lines", () => {

@@ -37,6 +37,16 @@ it("M-recognizable-omission: refuses unsupported recognizable findings even afte
     expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
   }
 });
+it.each([
+  "**F1 — HIGH — real unsupported finding**",
+  "- F2: HIGH — omitted finding in a list",
+  "- [P4] Unknown priority in a list item",
+  "**[P4] Unknown priority**",
+  "- **F3: LOW — bold list finding**",
+])("M-markdown-prefixed-omission: fails closed on malformed finding heading %s", body => {
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+});
+
 it("clean verdict and fenced/quoted non-ATX examples are not omissions", () => {
   expect(findingIndex(url, { html_url: url, body: "VERDICT: PASS\nNo findings.\n~~~md\nF1: HIGH example\n~~~\n> [P4] quoted" })).toEqual([]);
 });
