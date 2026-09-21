@@ -1,5 +1,25 @@
 # Status
 
+## R18c — train as a command (PR #488)
+
+JSON-encoded authority; host-owned validated final-PR transport without permission
+widening; row-marker/fresh-ancestry landing binding with an exact pinned-resume
+exception; checkout gate regressions; invalid-extension refusal and stale-temp-safe
+recovery records. Repair round 3 adds guard-deletion proofs for train-directory
+confinement, stale receipts, pinned-resume PR mismatch and reused done/halted row
+identities. Independent focused review closed C4; no runtime change was needed.
+
+`agentrig train <dir>` now drains strict JSON rows via a core queue transport and
+the existing headless run path. Each row validates and rebuilds its checkout; done
+requires verified PR merge plus required push CI on the exact merge commit. Halts
+retain phase/reason/PR/head/session identifiers, and status follows every row.
+STOP/PAUSE, same-session resume pointers and interrupted-active refusal are covered
+by fake-command fixtures. See [operations](TRAIN-OPERATIONS.md#agentrig-train-dir-r18c)
+and [R18 contract](plans/R18.md#r18c-implementation). Review dispositions and final
+CI/landing receipts are tracked on [PR #488](https://github.com/agentkitai/agentrig/pull/488).
+The LOW active-row-name residual remains #493; own-test observations stay advisory.
+No claim of the separate 30-row live drain acceptance or R18e completion.
+
 ## R18d — structured verdicts and base-pinned review tooling (implementation; review pending)
 
 A versioned zod review wire contract binds full reviewed head, model/source, slot,
