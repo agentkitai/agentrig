@@ -11,8 +11,11 @@ reach parents only after recovery exhaustion. Transport prefix retry stays uncha
 Fake-provider fail-first, discard/budget mutants and child recovery/exhaustion tests
 accompany declared checks in the PR. Repair round 1/3 implements the required
 aborted-output consumers: CLI/AssistantText, live TUI, materialization, memory ingest,
-CI capture (including cap/omission rollback), MCP answer capture and bounded ACP
-publication. Evaluation closes aborted requests and prior stream retries as unknown
+CI capture (including cap/omission rollback) and MCP answer capture. Repair round
+2/3 restores live ACP/web speculative chunks with the original bounded outstanding
+writes, not per-attempt staging. An explicit discard/retry notice separates an
+abandoned attempt from recovered text; completed log messages retain only recovered
+text. The real browser pre-cancel streaming assertion is restored. Evaluation closes aborted requests and prior stream retries as unknown
 usage. Fatal-uncommitted output remains observable; #472 turn-end balancing is
 intentionally unchanged. Independent delta review remains pending.
 

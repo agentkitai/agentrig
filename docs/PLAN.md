@@ -279,9 +279,11 @@ retry policy is unchanged: it must never replay a consumed prefix.
 output remains observable. CLI/AssistantText, live TUI, legacy materialization,
 memory transcript ingest, CI and MCP captures discard only that attempt's buffered
 text. Capture limits and omission flags roll back with it, not with completed text.
-ACP has no chunk retraction, so it stages one attempt against the existing transport
-output-byte bound, publishes on response or terminal failure, and releases/discards
-on `turn.aborted`. Raw logs and `sessions show` remain lossless event timelines with
+ACP/web stream speculative chunks immediately under the existing outstanding-write
+reservations and frame limits. ACP has no chunk retraction: `turn.aborted` emits a
+visible assistant notice marking the previous attempt abandoned and its partial
+output to be discarded, before recovered text. This is not a completed log message
+or a claim to retract already-sent chunks. Raw logs and `sessions show` remain lossless event timelines with
 explicit abort markers. Evaluation closes discarded requests and their provider
 retries as unknown usage, clears pending state, and treats the loop recovery marker
 as informational rather than inventing tokens or another billed attempt. The

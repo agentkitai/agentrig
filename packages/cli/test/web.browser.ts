@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { runtimeFixture } from "./web-fixture.js";
 
 it("real Chromium submits ACP, explicitly approves, answers a question, renders hostile text literally and cancels", async () => {
-  let turn = 0; let cancellationReady = false; const canary = '<img src="http://127.0.0.1:9/leak" onerror="globalThis.webCanary=1"><script>globalThis.webCanary=2</script><a href="javascript:globalThis.webCanary=3">link</a>';
+  let turn = 0; const canary = '<img src="http://127.0.0.1:9/leak" onerror="globalThis.webCanary=1"><script>globalThis.webCanary=2</script><a href="javascript:globalThis.webCanary=3">link</a>';
   const f = await runtimeFixture(async function* (_request, signal) {
     if (++turn === 1) { yield {type:"tool_use",id:"write",name:"write_file",input:{path:"browser-file",content:"explicitly approved"}}; yield {type:"stop",reason:"tool_use"}; }
     else if (turn === 2) { yield {type:"tool_use",id:"question",name:"ask_user",input:{prompt:"Pick a direction",options:["North","South"]}}; yield {type:"stop",reason:"tool_use"}; }
@@ -13,7 +13,7 @@ it("real Chromium submits ACP, explicitly approves, answers a question, renders 
       yield {type:"thinking",block:{type:"thinking",format:"anthropic",text:"PRIVATE_REASONING_CANARY",signature:"OPAQUE_SIGNATURE_CANARY",replay:JSON.stringify({type:"thinking",thinking:"PRIVATE_REASONING_CANARY",signature:"OPAQUE_SIGNATURE_CANARY"})}};
       yield {type:"text_delta",text:canary}; yield {type:"stop",reason:"end_turn"};
     }
-    else { yield {type:"text_delta",text:"Waiting for cancellation"}; cancellationReady = true; await new Promise<void>(resolve => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort",()=>resolve(),{once:true}); }); yield {type:"stop",reason:"end_turn"}; }
+    else { yield {type:"text_delta",text:"Waiting for cancellation"}; await new Promise<void>(resolve => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort",()=>resolve(),{once:true}); }); yield {type:"stop",reason:"end_turn"}; }
   });
   const browser = await chromium.launch({headless:true}); const page = await browser.newPage(); const requests: string[] = []; const errors: string[] = [];
   const frames: string[] = [];
@@ -37,10 +37,7 @@ it("real Chromium submits ACP, explicitly approves, answers a question, renders 
     expect(await page.evaluate(()=> (globalThis as {webCanary?:number}).webCanary)).toBeUndefined();
     expect(requests.every(url => url.startsWith(f.server.url))).toBe(true); expect(errors).toEqual([]);
     await page.locator("#task").fill("Wait until I cancel"); await page.locator("#send").click();
-    // ACP cannot retract speculative text: readiness is the provider waiting on
-    // cancellation, not receipt of a chunk that might still be discarded.
-    await expect.poll(()=>cancellationReady).toBe(true);
-    expect(await page.locator("#transcript").textContent()).not.toContain("Waiting for cancellation");
+    await expect.poll(()=>page.locator("#transcript").textContent()).toContain("Waiting for cancellation");
     await page.locator("#cancel").click();
     await expect.poll(()=>page.locator("#status").textContent()).toBe("Finished: cancelled");
     expect(await page.locator("#transcript").textContent()).toContain("Waiting for cancellation");
