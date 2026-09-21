@@ -1,6 +1,17 @@
 # Status
 
-Current roadmap row: drain 171 (#467), implemented pending review; next: next queued drain row under ROADMAP §5 (no dependent work pulled forward).
+Current roadmap row: fatal provider turn lifecycle (#476, #477), implemented pending verification and review; next: next queued drain row under ROADMAP §5 (no dependent work pulled forward).
+
+## Fatal provider turn lifecycle (#476, #477) — implemented, pending review
+
+Pre-delta provider failures now close the started turn, preserving fork snapshot
+turn counts against the session summary. Pre-delta and recovery-cap fatal exits
+emit one fatal error before `turn.end`, then `session.end` with `reason=error`.
+Fake-provider regressions cover pre-delta failure, per-turn and per-run caps;
+fail-first and named turn-end/order mutants are recorded in the PR. #475 remains
+out of scope. Full verification is blocked by the CLI test that assumes pre-delta
+failures never close a turn; updating that out-of-scope test requires conductor
+arbitration. Independent review and hosted exact-head checks remain pending.
 
 ## Turn-boundary disconnect recovery (#467) — implemented, pending review
 
