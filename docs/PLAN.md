@@ -275,6 +275,18 @@ unknown. Child agents recover independently; subagent answer buffers discard abo
 turns and parent completion follows the child terminal outcome. Provider transport
 retry policy is unchanged: it must never replay a consumed prefix.
 
+`turn.aborted` marks only an attempt actually discarded for retry; fatal-uncommitted
+output remains observable. CLI/AssistantText, live TUI, legacy materialization,
+memory transcript ingest, CI and MCP captures discard only that attempt's buffered
+text. Capture limits and omission flags roll back with it, not with completed text.
+ACP has no chunk retraction, so it stages one attempt against the existing transport
+output-byte bound, publishes on response or terminal failure, and releases/discards
+on `turn.aborted`. Raw logs and `sessions show` remain lossless event timelines with
+explicit abort markers. Evaluation closes discarded requests and their provider
+retries as unknown usage, clears pending state, and treats the loop recovery marker
+as informational rather than inventing tokens or another billed attempt. The
+budget-exhaustion turn-end balance bug is tracked separately in #472.
+
 H6 keeps `agent.ts` as the model-loop coordinator. Internal `tool-execution.ts` owns the sequential
 tool pipeline and registered-name emission authority; `session-lifecycle.ts` owns ordered event
 delivery, pause/cancellation, orphan settlement and terminal resource release. Live plan state

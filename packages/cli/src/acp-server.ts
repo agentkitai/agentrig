@@ -73,30 +73,53 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
   async function observe(sessionId: string, entry: Entry, session: Session): Promise<void> {
     const turn = entry.turn;
     const toolId = (id: string) => `${turn}:${id}`;
-    for await (const event of session.events) {
-      if (closing) continue;
-      let payload: SessionUpdate | undefined;
-      if (event.type === "model.delta") payload = { sessionUpdate: "agent_message_chunk", content: { type: "text", text: event.text } };
-      if (event.type === "model.response") entry.stop = event.stop;
-      if (event.type === "tool.call") payload = { sessionUpdate: "tool_call", toolCallId: toolId(event.id),
-        title: event.internal === undefined ? event.name : event.internal.kind === "attachment" ? `Input attachment: ${event.name}` : `Diagnostics for ${toolId(event.internal.parentToolUseId)}: ${event.name}`,
-        kind: "other", status: "in_progress", rawInput: event.input };
-      if (event.type === "tool.result") payload = { sessionUpdate: "tool_call_update", toolCallId: toolId(event.id), status: event.ok ? "completed" : "failed",
-        content: [{ type: "content", content: { type: "text", text: bounded(event.display) } }] };
-      if (payload !== undefined && (event.type === "tool.call" || event.type === "tool.result") && event.internal !== undefined) {
-        payload._meta = { agentrig: { internal: { kind: event.internal.kind, parentToolCallId: toolId(event.internal.parentToolUseId) } } };
+    // ACP has no chunk retraction. Stage each attempt against the transport byte
+    // cap until response or terminal failure, dropping only explicit discards.
+    let staged: Array<{ text: string; release: () => void }> = [];
+    const discard = () => { for (const chunk of staged) chunk.release(); staged = []; };
+    const flush = async () => {
+      const chunks = staged; staged = [];
+      try {
+        for (const chunk of chunks) {
+          chunk.release();
+          await update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk.text } });
+        }
+      } finally { for (const chunk of chunks) chunk.release(); }
+    };
+    try {
+      for await (const event of session.events) {
+        if (closing) continue;
+        let payload: SessionUpdate | undefined;
+        if (event.type === "model.delta") {
+          const params = { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: event.text } } };
+          // Include envelope/object overhead so tiny and empty chunks are bounded too.
+          const release = options.reserveOutput(Buffer.byteLength(JSON.stringify({ jsonrpc: "2.0", method: "session/update", params })) + 64);
+          let released = false;
+          staged.push({ text: event.text, release: () => { if (!released) { released = true; release(); } } });
+        }
+        if (event.type === "turn.aborted") discard();
+        if (event.type === "model.response" || event.type === "session.end") await flush();
+        if (event.type === "model.response") entry.stop = event.stop;
+        if (event.type === "tool.call") payload = { sessionUpdate: "tool_call", toolCallId: toolId(event.id),
+          title: event.internal === undefined ? event.name : event.internal.kind === "attachment" ? `Input attachment: ${event.name}` : `Diagnostics for ${toolId(event.internal.parentToolUseId)}: ${event.name}`,
+          kind: "other", status: "in_progress", rawInput: event.input };
+        if (event.type === "tool.result") payload = { sessionUpdate: "tool_call_update", toolCallId: toolId(event.id), status: event.ok ? "completed" : "failed",
+          content: [{ type: "content", content: { type: "text", text: bounded(event.display) } }] };
+        if (payload !== undefined && (event.type === "tool.call" || event.type === "tool.result") && event.internal !== undefined) {
+          payload._meta = { agentrig: { internal: { kind: event.internal.kind, parentToolCallId: toolId(event.internal.parentToolUseId) } } };
+        }
+        if (payload !== undefined) void update(sessionId, payload).catch(() => {});
+        if (entry.raw) {
+          const originalBytes = Buffer.byteLength(JSON.stringify(event));
+          const payload = originalBytes > 262_144
+            ? { version: 1, sessionId, omitted: true, eventType: event.type, seq: event.seq, originalBytes }
+            : { version: 1, sessionId, event };
+          void send("_agentrig/event", payload).catch(() => {});
+        }
       }
-      if (payload !== undefined) void update(sessionId, payload).catch(() => {});
-      if (entry.raw) {
-        const originalBytes = Buffer.byteLength(JSON.stringify(event));
-        const payload = originalBytes > 262_144
-          ? { version: 1, sessionId, omitted: true, eventType: event.type, seq: event.seq, originalBytes }
-          : { version: 1, sessionId, event };
-        void send("_agentrig/event", payload).catch(() => {});
-      }
-    }
-    entry.summary = await session.done;
-    await Promise.allSettled([...outstanding]);
+      entry.summary = await session.done;
+      await Promise.allSettled([...outstanding]);
+    } finally { discard(); }
   }
   function permission(sessionId: string, entry: Entry, pending: PendingPermission): void {
     if (asks.has(pending)) return; asks.add(pending);

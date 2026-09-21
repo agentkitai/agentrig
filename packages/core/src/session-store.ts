@@ -634,6 +634,12 @@ export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
       case "model.request":
         activeAssistant = undefined;
         break;
+      case "turn.aborted":
+        // No response/message was committed for this attempt. Never replay its deltas
+        // as part of the next response (including an empty successful recovery).
+        streamedText = "";
+        activeAssistant = undefined;
+        break;
       case "model.delta":
         streamedText += event.text;
         break;

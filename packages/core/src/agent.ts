@@ -998,7 +998,6 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
             const partial = text !== "" || assistantContent.length > 0;
             if (!partial || !streamFailed) throw err;
             const message = err instanceof Error ? err.message : String(err);
-            await emit({ type: "turn.aborted", n: turns, reason: message });
             if (recoveredTurn || streamRecoveries >= 3) throw err;
             const retryBudget = budgetExceeded(turns - 1);
             if (retryBudget !== null) {
@@ -1006,6 +1005,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
               await emit({ type: "error", message: retryBudget, fatal: false });
               break loop;
             }
+            // Only a retried/discarded attempt emits this marker. Fatal or budget
+            // exits retain their uncommitted output on observational surfaces.
+            await emit({ type: "turn.aborted", n: turns, reason: message });
             recoveredTurn = true;
             streamRecoveries += 1;
             assistantContent.length = 0;

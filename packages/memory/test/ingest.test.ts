@@ -412,3 +412,17 @@ describe("ingestSession", () => {
     expect(seen).toContain("it is per request");
   });
 });
+
+it("transcript drops aborted evidence but retains completed and fatal-uncommitted text", () => {
+  const transcript = eventsToTranscript([
+    { type: "message.append", message: { role: "assistant", content: [{ type: "text", text: "completed" }] } },
+    { type: "model.delta", text: "discarded" },
+    { type: "turn.aborted", n: 2, reason: "stream_interrupted" },
+    { type: "model.response", usage: { input: 1, output: 0 }, stop: "end_turn" },
+    { type: "turn.end", n: 3 },
+    { type: "model.delta", text: "fatal partial" },
+    { type: "session.end", reason: "error" },
+  ].map((e, seq) => ({ ...e, seq, ts: at(), sessionId: "fixture" })));
+  expect(transcript).not.toContain("discarded");
+  expect(transcript).toContain("completed"); expect(transcript).toContain("fatal partial");
+});

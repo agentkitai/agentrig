@@ -1483,3 +1483,20 @@ it("initializes expanded tool display from persistent preference and permits ses
   const normal = makeController([[stop("end_turn")]]);
   expect(normal.state.verbose).toBe(false);
 });
+
+it("TUI clears the live attempt at abort and commits only recovered text", async () => {
+  let calls = 0; let recovered!: () => void;
+  const gate = new Promise<void>(resolve => { recovered = resolve; });
+  const provider: ModelProvider = { id: "fake", model: "m", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 100000 },
+    async *stream() {
+      if (calls++ === 0) { yield { type: "text_delta", text: "abandoned-prefix" }; throw new Error("terminated"); }
+      await gate; yield { type: "text_delta", text: "recovered" }; yield stop("end_turn");
+    } };
+  const c = makeControllerWith(provider); ownedTransitionControllers.push(c);
+  const running = c.submit("test");
+  try {
+    await vi.waitFor(() => expect(calls).toBe(2));
+    expect(c.snapshot().streaming).toBe("");
+  } finally { recovered(); await running; }
+  expect(text(c)).toContain("recovered"); expect(text(c)).not.toContain("abandoned-prefix");
+});

@@ -574,6 +574,10 @@ export class AssistantText {
       this.buffer += e.text;
       return null;
     }
+    if (e.type === "turn.aborted") {
+      this.buffer = "";
+      return null;
+    }
     // a turn that never ended (an abort mid-stream) still said what it said, so `session.end`
     // flushes too rather than discarding it
     if (e.type === "turn.end" || e.type === "session.end") return this.flush();

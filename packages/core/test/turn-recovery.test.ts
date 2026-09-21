@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 import { createAgent, RulePolicy, SessionStore, HarnessEvent, type ModelProvider, type ModelEvent, type ModelRequest } from "@agentkitai/agentrig-core";
 import { renderEvent, renderChatEvent } from "../../cli/src/render.js";
 
-async function run(pattern: boolean[]) {
+async function run(pattern: boolean[], emptyReply = false) {
   const root = await mkdtemp(join(tmpdir(), "turn-recovery-"));
   const requests: ModelRequest[] = [];
   const provider: ModelProvider = {
@@ -19,7 +19,7 @@ async function run(pattern: boolean[]) {
         yield { type: "tool_use", id: "discarded", name: "missing", input: {} };
         throw new Error("terminated");
       }
-      yield { type: "text_delta", text: "complete" };
+      if (!emptyReply) yield { type: "text_delta", text: "complete" };
       yield { type: "usage", usage: { input: 1, output: 1 } };
       if (pattern.length) yield { type: "tool_use", id: "continue", name: "missing", input: {} };
       yield { type: "stop", reason: pattern.length ? "tool_use" : "end_turn" };
@@ -34,7 +34,7 @@ async function run(pattern: boolean[]) {
     for await (const e of session.events) events.push(e);
     const summary = await session.done;
     expect(await store.readAll(summary.id)).toEqual(events);
-    return { events, summary, requests };
+    return { events, summary, requests, messages: await store.materializeMessages(summary.id) };
   } finally { await rm(root, { recursive: true, force: true }); }
 }
 
@@ -59,11 +59,19 @@ it("a second disconnect in one turn remains fatal", async () => {
   const { events, summary, requests } = await run([true, true]);
   expect(summary.reason).toBe("error");
   expect(requests).toHaveLength(2);
-  expect(events.filter(e => e.type === "turn.aborted")).toHaveLength(2);
+  expect(events.filter(e => e.type === "turn.aborted")).toHaveLength(1);
 });
 it("the session recovery cap ends repeated disconnected turns fatally", async () => {
   const { events, summary, requests } = await run([true, false, true, false, true, false, true, false]);
   expect(summary.reason).toBe("error");
   expect(requests).toHaveLength(7);
   expect(events.filter(e => e.type === "model.retry")).toHaveLength(3);
+});
+
+it("empty successful recovery never materializes the discarded assistant prefix", async () => {
+  const { events, messages, summary } = await run([true, false], true);
+  expect(summary.reason).toBe("done");
+  expect(events.filter(e => e.type === "message.append" && e.message.role === "assistant")).toHaveLength(0);
+  expect(messages.filter(message => message.role === "assistant")).toHaveLength(0);
+  expect(JSON.stringify(messages)).not.toContain("discard me");
 });

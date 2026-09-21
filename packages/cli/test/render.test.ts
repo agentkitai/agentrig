@@ -716,3 +716,18 @@ describe("model.retry rendering", () => {
     expect(renderChatEvent(HarnessEvent.parse(retry))).toBeNull();
   });
 });
+
+it("AssistantText discards only the aborted attempt, then renders recovered text", () => {
+  const a = new AssistantText();
+  a.push(event({ type: "model.delta", text: "completed" }));
+  expect(a.push(event({ type: "turn.end", n: 1 }))).toBe("completed");
+  a.push(event({ type: "model.delta", text: "discarded" }));
+  expect(a.push(event({ type: "turn.aborted", n: 2, reason: "stream_interrupted" }))).toBeNull();
+  a.push(event({ type: "model.delta", text: "recovered" }));
+  expect(a.push(event({ type: "turn.end", n: 3 }))).toBe("recovered");
+  a.push(event({ type: "model.delta", text: "fatal partial" }));
+  expect(a.push(event({ type: "session.end", reason: "error" }))).toBe("fatal partial");
+});
+it("full event rendering used by sessions show identifies the discarded turn", () => {
+  expect(renderEvent(event({ type: "turn.aborted", n: 2, reason: "terminated" }))).toMatch(/turn\.aborted\s+n=2 reason=terminated/);
+});

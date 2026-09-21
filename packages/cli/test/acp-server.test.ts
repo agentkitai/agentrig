@@ -12,7 +12,7 @@ import { serveAcp } from "../src/acp-server.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); });
-async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "allow" | "ask" = "ask", options: { result?: string; deltas?: string[]; diagnostics?: boolean } = {}) {
+async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "allow" | "ask" = "ask", options: { result?: string; deltas?: string[]; diagnostics?: boolean; recover?: boolean; fatal?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "agentrig-acp-"));
   const input = new PassThrough(); const output = new PassThrough(); const transport = acpTransport(input, output);
   const requests: ModelRequest[] = []; const updates: SessionNotification[] = []; const controllers: TuiController[] = []; const raw: unknown[] = [];
@@ -23,6 +23,7 @@ async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "
       const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 1_000_000 },
         async *stream(req) {
           requests.push(structuredClone(req));
+          if ((options.recover && calls === 0) || options.fatal) { calls++; yield { type: "text_delta", text: options.fatal ? "fatal partial" : "discarded" }; throw new Error(options.fatal ? "invalid request" : "terminated"); }
           if (calls++ % 2 === 0) { yield { type: "tool_use", id: "effect", name: options.diagnostics ? "write_file" : "effect",
             input: options.diagnostics ? { path: "probe.ts", content: "fixture" } : {} }; yield { type: "stop", reason: "tool_use" }; }
           else { for (const text of options.deltas ?? ["completed fixture"]) yield { type: "text_delta", text }; yield { type: "stop", reason: "end_turn" }; }
@@ -159,4 +160,12 @@ it("permission traffic keeps its reservation after local cancellation until the 
   answer({ outcome: { outcome: "selected", optionId: "allow" } });
   await vi.waitFor(() => expect(f.transport.reservedBytes).toBe(0));
   expect(f.effects()).toBe(0); expect(f.controllers[0]!.snapshot().pending).toBeNull();
+});
+
+it.each([false, true])("ACP retains fatal output but never publishes an aborted attempt (fatal=%s)", async fatal => {
+  const f = await fixture(async () => ({ outcome: { outcome: "cancelled" } }), "allow", { recover: true, fatal });
+  const request = f.peer.agent.request("session/prompt", { sessionId: f.sessionId, prompt: [{ type: "text", text: "recover" }] });
+  if (fatal) await expect(request).rejects.toThrow("ACP request refused"); else await request;
+  const chunks = f.updates.flatMap(({ update }) => update.sessionUpdate === "agent_message_chunk" && update.content.type === "text" ? [update.content.text] : []);
+  expect(chunks.join("")).toBe(fatal ? "fatal partial" : "completed fixture");
 });

@@ -1568,7 +1568,7 @@ it.each([false, true])("child stream recovery exhaustion=%s precedes parent end"
   const store = new SessionStore({ root });
   const events: HarnessEvent[] = [];
   for await (const e of store.read(spawnEvent.id)) events.push(e);
-  expect(events.filter(e => e.type === "turn.aborted")).toHaveLength(exhaust ? 2 : 1);
+  expect(events.filter(e => e.type === "turn.aborted")).toHaveLength(1);
   expect(events.filter(e => e.type === "model.retry")).toHaveLength(1);
   expect(events.at(-1)).toMatchObject({ type: "session.end", reason: exhaust ? "error" : "done" });
   expect(emitted.at(-1)).toMatchObject({ type: "subagent.end", reason: exhaust ? "error" : "done" });

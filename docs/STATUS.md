@@ -9,7 +9,12 @@ re-requests once per turn, capped at three recoveries per run. `turn.aborted` re
 the provider error; child answer extraction clears aborted deltas, and child errors
 reach parents only after recovery exhaustion. Transport prefix retry stays unchanged.
 Fake-provider fail-first, discard/budget mutants and child recovery/exhaustion tests
-accompany declared checks in the PR. Repair round 0/3; review pending; residuals none.
+accompany declared checks in the PR. Repair round 1/3 implements the required
+aborted-output consumers: CLI/AssistantText, live TUI, materialization, memory ingest,
+CI capture (including cap/omission rollback), MCP answer capture and bounded ACP
+publication. Evaluation closes aborted requests and prior stream retries as unknown
+usage. Fatal-uncommitted output remains observable; #472 turn-end balancing is
+intentionally unchanged. Independent delta review remains pending.
 
 ## R17a dogfood evidence checkpoint — 2026-09-21
 
