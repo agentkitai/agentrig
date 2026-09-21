@@ -998,11 +998,15 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
             const partial = text !== "" || assistantContent.length > 0;
             if (!partial || !streamFailed) throw err;
             const message = err instanceof Error ? err.message : String(err);
-            if (recoveredTurn || streamRecoveries >= 3) throw err;
+            if (recoveredTurn || streamRecoveries >= 3) {
+              await emit({ type: "turn.end", n: turns });
+              throw err;
+            }
             const retryBudget = budgetExceeded(turns - 1);
             if (retryBudget !== null) {
               reason = "budget";
               await emit({ type: "error", message: retryBudget, fatal: false });
+              await emit({ type: "turn.end", n: turns });
               break loop;
             }
             // Only a retried/discarded attempt emits this marker. Fatal or budget

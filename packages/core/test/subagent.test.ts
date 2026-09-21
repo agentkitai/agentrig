@@ -1552,7 +1552,7 @@ it.each([false, true])("child stream recovery exhaustion=%s precedes parent end"
     id: "disconnect", model: "fake", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
     async *stream() {
       attempts++;
-      yield say(attempts === 1 || exhaust ? "abandoned" : "recovered");
+      yield say(attempts === 1 ? "abandoned" : exhaust ? "terminal partial" : "recovered");
       yield say(" text");
       if (attempts === 1 || exhaust) throw new Error("terminated");
       yield usage(1, 1);
@@ -1564,6 +1564,7 @@ it.each([false, true])("child stream recovery exhaustion=%s precedes parent end"
   expect(attempts).toBe(2);
   expect(result.isError === true).toBe(exhaust);
   expect(result.display).not.toContain("abandoned");
+  expect(result.display).toContain(exhaust ? "terminal partial text" : "recovered text");
   const spawnEvent = emitted.find(e => e.type === "subagent.spawn") as { type: string; id: string };
   const store = new SessionStore({ root });
   const events: HarnessEvent[] = [];
