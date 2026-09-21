@@ -286,8 +286,12 @@ output to be discarded, before recovered text. This is not a completed log messa
 or a claim to retract already-sent chunks. Raw logs and `sessions show` remain lossless event timelines with
 explicit abort markers. Evaluation closes discarded requests and their provider
 retries as unknown usage, clears pending state, and treats the loop recovery marker
-as informational rather than inventing tokens or another billed attempt. The
-budget-exhaustion turn-end balance bug is tracked separately in #472.
+as informational rather than inventing tokens or another billed attempt.
+Fatal provider stream failures (including pre-delta failures and recovery-cap exhaustion) emit
+one fatal `error` before the matching `turn.end`, then `session.end` with the existing
+classified reason (`error` for ordinary provider errors, `budget` for spend-cap failures,
+or `aborted` when cancellation takes precedence); ordinary-budget exhaustion during a
+failed stream also closes the turn before session end.
 
 H6 keeps `agent.ts` as the model-loop coordinator. Internal `tool-execution.ts` owns the sequential
 tool pipeline and registered-name emission authority; `session-lifecycle.ts` owns ordered event

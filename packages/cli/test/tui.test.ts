@@ -424,9 +424,9 @@ describe("TuiController", () => {
     expect(c.snapshot().sessionId).not.toBe(first);
   });
 
-  it("does not try to continue a session that never finished a turn", async () => {
-    // a provider that rejects the request — exactly the live `HTTP 400 Unsupported parameter`
-    // case — dies before any turn.end, so there is no snapshot and nothing to resume from
+  it("continues the same session after a pre-delta provider failure closes its turn", async () => {
+    // A rejected request still closes its started turn, so the existing TUI
+    // resumability path can continue the same session on the next prompt.
     const c = makeController([
       new Error("HTTP 400 Unsupported parameter: max_output_tokens"),
       [{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")],
@@ -435,7 +435,7 @@ describe("TuiController", () => {
     const broken = c.snapshot().sessionId;
     await c.submit("this one should still work");
 
-    expect(c.snapshot().sessionId).not.toBe(broken);
+    expect(c.snapshot().sessionId).toBe(broken);
     expect(text(c)).toContain("ok");
   });
 
