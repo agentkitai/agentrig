@@ -76,7 +76,11 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
     for await (const event of session.events) {
       if (closing) continue;
       let payload: SessionUpdate | undefined;
+      // ACP is append-only: speculative chunks remain visible, so mark an
+      // abandoned attempt explicitly before any recovered response text.
       if (event.type === "model.delta") payload = { sessionUpdate: "agent_message_chunk", content: { type: "text", text: event.text } };
+      if (event.type === "turn.aborted") payload = { sessionUpdate: "agent_message_chunk", content: { type: "text",
+        text: "\n\n[Previous response attempt abandoned after a provider disconnect; discard its partial output. Retrying the response.]\n\n" } };
       if (event.type === "model.response") entry.stop = event.stop;
       if (event.type === "tool.call") payload = { sessionUpdate: "tool_call", toolCallId: toolId(event.id),
         title: event.internal === undefined ? event.name : event.internal.kind === "attachment" ? `Input attachment: ${event.name}` : `Diagnostics for ${toolId(event.internal.parentToolUseId)}: ${event.name}`,

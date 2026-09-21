@@ -10,7 +10,7 @@ import type { AcpFlags } from "../src/acp.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-async function fixture(extra: Partial<AcpFlags> = {}, reportedUsage = false) {
+async function fixture(extra: Partial<AcpFlags> = {}, reportedUsage = false, recover = false) {
   const cwd = await mkdtemp(join(tmpdir(), "agentrig-mcp-runtime-")); roots.push(cwd);
   vi.stubEnv("ANTHROPIC_API_KEY", "fixture-key");
   const opts: AcpFlags = { root: join(cwd, "logs"), provider: "anthropic", model: "fixture", maxTurns: "6", maxTokensPerTurn: "100",
@@ -21,6 +21,7 @@ async function fixture(extra: Partial<AcpFlags> = {}, reportedUsage = false) {
     const built = await buildAgent(flags, extras); let n = 0;
     vi.spyOn(built.provider, "stream").mockImplementation(async function* (req): AsyncIterable<ModelEvent> {
       requests.push(req);
+      if (recover && n === 0) { n++; yield { type: "text_delta", text: "abandoned-prefix" }; yield { type: "text_delta", text: "discarded".repeat(15000) }; throw new Error("terminated"); }
       if (reportedUsage) yield { type: "usage", usage: { input: 30, output: 5 }, reported: true };
       if (n++ === 0) { yield { type: "tool_use", id: "fixture", ...tool }; yield { type: "stop", reason: "tool_use" }; }
       else { yield { type: "text_delta", text: "model completion claim" }; yield { type: "stop", reason: "end_turn" }; }
@@ -120,4 +121,12 @@ it("bounded session export redacts secrets, refuses invalid IDs and obeys read d
   await mkdir(join(f.opts.root, "ignored")); await writeFile(join(f.opts.root, "not-a-session.txt"), "ignored");
   expect(await reader.list(1, new AbortController().signal)).toHaveLength(1);
   await Promise.all([f.rt.close(), denied.close(), reader.close()]);
+});
+
+it("MCP abort resets answer and cap accounting", async () => {
+  const f = await fixture({}, false, true);
+  try {
+    const result = await f.rt.run({ task: "recover" }, new AbortController().signal) as { answer: string; answerOmitted: boolean };
+    expect(result.answer).toBe("model completion claim"); expect(result.answerOmitted).toBe(false);
+  } finally { await f.rt.close(); }
 });

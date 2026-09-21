@@ -90,6 +90,7 @@ export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortS
   let file: FileHandle | undefined, summary: RunSummary | undefined, pr: GitHubPr | undefined;
   let outcome = "error", asked = 0, denied = 0, currentText = "", omitted = false, diagnostic = "";
   let captureClosed = false;
+  let committed = { length: 0, omitted: false, captureClosed: false };
   let questions = 0, answered = 0, unanswered = 0;
   let outputValidation = "not requested or not reached";
   let options: RunOptions | undefined, github: GitHubTransport | undefined;
@@ -97,7 +98,15 @@ export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortS
   const controller = new AbortController(), signal = AbortSignal.any([parent, controller.signal]);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const observe = (event: HarnessEvent): void => {
-    if (event.type === "turn.start") { currentText = ""; captureClosed = false; }
+    if (event.type === "turn.start") {
+      currentText = ""; captureClosed = false;
+      committed = { length: 0, omitted, captureClosed };
+    }
+    if (event.type === "turn.aborted") {
+      currentText = currentText.slice(0, committed.length);
+      ({ omitted, captureClosed } = committed);
+    }
+    if (event.type === "turn.end") committed = { length: currentText.length, omitted, captureClosed };
     if (event.type === "model.delta" && !captureClosed) {
       const available = CI_LIMITS.taskBytes - Buffer.byteLength(currentText);
       const bytes = Buffer.from(event.text);

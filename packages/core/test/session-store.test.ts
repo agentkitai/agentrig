@@ -158,3 +158,17 @@ describe("session ids cannot escape the sessions directory", () => {
     expect(() => store.lockPathFor("../evil")).toThrow(/invalid session id/);
   });
 });
+
+it("materialization drops aborted deltas even when recovery commits no assistant", async () => {
+  const store = new SessionStore({ root }); const id = store.create();
+  await store.append(id, { type: "model.delta", text: "completed" });
+  await store.append(id, { type: "model.response", usage: { input: 1, output: 1 }, stop: "end_turn" });
+  await store.append(id, { type: "turn.start", n: 2 });
+  await store.append(id, { type: "model.delta", text: "discarded" });
+  await store.append(id, { type: "turn.aborted", n: 2, reason: "stream_interrupted" });
+  await store.append(id, { type: "model.response", usage: { input: 1, output: 0 }, stop: "end_turn" });
+  await store.append(id, { type: "turn.end", n: 3 });
+  await store.append(id, { type: "session.end", reason: "done" });
+  expect(await store.materializeMessages(id)).toEqual([{ role: "assistant", content: [{ type: "text", text: "completed" }] }]);
+
+});

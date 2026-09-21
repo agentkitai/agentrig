@@ -1,5 +1,24 @@
 # Status
 
+Current roadmap row: drain 171 (#467), implemented pending review; next: next queued drain row under ROADMAP §5 (no dependent work pulled forward).
+
+## Turn-boundary disconnect recovery (#467) — implemented, pending review
+
+Core discards uncommitted partial assistant output on provider stream failure and
+re-requests once per turn, capped at three recoveries per run. `turn.aborted` records
+the provider error; child answer extraction clears aborted deltas, and child errors
+reach parents only after recovery exhaustion. Transport prefix retry stays unchanged.
+Fake-provider fail-first, discard/budget mutants and child recovery/exhaustion tests
+accompany declared checks in the PR. Repair round 1/3 implements the required
+aborted-output consumers: CLI/AssistantText, live TUI, materialization, memory ingest,
+CI capture (including cap/omission rollback) and MCP answer capture. Repair round
+2/3 restores live ACP/web speculative chunks with the original bounded outstanding
+writes, not per-attempt staging. An explicit discard/retry notice separates an
+abandoned attempt from recovered text; completed log messages retain only recovered
+text. The real browser pre-cancel streaming assertion is restored. Evaluation closes aborted requests and prior stream retries as unknown
+usage. Fatal-uncommitted output remains observable; #472 turn-end balancing is
+intentionally unchanged. Independent delta review remains pending.
+
 ## R17a dogfood evidence checkpoint — 2026-09-21
 
 Builder: AgentRig (documentation-only ship child). [ROADMAP current checkpoint](ROADMAP.md#current-checkpoint--r17a-dogfood-evidence-2026-09-19-to-2026-09-21)

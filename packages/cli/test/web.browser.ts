@@ -40,6 +40,7 @@ it("real Chromium submits ACP, explicitly approves, answers a question, renders 
     await expect.poll(()=>page.locator("#transcript").textContent()).toContain("Waiting for cancellation");
     await page.locator("#cancel").click();
     await expect.poll(()=>page.locator("#status").textContent()).toBe("Finished: cancelled");
+    expect(await page.locator("#transcript").textContent()).toContain("Waiting for cancellation");
     await page.locator("#disconnect").click();
     await expect.poll(()=>page.locator("#status").textContent()).toContain("Disconnected");
   } finally { await browser.close(); await f.close(); }

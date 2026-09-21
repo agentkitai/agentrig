@@ -264,6 +264,31 @@ interface Agent { run(task: string, opts?: { cwd?: string; resume?: string; id?:
 
 Session persistence: one JSONL file per session under `.agentrig/sessions/<id>.jsonl` (events) + periodic snapshot of the message array for cheap resume.
 
+Mid-reply provider stream failures abort the uncommitted assistant turn (`turn.aborted`
+with the provider error). Core discards partial text, reasoning and tool calls, then
+re-requests the same history once per turn, at most three times per session run.
+A second failure in a turn or exhausted recovery cap follows the fatal error path;
+cancellation and ordinary budgets still bind. Observational deltas stay in the log,
+but no partial assistant message is committed and no partial tool call executes.
+Recovered responses have incomplete usage accounting because failed-attempt usage is
+unknown. Child agents recover independently; subagent answer buffers discard aborted
+turns and parent completion follows the child terminal outcome. Provider transport
+retry policy is unchanged: it must never replay a consumed prefix.
+
+`turn.aborted` marks only an attempt actually discarded for retry; fatal-uncommitted
+output remains observable. CLI/AssistantText, live TUI, legacy materialization,
+memory transcript ingest, CI and MCP captures discard only that attempt's buffered
+text. Capture limits and omission flags roll back with it, not with completed text.
+ACP/web stream speculative chunks immediately under the existing outstanding-write
+reservations and frame limits. ACP has no chunk retraction: `turn.aborted` emits a
+visible assistant notice marking the previous attempt abandoned and its partial
+output to be discarded, before recovered text. This is not a completed log message
+or a claim to retract already-sent chunks. Raw logs and `sessions show` remain lossless event timelines with
+explicit abort markers. Evaluation closes discarded requests and their provider
+retries as unknown usage, clears pending state, and treats the loop recovery marker
+as informational rather than inventing tokens or another billed attempt. The
+budget-exhaustion turn-end balance bug is tracked separately in #472.
+
 H6 keeps `agent.ts` as the model-loop coordinator. Internal `tool-execution.ts` owns the sequential
 tool pipeline and registered-name emission authority; `session-lifecycle.ts` owns ordered event
 delivery, pause/cancellation, orphan settlement and terminal resource release. Live plan state

@@ -585,7 +585,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
           for await (const e of session.events) {
             // the child's transcript stays in the child's log: forwarding it would defeat the
             // context isolation that is the entire reason to spawn one
-            if (e.type === "turn.start") current = "";
+            if (e.type === "turn.start" || e.type === "turn.aborted") current = "";
             else if (e.type === "model.delta") current += e.text;
             // `turn.end` is emitted even when a turn is aborted or errors mid-tool, so every turn
             // that produced text is seen here — there is no trailing buffer left to promote

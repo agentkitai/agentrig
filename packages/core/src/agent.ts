@@ -411,6 +411,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
     const totals: Usage = { input: 0, output: 0 };
     let turns = 0;
     let turnsThisRun = 0;
+    let streamRecoveries = 0;
     let usd = 0;
     let reason: SessionSummary["reason"] = "done";
 
@@ -919,75 +920,114 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
         let sawStop = false;
         let stop: StopReason = "end_turn";
         let stopRaw: string | undefined;
-        try {
-          abortController.signal.throwIfAborted();
-          // Only an actual provider attempt is a continuation, never a staged retry that a
-          // budget, cancellation or pre_model veto prevents. This remains a normal paid turn.
-          if (continuationFrom !== undefined) {
-            await emit({ type: "turn.continued", n: turns, from: continuationFrom,
-              attempt: consecutiveContinuations, maxAttempts: 2, reason: "max_tokens" });
-            continuationFrom = undefined;
+        let recoveredTurn = false;
+        recovery: while (true) {
+          let streamFailed = false;
+          async function* responseStream() {
+            try { yield* provider.stream(req, abortController.signal); }
+            catch (error) { streamFailed = true; throw error; }
           }
-          for await (const ev of provider.stream(req, abortController.signal)) {
-            switch (ev.type) {
-              case "thinking": {
-                const parsed = ThinkingBlockSchema.safeParse(ev.block);
-                if (!parsed.success) throw new Error("invalid reasoning block");
-                thinkingBytes += Buffer.byteLength(JSON.stringify(parsed.data));
-                if (++thinkingCount > 32 || thinkingBytes > 1_048_576) throw new Error("reasoning response exceeds retention bound");
-                flushText();
-                // No response prose can supply user provenance or instruction authority.
-                assistantContent.push({ ...parsed.data, trust: "generated", context: ADVISORY_CONTEXT });
-                break;
-              }
-              case "text_delta": {
-                const trust = ContentTrustSchema.optional().parse(ev.trust);
-                if (trust !== textTrust) flushText();
-                textTrust = trust;
-                text += ev.text;
-                await emit({ type: "model.delta", text: ev.text });
-                break;
-              }
-              case "tool_use": {
-                flushText();
-                const trust = ContentTrustSchema.optional().parse(ev.trust);
-                assistantContent.push({ type: "tool_use", id: ev.id, name: ev.name, input: ev.input,
-                  ...(trust === undefined ? {} : { trust }) });
-                toolUses.push(ev);
-                break;
-              }
-              case "usage":
-                usage = ev.usage;
-                usageReported = ev.reported !== false;
-                break;
-              case "stop":
-                stop = ev.reason;
-                sawStop = true;
-                stopRaw = ev.raw;
-                break;
-              case "retry":
-                usageRetried = true;
-                // informational: the provider re-requested a transient failure; logged so a slow
-                // turn is explicable from the session log alone
-                await emit({
-                  type: "model.retry",
-                  attempt: ev.attempt,
-                  maxAttempts: ev.maxAttempts,
-                  delayMs: ev.delayMs,
-                  reason: ev.reason,
-                });
-                break;
+          try {
+            abortController.signal.throwIfAborted();
+            // Only an actual provider attempt is a continuation, never a staged retry that a
+            // budget, cancellation or pre_model veto prevents. This remains a normal paid turn.
+            if (continuationFrom !== undefined) {
+              await emit({ type: "turn.continued", n: turns, from: continuationFrom,
+                attempt: consecutiveContinuations, maxAttempts: 2, reason: "max_tokens" });
+              continuationFrom = undefined;
             }
+            for await (const ev of responseStream()) {
+              switch (ev.type) {
+                case "thinking": {
+                  const parsed = ThinkingBlockSchema.safeParse(ev.block);
+                  if (!parsed.success) throw new Error("invalid reasoning block");
+                  thinkingBytes += Buffer.byteLength(JSON.stringify(parsed.data));
+                  if (++thinkingCount > 32 || thinkingBytes > 1_048_576) throw new Error("reasoning response exceeds retention bound");
+                  flushText();
+                  // No response prose can supply user provenance or instruction authority.
+                  assistantContent.push({ ...parsed.data, trust: "generated", context: ADVISORY_CONTEXT });
+                  break;
+                }
+                case "text_delta": {
+                  const trust = ContentTrustSchema.optional().parse(ev.trust);
+                  if (trust !== textTrust) flushText();
+                  textTrust = trust;
+                  text += ev.text;
+                  await emit({ type: "model.delta", text: ev.text });
+                  break;
+                }
+                case "tool_use": {
+                  flushText();
+                  const trust = ContentTrustSchema.optional().parse(ev.trust);
+                  assistantContent.push({ type: "tool_use", id: ev.id, name: ev.name, input: ev.input,
+                    ...(trust === undefined ? {} : { trust }) });
+                  toolUses.push(ev);
+                  break;
+                }
+                case "usage":
+                  usage = ev.usage;
+                  usageReported = ev.reported !== false;
+                  break;
+                case "stop":
+                  stop = ev.reason;
+                  sawStop = true;
+                  stopRaw = ev.raw;
+                  break;
+                case "retry":
+                  usageRetried = true;
+                  // informational: the provider re-requested a transient failure; logged so a slow
+                  // turn is explicable from the session log alone
+                  await emit({
+                    type: "model.retry",
+                    attempt: ev.attempt,
+                    maxAttempts: ev.maxAttempts,
+                    delayMs: ev.delayMs,
+                    reason: ev.reason,
+                  });
+                  break;
+              }
+            }
+          } catch (err) {
+            if (abortController.signal.aborted) {
+              reason = "aborted";
+              await emit({ type: "turn.end", n: turns });
+              break loop;
+            }
+            // Deltas are observational only: no assistant message or tool execution has
+            // been committed yet. A fresh request must not replay the abandoned prefix.
+            const partial = text !== "" || assistantContent.length > 0;
+            if (!partial || !streamFailed) throw err;
+            const message = err instanceof Error ? err.message : String(err);
+            if (recoveredTurn || streamRecoveries >= 3) throw err;
+            const retryBudget = budgetExceeded(turns - 1);
+            if (retryBudget !== null) {
+              reason = "budget";
+              await emit({ type: "error", message: retryBudget, fatal: false });
+              break loop;
+            }
+            // Only a retried/discarded attempt emits this marker. Fatal or budget
+            // exits retain their uncommitted output on observational surfaces.
+            await emit({ type: "turn.aborted", n: turns, reason: message });
+            recoveredTurn = true;
+            streamRecoveries += 1;
+            assistantContent.length = 0;
+            toolUses.length = 0;
+            text = "";
+            textTrust = undefined;
+            thinkingBytes = 0;
+            thinkingCount = 0;
+            usage = { input: 0, output: 0 };
+            usageReported = false;
+            usageRetried = true; // failed attempt consumption is unknown
+            sawStop = false;
+            stop = "end_turn";
+            stopRaw = undefined;
+            await emit({ type: "model.retry", attempt: 1, maxAttempts: 1, delayMs: 0, reason: message });
+            await emit({ type: "model.request", tokensIn: estimateTokens(req.system, req.messages) });
+            continue recovery;
           }
-        } catch (err) {
-          if (abortController.signal.aborted) {
-            reason = "aborted";
-            await emit({ type: "turn.end", n: turns });
-            break;
-          }
-          throw err;
+          break recovery;
         }
-
         await emit({ type: "model.response", usage, stop,
           usageComplete: usageReported && sawStop && stop !== "error" && !usageRetried });
         {

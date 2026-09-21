@@ -40,6 +40,7 @@ export function mcpServeRuntime(opts: AcpFlags, cwd: string, build: typeof build
       let session: Session | undefined;
       let observed = Promise.resolve();
       let answer = ""; let omitted = false;
+      let committed = { length: 0, omitted: false };
       let responses = 0; let completeUsage = true;
       const controller = new TuiController({ cwd, model: opts.model, maxLines: 100,
         agent: { run() { throw new Error("agent not ready"); } }, onSession: current => {
@@ -47,9 +48,14 @@ export function mcpServeRuntime(opts: AcpFlags, cwd: string, build: typeof build
           observed = (async () => {
             for await (const event of current.events) {
               if (event.type === "model.response") { responses++; completeUsage &&= event.usageComplete === true; }
+              if (event.type === "turn.aborted") {
+                answer = answer.slice(0, committed.length);
+                omitted = committed.omitted;
+              }
+              if (event.type === "turn.end") committed = { length: answer.length, omitted };
               if (event.type === "model.delta") {
-              if (Buffer.byteLength(answer) + Buffer.byteLength(event.text) <= 120_000) answer += event.text;
-              else omitted = true;
+                if (Buffer.byteLength(answer) + Buffer.byteLength(event.text) <= 120_000) answer += event.text;
+                else omitted = true;
               }
             }
           })();

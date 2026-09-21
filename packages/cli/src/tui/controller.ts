@@ -1538,6 +1538,7 @@ export class TuiController {
     // ends. Dropping it outright — which both surfaces used to do — meant the agent never showed
     // an answer at all.
     const finished = this.assistant.push(e);
+    if (e.type === "turn.aborted") this.set({ streaming: "" });
     if (e.type === "model.delta") {
       this.set({ streaming: this.assistant.pending });
       return;

@@ -12,10 +12,11 @@ import { serveAcp } from "../src/acp-server.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); });
-async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "allow" | "ask" = "ask", options: { result?: string; deltas?: string[]; diagnostics?: boolean } = {}) {
+async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "allow" | "ask" = "ask", options: { result?: string; deltas?: string[]; diagnostics?: boolean; recover?: boolean; fatal?: boolean; afterDelta?: () => Promise<void> } = {}) {
   const root = await mkdtemp(join(tmpdir(), "agentrig-acp-"));
   const input = new PassThrough(); const output = new PassThrough(); const transport = acpTransport(input, output);
   const requests: ModelRequest[] = []; const updates: SessionNotification[] = []; const controllers: TuiController[] = []; const raw: unknown[] = [];
+  const logs: Array<{ store: SessionStore; id: string }> = [];
   let effects = 0;
   const server = serveAcp(transport.stream, { closeTransport: transport.close, reserveOutput: transport.reserve,
     createSession: async (request, observe) => {
@@ -23,12 +24,14 @@ async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "
       const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 1_000_000 },
         async *stream(req) {
           requests.push(structuredClone(req));
+          if ((options.recover && calls === 0) || options.fatal) { calls++; yield { type: "text_delta", text: options.fatal ? "fatal partial" : "discarded" }; throw new Error(options.fatal ? "invalid request" : "terminated"); }
           if (calls++ % 2 === 0) { yield { type: "tool_use", id: "effect", name: options.diagnostics ? "write_file" : "effect",
             input: options.diagnostics ? { path: "probe.ts", content: "fixture" } : {} }; yield { type: "stop", reason: "tool_use" }; }
-          else { for (const text of options.deltas ?? ["completed fixture"]) yield { type: "text_delta", text }; yield { type: "stop", reason: "end_turn" }; }
+          else { for (const text of options.deltas ?? ["completed fixture"]) { yield { type: "text_delta", text }; await options.afterDelta?.(); } yield { type: "stop", reason: "end_turn" }; }
         } };
-      const controller = new TuiController({ cwd: request.cwd, agent: { run() { throw new Error("not ready"); } }, onSession: observe });
-      controller.attach(createAgent({ provider, store: new SessionStore({ root: join(root, String(controllers.length)) }), repoMap: false,
+      const store = new SessionStore({ root: join(root, String(controllers.length)) });
+      const controller = new TuiController({ cwd: request.cwd, agent: { run() { throw new Error("not ready"); } }, onSession: session => { logs.push({ store, id: session.id }); observe(session); } });
+      controller.attach(createAgent({ provider, store, repoMap: false,
         systemPrompt: "fixture", permissions: new RulePolicy([{ class: "exec", decision: base }, { class: "write", decision: "allow" }]), permissionGrants: controller.permissionGrants, onAsk: controller.ask,
         tools: options.diagnostics ? builtinTools({ diagnostics: [{ parser: "ruff-json", extensions: [".ts"], executable: process.execPath,
           args: ["-e", "process.stdout.write('[]')"] }] }) : [{ name: "effect", description: "fixture", permission: "exec", inputSchema: z.object({}), execute: async () => {
@@ -43,7 +46,7 @@ async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "
   cleanups.push(async () => { peer.close(); transport.close(); await server.done; await rm(root, { recursive: true, force: true }); });
   await peer.agent.request("initialize", { protocolVersion: 1, clientCapabilities: {} });
   const { sessionId } = await peer.agent.request("session/new", { cwd: root, mcpServers: [] });
-  return { peer, root, sessionId, requests, updates, controllers, raw, output, transport, effects: () => effects };
+  return { logs, peer, root, sessionId, requests, updates, controllers, raw, output, transport, effects: () => effects };
 }
 
 it("oversized actual tool raw events become explicit omission notices without losing the ACP turn", async () => {
@@ -160,3 +163,44 @@ it("permission traffic keeps its reservation after local cancellation until the 
   await vi.waitFor(() => expect(f.transport.reservedBytes).toBe(0));
   expect(f.effects()).toBe(0); expect(f.controllers[0]!.snapshot().pending).toBeNull();
 });
+
+it.each([false, true])("ACP streams speculative output with an explicit discard/retry boundary (fatal=%s)", async fatal => {
+  const f = await fixture(async () => ({ outcome: { outcome: "cancelled" } }), "allow", { recover: true, fatal });
+  const request = f.peer.agent.request("session/prompt", { sessionId: f.sessionId, prompt: [{ type: "text", text: "recover" }] });
+  if (fatal) await expect(request).rejects.toThrow("ACP request refused"); else await request;
+  const chunks = f.updates.flatMap(({ update }) => update.sessionUpdate === "agent_message_chunk" && update.content.type === "text" ? [update.content.text] : []);
+  expect(chunks).toEqual([fatal ? "fatal partial" : "discarded", "\n\n[Previous response attempt abandoned after a provider disconnect; discard its partial output. Retrying the response.]\n\n", fatal ? "fatal partial" : "completed fixture"]);
+  if (!fatal) {
+    const { store, id } = f.logs[0]!;
+    const messages = await store.materializeMessages(id);
+    expect(JSON.stringify(messages)).not.toContain("discarded");
+    expect(JSON.stringify(messages)).toContain("completed fixture");
+  }
+  await vi.waitFor(() => expect(f.transport.reservedBytes).toBe(0));
+});
+
+it("ACP publishes a text update before response completion while the provider is held", async () => {
+  let release!: () => void;
+  const latch = new Promise<void>(resolve => { release = resolve; });
+  const f = await fixture(async () => ({ outcome: { outcome: "cancelled" } }), "allow", { afterDelta: () => latch });
+  let completed = false;
+  const running = f.peer.agent.request("session/prompt", { sessionId: f.sessionId, prompt: [{ type: "text", text: "stream" }] }).then(result => { completed = true; return result; });
+  try {
+    await vi.waitFor(() => expect(f.updates.some(({ update }) => update.sessionUpdate === "agent_message_chunk")).toBe(true));
+    expect(completed).toBe(false);
+  } finally { release(); await running; }
+});
+
+it("ACP drains many small live deltas beyond the cumulative reservation budget without losing concurrent sessions", async () => {
+  const count = 9000;
+  const f = await fixture(async () => ({ outcome: { outcome: "cancelled" } }), "allow", {
+    deltas: Array.from({ length: count }, () => "text"), afterDelta: () => new Promise(resolve => setImmediate(resolve)),
+  });
+  const second = await f.peer.agent.request("session/new", { cwd: f.root, mcpServers: [] });
+  const ids = [f.sessionId, second.sessionId];
+  const results = await Promise.all(ids.map(sessionId => f.peer.agent.request("session/prompt", { sessionId, prompt: [{ type: "text", text: "stream" }] })));
+  expect(results.map(result => result.stopReason)).toEqual(["end_turn", "end_turn"]);
+  for (const id of ids) expect(f.updates.filter(({ sessionId, update }) => sessionId === id && update.sessionUpdate === "agent_message_chunk")).toHaveLength(count);
+  expect(f.output.destroyed).toBe(false);
+  await vi.waitFor(() => expect(f.transport.reservedBytes).toBe(0));
+}, 30_000);

@@ -152,6 +152,7 @@ export function buildEvaluationReport(input: EvaluationInput) {
     if (descriptor.role === "main") check(start.parent === undefined, "main log is a child session");
     check(configs.has(JSON.stringify([descriptor.role, start.provider, start.model])), "session provider/model does not match configuration");
     let pending: { retries: number } | undefined;
+    let recoveryRetry = false;
     const toolCalls = new Map<string, string>();
     const toolResults = new Set<string>();
     let ended = false;
@@ -162,8 +163,19 @@ export function buildEvaluationReport(input: EvaluationInput) {
       check(e.ts >= m.timing.startedAt && (m.timing.settledAt === null || e.ts <= m.timing.settledAt),
         `event outside declared run window: seq=${e.seq} ts=${e.ts} start=${m.timing.startedAt} end=${m.timing.settledAt ?? "open"}`);
       firstTs = firstTs === null ? e.ts : Math.min(firstTs, e.ts); lastTs = lastTs === null ? e.ts : Math.max(lastTs, e.ts);
-      if (e.type === "model.request") { check(!pending, "overlapping main requests"); pending = { retries: 0 }; }
-      if (e.type === "model.retry") { check(pending, "retry without request"); pending.retries++; }
+      if (e.type === "model.request") { check(!pending, "overlapping main requests"); pending = { retries: 0 }; recoveryRetry = false; }
+      if (e.type === "turn.aborted") {
+        check(pending, "aborted turn without request");
+        for (let n = 0; n <= pending.retries; n++) record(descriptor.role, { provider: start.provider, model: start.model, usageComplete: false });
+        pending = undefined;
+        recoveryRetry = true;
+      }
+      if (e.type === "model.retry") {
+        // The loop's recovery marker follows the discarded attempt. Its following
+        // model.request accounts for the new attempt; this marker adds no usage.
+        if (pending) pending.retries++;
+        else { check(recoveryRetry, "retry without request"); recoveryRetry = false; }
+      }
       if (e.type === "model.response") {
         check(pending, "response without request");
         record(descriptor.role, { provider: start.provider, model: start.model, usage: e.usage, usageComplete: e.usageComplete === true });

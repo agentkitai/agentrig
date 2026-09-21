@@ -133,6 +133,10 @@ function transcriptEvidence(events: unknown[]): { text: string; omissions: Evide
       case "session.resume":
         lines.push(`[${type}] task=${JSON.stringify(e.task)} cwd=${String(e.cwd)}`);
         break;
+      case "turn.aborted":
+        streamed = "";
+        responseEnded = false;
+        break;
       case "model.delta":
         if (responseEnded) flushStream();
         if (typeof e.text === "string") streamed += e.text;

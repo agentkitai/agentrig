@@ -327,3 +327,18 @@ describe("E2 actual provider and bundle integration", () => {
     expect(JSON.parse(result.stdout).reason).toContain("regular files");
   });
 });
+
+it("aborted request and its stream retries are unknown; recovery retry has no invented usage", () => {
+  const input = fixture(); input.logs[0]!.events = events([start,
+    { type: "model.request", tokensIn: 1 },
+    { type: "model.retry", attempt: 1, maxAttempts: 2, delayMs: 0, reason: "network" },
+    { type: "model.delta", text: "discarded" },
+    { type: "turn.aborted", n: 1, reason: "terminated" },
+    { type: "model.retry", attempt: 1, maxAttempts: 1, delayMs: 0, reason: "terminated" },
+    { type: "model.request", tokensIn: 1 }, response,
+    { type: "session.end", reason: "done" },
+  ]);
+  const report = buildEvaluationReport(input);
+  expect(report.main).toMatchObject({ calls: 3, unknownUsageCalls: 2, costUsd: null, reportedUsage: response.usage });
+  expect(report.totalCostUsd).toBeNull();
+});

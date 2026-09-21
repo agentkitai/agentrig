@@ -276,3 +276,21 @@ it("malformed secret-bearing input produces a safe failure report without echoin
   const report = await readFile(join(root, "bad.md"), "utf8"); expect(report).toContain("Outcome: error");
   expect(report + result.stdout + result.stderr).not.toContain("private-canary");
 }, 30_000);
+
+it("CI abort restores capture bytes and truncation without removing earlier turns", async () => {
+  const root = await fixture(); const reportPath = join(root, "recovery.md");
+  await runCi({ taskFile: join(root, "task.txt"), report: reportPath }, options(root), new AbortController().signal, {
+    run: async (_task, _options, runtime) => {
+      const events = [
+        { type: "model.delta", text: "completed\n" }, { type: "turn.end", n: 1 },
+        { type: "model.delta", text: "discarded".repeat(4000) }, { type: "turn.aborted", n: 2, reason: "stream_interrupted" },
+        { type: "model.delta", text: "recovered" }, { type: "turn.end", n: 3 },
+      ] as const;
+      events.forEach((e, seq) => runtime?.observe?.({ ...e, seq, ts: 1, sessionId: "fixture" }));
+      return summary();
+    },
+  });
+  const report = await readFile(reportPath, "utf8");
+  expect(report).toContain("completed"); expect(report).toContain("recovered");
+  expect(report).not.toContain("discarded"); expect(report).not.toContain("omitted remainder");
+});
