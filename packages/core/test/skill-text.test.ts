@@ -28,7 +28,7 @@ it("does not silently fall back to checkout skills when the override is incomple
   const root = fixture();
   rmSync(join(root, "dogfood", "SKILL.md"));
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: dogfood/SKILL.md in ${root}`);
+  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: ${join("dogfood", "SKILL.md")} in ${root}`);
 });
 
 it("keeps non-skill document bytes and paths unchanged", () => {
@@ -47,10 +47,20 @@ it("rejects an incomplete tree even when the requested skill exists", () => {
   const root = fixture();
   rmSync(join(root, "topic"), { recursive: true });
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: topic/SKILL.md in ${root}`);
+  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: ${join("topic", "SKILL.md")} in ${root}`);
 });
 it("preserves generated SKILL.md raw bytes including line-ending-only edits", () => {
   const path = join(fixture(), "SKILL.md");
   writeFileSync(path, "one\r\ntwo\r");
   expect(readSkillText(path)).toBe("one\r\ntwo\r");
+});
+
+it("uses a Windows-style separator in incomplete-override diagnostic expectations", () => {
+  const root = fixture();
+  rmSync(join(root, "dogfood", "SKILL.md"));
+  vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
+  const expected = `incomplete skills override: ${join("dogfood", "SKILL.md")} in ${root}`;
+  // The assertion derives the diagnostic component through node:path; on Windows this
+  // is dogfood\\SKILL.md rather than a POSIX-only literal.
+  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(expected);
 });

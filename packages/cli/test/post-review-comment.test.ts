@@ -385,6 +385,23 @@ it("M-quoted-contract: allows explicit contract quotation inside a real finding 
   expect(run(`VERDICT: PASS\n> ${echoPhrases[1]}\n`).args).toBeUndefined();
   expect(run(body + echoPhrases[0]).args).toBeUndefined();
 });
+it("F2/F3 accepts quoted contract citations only inside a bounded finding section", () => {
+  const phrase = echoPhrases[1];
+  const body = `VERDICT: FAIL\r\nReviewed head ${head}\r\n### LOW: Contract citation\r\nThe contract is wrong; update the guard.\r\n> ${phrase.slice(0, 30)}\r\n> ${phrase.slice(30)}\r\n\`${phrase}\`\r\n\`\`\`text\r\n${phrase}\r\n\`\`\`\r\n    ${phrase}\r\n`;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+  const outside = `${body}\r\n\r\nLater unheaded prose:\r\n> ${phrase}\r\n`;
+  expect(run(outside).args).toBeUndefined();
+  const afterSection = `${body}\r\n## Evidence\r\n> ${phrase}\r\n`;
+  expect(run(afterSection).args).toBeUndefined();
+});
+it("F4 rejects CRLF literal echoes rewrapped across ordinary lines while accepting a contract finding", () => {
+  const phrase = echoPhrases[2];
+  const wrapped = `${phrase.slice(0, 26)}\r\n${phrase.slice(26)}`;
+  expect(run(`VERDICT: PASS\r\n${wrapped}\r\n`).args).toBeUndefined();
+  const finding = `VERDICT: FAIL\r\n### LOW: The review contract requires a correction\r\nThe documented quote is incorrect; revise it.\r\n> ${phrase.slice(0, 26)}\r\n> ${phrase.slice(26)}\r\n`;
+  expect(run(finding).args).toBeDefined();
+});
+
 it("M-size-gate: large genuine review requires nonempty conductor ledger before gh", () => {
   const body = `VERDICT: PASS\nReviewed head ${head}\n` + "Evidence from targeted probe.\n".repeat(2000);
   for (const reason of [undefined, " \n"]) {

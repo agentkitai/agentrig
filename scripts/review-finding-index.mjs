@@ -29,18 +29,36 @@ export const instructionEchoSentences = [
   "Report which of the PR body's claims you verified, and any you could not.",
 ];
 export function assertReviewerVerdict(body) {
-  // Posting checks literal echoes, not live finding-index completeness or identity.
+  // Literal echoes are forbidden even when line-wrapped. Quotation forms are an
+  // exception only in the contiguous section of an indexed finding.
   const headings = new Set(findingHeadings(body));
+  const ordinary = [];
   let inFinding = false;
+  let fence;
   for (const line of body.split(/\r?\n/)) {
-    if (/^ {0,3}#{1,6} /.test(line)) inFinding = headings.has(line);
-    else if (headings.has(line)) inFinding = true;
-    // Narrow escape hatch: a Markdown blockquote inside an indexed finding. The
-    // unquoted surrounding finding must still state the scenario and proposed fix.
-    if (inFinding && /^ {0,3}> /.test(line)) continue;
-    if (instructionEchoSentences.some(sentence => line.includes(sentence))) {
-      throw new Error("reviewer body echoes instructions; not a verdict");
+    if (/^ {0,3}#{1,6} /.test(line)) {
+      inFinding = headings.has(line);
+      fence = undefined;
     }
+    if (!line.trim()) {
+      // A later unheaded paragraph is not part of the preceding finding.
+      inFinding = false;
+      fence = undefined;
+      continue;
+    }
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (inFinding && (fence || marker || /^ {0,3}> /.test(line) || /^ {4}/.test(line) || /^`[^`]+`$/.test(line.trim()))) {
+      if (marker) {
+        if (fence && marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+        else if (!fence) fence = marker;
+      }
+      continue;
+    }
+    ordinary.push(line);
+  }
+  const normalized = [ordinary.join(" "), ordinary.join("")].map(text => text.replace(/\s+/g, " "));
+  if (instructionEchoSentences.some(sentence => normalized.some(text => text.includes(sentence)))) {
+    throw new Error("reviewer body echoes instructions; not a verdict");
   }
 }
 
@@ -82,7 +100,7 @@ function findingHeadings(body, unsupported = () => {}) {
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
     if (finding) {
       findings.push(line);
-    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:^\s*F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|^\s*\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
       unsupported(line);
     }
   }

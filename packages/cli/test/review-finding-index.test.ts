@@ -72,3 +72,15 @@ it.each([
   const heading = "### LOW: Actual finding";
   expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
 });
+
+// #451: grammar examples embedded in ordinary prose are not finding attempts.
+it.each([
+  "A reviewer may write `### HIGH — title` when explaining the grammar.",
+  "- **#444** historical inline F1 — HIGH — example",
+])("F1 ignores inline grammar example prose: %s", prose => {
+  const heading = "### LOW: Real finding";
+  expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
+});
+it("F1 still fails closed for a real delimiter-less ALL-CAPS heading", () => {
+  expect(() => findingIndex(url, { html_url: url, body: "### HIGH title" })).toThrow(/unindexed finding/);
+});
