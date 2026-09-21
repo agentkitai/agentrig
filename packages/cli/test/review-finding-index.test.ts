@@ -80,3 +80,11 @@ it.each([
 ])('M-inline-grammar: accepts ordinary prose %s', body => {
   expect(findingIndex(url, { html_url: url, body })).toEqual([]);
 });
+
+it.each([
+  '**F1 — HIGH, blocking — Emit gate bypass**', '**F1 — HIGH — Bypass**',
+  '- F1 — HIGH — Bypass', '+ [P4] Unknown priority', '1. F1 — LOW — Bypass',
+  '| F1 — HIGH — Broken gate | blocking |', '***F2: LOW — Unsupported***',
+])('R1-M-decorated-opening: fails closed for %s', body => {
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+});

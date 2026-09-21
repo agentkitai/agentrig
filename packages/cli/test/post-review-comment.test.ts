@@ -470,3 +470,17 @@ it("M-unclosed-code: does not let an unmatched backtick hide a literal echo", ()
   expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
   expect(result.args).toBeUndefined();
 });
+
+it.each(['    closing ` span', '> closing ` span', '```text\nclosing ` span\n```'])('R1-M-stuck-span: quoted closer cannot hide later echo: %s', closer => {
+  const result = run(`### LOW: Real finding\nOpen \`span here\n${closer}\n## Summary\n${echoPhrases[0]}`);
+  expect(result.stderr).toContain('reviewer body echoes instructions; not a verdict');
+});
+it.each(['> ', '    ', '```text\n'])('R1-M-backtick-paragraph: ordinary code-led prose ends scope: %s', wrapper => {
+  const quote = wrapper + echoPhrases[2] + (wrapper.startsWith('```') ? '\n```' : '');
+  const result = run(`### LOW: Real finding\nScenario and fix.\n\n\`assertReviewerVerdict\` is the guard.\n\n${quote}`);
+  expect(result.stderr).toContain('reviewer body echoes instructions; not a verdict');
+});
+it.each(['Contract:', 'The skill says:', 'Relevant requirement:', ''])('R1-M-citation-composition: accepts generic citation lead-in %s', lead => {
+  const body = `### LOW: Real finding\nScenario and fix.\n\n${lead} \`${echoPhrases[1]!.replace('probed and', 'probed\nand')}\``;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+});
