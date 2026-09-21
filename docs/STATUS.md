@@ -9,9 +9,11 @@ turn counts against the session summary. Pre-delta and recovery-cap fatal exits
 emit one fatal error before `turn.end`, then `session.end` with `reason=error`.
 Fake-provider regressions cover pre-delta failure, per-turn and per-run caps;
 fail-first and named turn-end/order mutants are recorded in the PR. #475 remains
-out of scope. Full verification is blocked by the CLI test that assumes pre-delta
-failures never close a turn; updating that out-of-scope test requires conductor
-arbitration. Independent review and hosted exact-head checks remain pending.
+out of scope. Arbiter session 32a76383 approved updating only the existing CLI
+pre-delta provider-error regression to assert same-session continuation while
+retaining its successful subsequent-response assertion; no CLI runtime changed.
+Full declared-check receipts accompany the PR. Independent review and hosted
+exact-head checks remain pending.
 
 ## Turn-boundary disconnect recovery (#467) — implemented, pending review
 
