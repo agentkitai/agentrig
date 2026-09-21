@@ -178,9 +178,11 @@ Record `declared checks: none`; landing still needs exact-head CI plus human mer
 Do not claim local green or waive missing CI. For nonempty steps, bootstrap, optional preflight,
 and each named step run in order, stopping on nonzero, recording name, command, exit code,
 UTC start/end, counts (or N/A), head and runner. The independent conductor supplies GREEN
-same-head receipts **before** launching the review pair. Reviewers inspect code and targeted
-mutants, not a duplicate full suite. The operative sections in dogfood/topic/review/arbiter
-supersede shipping policy §3's reviewer-trio rule; ship/land and shipping policy are unchanged.
+same-head receipts **before** launching any declared reviewer slot, including focused-delta
+reviews. Reviewers inspect code and may run optional targeted mutants; they never run project
+checks, bootstrap or preflight. Shipping policy §3 and the workflow skills share this rule.
+Zero slots records `External review: none declared`; one slot requires only that review and its
+material-delta coverage. Hosted CI may overlap review and is required only for landing.
 
 `packages/cli/test/project-checks.test.ts` executes a tiny generated external fixture using
 this resolver in the test itself. There is no CLI workflow runner.

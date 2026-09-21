@@ -1,92 +1,38 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 import { expect, it } from "vitest";
-
-const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
-const section = (text: string, start: string, end: string) => text.split(start)[1]?.split(end)[0] ?? "";
-const requirements = [
-  {
-    path: ".agentrig/skills/topic/SKILL.md", start: "   - **Independent conductor checks", end: "   - **Claude job**",
-    phrases: ["BEFORE reviewers", "PR HEAD", "ordered named steps", "Require GREEN before", "launching either job", "empty steps", "name, command, exit code, UTC start/end and counts", "restored tracked/index state", "unchanged head", "receipts", "before launch", "NEW"],
-  },
-  {
-    path: "docs/SHIPPING-WORKFLOW.md", start: "## 3.", end: "## 4.",
-    phrases: ["runs independently of the author on the same reviewed head", "conductor trio is the Codex trio evidence", "docs/TESTING.md", "denied sockets", "npm cache", "GitHub", "environment limitation", "author's trio", "exact-head CI", "Never halt solely because Codex cannot run the suite", "does not erase", "Real test failures"],
-  },
-  {
-    path: ".agentrig/skills/land/SKILL.md", start: "## 1.", end: "## 2.",
-    phrases: ["runs independently of the author on the same reviewed head", "conductor trio is the Codex trio evidence", "shipping policy §3", "docs/TESTING.md", "denied sockets", "npm cache", "GitHub", "environment limitation", "author's trio", "exact-head CI", "Never halt solely because Codex cannot run the suite", "does not erase", "Real test failures"],
-  },
-  ...["ship"].map(skill => ({
-    path: `.agentrig/skills/${skill}/SKILL.md`, start: skill === "ship" ? "## 2." : "## 8.", end: skill === "ship" ? "## 3." : "## 9.",
-    phrases: ["author-tree proof is not independent evidence", "the independent trio", "topic §2 step 4's conductor trio", "shipping policy §3", "Codex trio evidence", "environment limitation", "Never halt solely because Codex cannot run the suite"],
-  })),
-  {
-    path: ".agentrig/skills/dogfood/SKILL.md", start: "## 8.", end: "## 9.",
-    phrases: ["author-tree proof is not independent evidence", "the independent declared checks", "pre-launch conductor checks", "overriding shipping policy §3", "named checks evidence", "environment limitation"],
-  },
-];
-
-for (const { path, start, end, phrases } of requirements) {
-  const check = (text: string) => {
-    const operative = section(text, start, end).replace(/\s+/g, " ");
-    for (const phrase of phrases) expect(operative).toContain(phrase);
-  };
-  it(`${path} pins initial trio execution, acceptance or delegation at its operative section`, () => check(read(path)));
-  it.each(phrases)(`${path} rejects removal of %s even with an out-of-section copy`, phrase => {
-    const text = read(path);
-    check(text);
-    const operative = section(text, start, end);
-    const expression = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+"), "g");
-    const changed = operative.replace(expression, "REMOVED");
-    expect(changed).not.toBe(operative);
-    expect(() => check(text.replace(operative, changed) + `\n${operative}`)).toThrow();
+import { instructionSource } from "./instruction-source.js";
+const read = (skill: string) => instructionSource(`.agentrig/skills/${skill}/SKILL.md`);
+function policy(text: string) {
+  const section = text.split("## Declared reviewer slots (issue #396)")[1]?.split("\n## ")[0] ?? "";
+  for (const phrase of ["zero, one or two named slots", "API slots reference existing provider entries by name", "same-head declared checks GREEN BEFORE launching any", "reviewers judge code and never run project checks", "Optional targeted mutation probes", "Hosted CI overlaps review", "External review: none declared", "checks → CI → land", "With 1 slot, only that slot reviews", "Landing requires only declared slots", "their exact pinned models", "named receipts"]) expect(section.replace(/\s+/g, " ")).toContain(phrase);
+  expect(text).not.toMatch(/claude|codex|opus|anthropic|openai|gpt-/i);
+}
+for (const skill of ["dogfood", "topic", "ship", "review", "land"]) {
+  it(`${skill} declares role separation, zero/one/two slots and landing gates`, () => policy(read(skill)));
+  for (const phrase of ["GREEN BEFORE launching any", "only declared slots", "External review: none declared", "their exact pinned models"]) it(`M-declared-role ${skill} kills removal of ${phrase}`, () => {
+    const text = read(skill); policy(text);
+    expect(() => policy(text.replaceAll(phrase, "REMOVED"))).toThrow();
   });
 }
-
-it("topic posts conductor provenance with the initial Codex verdict", () => {
-  const posting = section(read(".agentrig/skills/topic/SKILL.md"), "# Codex posting gate\n", "The conductor posts");
-  const guard = '[ -s "<OUT>/codex-trio.md" ] || exit 2';
-  expect(posting).toContain(guard);
-  expect(posting.indexOf(guard)).toBeLessThan(posting.indexOf("node scripts/post-review-comment.mjs"));
-  expect(posting).toContain('"<OUT>/codex-comment.md" "<OUT>/codex-trio.md"');
+it("topic operative flow orders preparation and checks before launch and passes provenance", () => {
+  const text = read("topic").split("4. Run the **external review pass**")[1]?.split("## 3.")[0] ?? "";
+  const ordered = ["**Prepare.**", "**Independent conductor checks — BEFORE reviewers.**", "**Launch each declared slot.**", "**Wait.**", "**Provenance.**", "scripts/post-review-comment.mjs"];
+  let previous = -1;
+  for (const gate of ordered) { const index = text.indexOf(gate); expect(index).toBeGreaterThan(previous); previous = index; }
+  for (const required of ["exit code zero in each", "before launching any reviewer job", "persist the failure receipt", "REVHEAD must equal the current PR HEAD", "GREEN before any launch", "pass", "these receipts to every slot", "actual model equals the configured pin", "Nonzero stops posting", "Persist", "partial/uncertain"]) expect(text).toContain(required);
 });
-
-it.each(["missing", "empty", "present"])("topic posting guard handles %s trio evidence", state => {
-  const out = mkdtempSync(join(tmpdir(), "initial-trio-"));
-  try {
-    writeFileSync(join(out, "codex-model.txt"), "gpt-test");
-    writeFileSync(join(out, "codex.md"), "verdict");
-    if (state !== "missing") writeFileSync(join(out, "codex-trio.md"), state === "present" ? "independent trio proof" : "");
-    const text = read(".agentrig/skills/topic/SKILL.md");
-    const snippet = section(text, "# Codex posting gate\n", "```")
-      .replace('mjs NN', 'mjs 372').replaceAll('"HEAD"', `"${"a".repeat(40)}"`).replaceAll('"MAIN"', `"${"b".repeat(40)}"`);
-    writeFileSync(join(out, "gh"), "#!/bin/sh\nexit 0\n");
-    chmodSync(join(out, "gh"), 0o755);
-    const result = spawnSync("/bin/sh", ["-c", snippet.replaceAll("<OUT>", out).replaceAll("<WT>", new URL("../../../", import.meta.url).pathname)], { encoding: "utf8", cwd: new URL("../../../", import.meta.url), env: { ...process.env, PATH: `${out}:${process.env.PATH}` } });
-    expect(result.status).toBe(state === "present" ? 0 : 2);
-    const comment = join(out, "codex-comment.md");
-    expect(existsSync(comment)).toBe(state === "present");
-    if (state === "present") {
-      expect(readFileSync(comment, "utf8")).toContain("verdict\nindependent trio proof");
-      expect(readFileSync(comment, "utf8")).toMatch(/^## External review — Codex/);
-    }
-  } finally {
-    rmSync(out, { recursive: true, force: true });
-  }
+it("shipping policy has no reviewer-trio special case", () => {
+  const policy = instructionSource("docs/SHIPPING-WORKFLOW.md").split("## 3.")[1]?.split("\n## ")[0] ?? "";
+  expect(policy).not.toMatch(/Codex trio|reviewers run the affected checks|focused reviews run the affected checks/);
+  expect(policy).toContain("GREEN BEFORE launching any reviewers");
 });
-
-const completeness = "For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.";
-it.each(["topic", "ship", "land", "dogfood"])("R379 %s requires all chunks and kills completeness deletion", skill => {
-  const end = skill === "land" ? "## 0." : "## Review scratch cleanup";
-  const check = (text: string) => expect(section(text, "## Initial full review heading contract", end).replace(/\s+/g, " ")).toContain(completeness.replace(/\s+/g, " "));
-  const text = read(`.agentrig/skills/${skill}/SKILL.md`);
-  check(text);
-  // R391-wrapping: formatting cannot change completeness semantics.
-  check(text.replace(completeness, completeness.replace(/ /g, "\n  ")));
-  expect(() => check(text.replace(completeness, ""))).toThrow();
-  // R379-out-of-section-copy: an appendix cannot satisfy the operative gate.
-  expect(() => check(text.replace(completeness, "") + `\n${completeness}`)).toThrow();
+it("review's operative probe section is optional rather than a hidden check gate", () => {
+ const text = read("review").split("## 5. Test quality and mutation probes")[1]?.split("## 6.")[0] ?? "";
+ expect(text).toContain("There is no required probe count");
+ expect(text).toContain("optional reviewer-owned probe, never a check gate");
+ expect(text).not.toMatch(/run 2-4|re-run at least one/);
+});
+it("land compares every declared pin, not one hardcoded model", () => {
+  const text = read("land");
+  expect(text).toContain("initial heading model must equal its configured pin");
+  expect(text).toContain("require\nonly declared slot comments with exact declared pins");
 });

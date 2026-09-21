@@ -3,9 +3,31 @@ name: review
 description: Independent adversarial code review on the final head using conductor declared-check receipts and targeted mutation probes. Never runs full checks or merges.
 ---
 
+## Declared reviewer slots (issue #396)
+
+Resolve zero, one or two named slots from the reviewed project's config using
+`node scripts/review-adapters.mjs <CONFIG> [PROFILE]`. An absent declaration is zero;
+a profile replaces the whole slot list. Never invent a reviewer or a model. Adapter
+launch templates and model extraction live in that skill-side script, not core.
+API slots reference existing provider entries by name; do not copy routing or credentials.
+Use each slot's declared adapter and pinned model, not a default or the conductor's model.
+No canRunChecks capability exists: reviewers judge code and never run project checks,
+bootstrap or preflight. Optional targeted mutation probes are allowed in their owned tree.
+The independent conductor must run same-head declared checks GREEN BEFORE launching any
+reviewers, including focused-delta reviewers. Pass named receipts (name, command, exit code,
+UTC start/end, counts and SHA) to every reviewer; never pass builder reasoning as evidence.
+Hosted CI overlaps review and is required only for landing, not reviewer launch.
+With 0 slots, record `External review: none declared` in the PR ledger and follow
+checks → CI → land (human merge authorization still required). Never launch a substitute.
+With 1 slot, only that slot reviews; material repairs use that slot for focused-delta review.
+With 2 slots, launch both independently and collect all declared initial verdicts before repair.
+Landing requires only declared slots, their exact pinned models, and complete coverage of
+material deltas; no undeclared second reviewer is required. A failed declared slot is not
+an opt-out. Freeze the declaration for the batch; changes are material and require new coverage.
+
 ## Operative declared-checks policy (issue #395)
 
-This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
+This policy implements shipping policy §3 and supersedes conflicting inherited
 ship/land check instructions for this task. Workflow decisions stay in skills, never core or
 a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
 selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
@@ -27,11 +49,11 @@ Record `declared checks: none`; land fallback is exact-head CI plus human merge 
 not a fabricated local pass. Missing CI or authorization cannot be waved through.
 
 The independent conductor runs declared checks on the exact review head and must be
-GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
+GREEN BEFORE launching any declared reviewer (and before a focused delta reviewer). Give all declared
 reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
 contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
 They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
-For empty steps give reviewers the explicit none receipt. Keep the two independent code
+For empty steps give reviewers the explicit none receipt. Keep the declared independent code
 reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
 
 
@@ -47,20 +69,25 @@ Run this in a session that shares no context with the run that wrote the PR.
 
 ## Initial full review heading contract
 
-The two initial external review comments must each start with this exact heading form:
-`## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
-The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.
+The declared initial external review comments must each start with this exact heading form:
+`## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Substitute the declared slot name, pinned model, full reviewed PR head SHA and full base SHA.
+The conductor (or standalone dogfood author) posts one for each declared slot.
 No alternate heading is valid for posting,
 acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
-elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
+elsewhere in the body. This form is for the initial full pass, not focused delta verdicts.
 
 For an initial full review, use the heading above for your own handed-off verdict.
 Hand off only your own verdict and provenance to the conductor; do not post the pair,
 invoke a counterpart, or fabricate a counterpart verdict. The conductor validates the actual
-model from CLI provenance and posts both independent reviews with the complete headings.
+model from CLI provenance and posts all declared independent reviews with the complete headings.
 
 ## 1. Fix the target
+
+Resolve the declared slot supplied in the handoff through scripts/review-adapters.mjs and
+verify its adapter and pinned model provenance. The conductor launches this review through
+that adapter only after independent same-head declared-check receipts are green. A standalone
+invocation also requires that preparation; never launch undeclared slots or run checks yourself.
 
 - Resolve the PR number to its branch and CURRENT head SHA (`gh pr view <n> --json headRefName,headRefOid,baseRefName`).
   Every claim you make is about that SHA; if the author pushes while you work, your review is of
@@ -120,15 +147,16 @@ verify assigned blocker closure and new direct regressions, not optional cleanup
 
 - Check the new tests would actually fail against the unfixed code: vacuous assertions (asserting
   a string absent that was never present), assertions satisfied by the wrong mechanism, races.
-- Pick the load-bearing lines (the condition that makes the change safe, not just correct) and
-  run 2-4 mutants: copy the file aside, apply the mutant, run the RELEVANT test file with
-  the project's targeted test invocation (not the full declared check command), restore, and only then run the next mutant — never overlap runs
-  in one worktree. A surviving mutant on a security line is a finding even when every test passes.
+- Optional targeted probes may test load-bearing lines (the condition that makes the change
+  safe, not just correct). There is no required probe count. If choosing a mutation, copy the
+  file aside, apply the mutant, run only the relevant targeted invocation (never a project check),
+  restore, and only then run the next mutant — never overlap runs in one worktree. A surviving
+  mutant on a security line is a finding even when every test passes.
 - Restore exact original bytes even when the check fails, and join its subprocesses before the
   next mutant. Record the original HEAD and verify unchanged HEAD plus clean tracked/index state
   at the end. Do not discard unfamiliar edits; an unrestored mutation is an incomplete review.
-- Where the PR claims "verified fail-first" or "mutant killed", re-run at least one of those
-  claims yourself.
+- Where the PR claims "verified fail-first" or "mutant killed", inspect the recorded evidence.
+  Independently reproducing those claims is an optional reviewer-owned probe, never a check gate.
 
 ## 6. Verdict
 
@@ -136,8 +164,8 @@ verify assigned blocker closure and new direct regressions, not optional cleanup
   Classify blocking/non-blocking with the scenario and shipping policy §2 rationale. Distinguish
   unmet acceptance or safety gates from minor deferrable defects and advisory polish. Uncertain
   impact remains blocking; a small fix or LOW severity is not proof of safe deferral.
-- A pass verdict lists what you probed and which mutants you ran — "looks good" with no evidence
-  is not a review.
+- A pass verdict lists inspected code and receipt evidence, plus any optional probes/mutants
+  (or `none; optional`). "Looks good" with no code reasoning is not a review.
 - Report which of the PR body's claims you verified, and any you could not.
 
 ## 7. Boundaries

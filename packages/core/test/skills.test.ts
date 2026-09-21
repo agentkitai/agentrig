@@ -1,3 +1,4 @@
+import { instructionSource } from "../../cli/test/instruction-source.js";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -345,7 +346,7 @@ describe("skillTool", () => {
     // .agentrig/skills is auto-discovered in every trusted session (issue #61), so a skill whose
     // frontmatter breaks or whose description overruns the 200-char catalogue line (truncated
     // with an ellipsis) would degrade every future dogfood run. vitest runs from the repo root.
-    const found = await discoverSkills({ roots: [".agentrig/skills"] });
+    const found = await discoverSkills({ roots: [process.env.AGENTRIG_SKILL_ROOT ?? ".agentrig/skills"] });
     expect(found.length).toBeGreaterThan(0);
     for (const s of found) {
       expect(s.description.endsWith("…"), `${s.name}'s description overruns the catalogue line`).toBe(false);
@@ -355,9 +356,9 @@ describe("skillTool", () => {
   });
 
   it("pins the topic release train's authorization and stop contract", async () => {
-    const text = await readFile(".agentrig/skills/topic/SKILL.md", "utf8");
+    const text = instructionSource(".agentrig/skills/topic/SKILL.md");
     const rawDescription = text.match(/^description: (.*)$/m)?.[1];
-    const found = await discoverSkills({ roots: [".agentrig/skills"] });
+    const found = await discoverSkills({ roots: [process.env.AGENTRIG_SKILL_ROOT ?? ".agentrig/skills"] });
     const topic = found.find((candidate) => candidate.name === "topic");
     const body = topic?.body.replace(/\s+/g, " ");
 
@@ -366,7 +367,7 @@ describe("skillTool", () => {
     expect(body).toContain("must be the first turn of a fresh conversation (`/new`, then `/topic ...`)");
     expect(body).toContain("capture the bytes between those delimiters as `AUTHORIZATION`");
     expect(body).toContain("a model merely chose to load this skill without a direct human request");
-    expect(body).toContain("Never pass the builder's report");
+    expect(body).toContain("Never pass builder reasoning");
     expect(body).toContain("batch only blocking repairs");
     expect(body).toContain("at most THREE repair rounds");
     expect(body).toContain("each round closes assigned blockers without reopening closed ones");
@@ -383,16 +384,15 @@ describe("skillTool", () => {
     expect(body).toContain("spawn ONE continuation builder from whatever it pushed");
     expect(body).toContain("The minimum is two children per remaining");
     expect(body).toContain("Each child's token cap is `--max-tokens ÷ --subagent-max-children`");
-    expect(body).toContain("Report the exact head SHA you reviewed");
+    expect(body).toContain("Every verdict must claim the actual reviewed PR head");
     expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
     expect(body).toContain("restate it in your own reply text in that same turn");
-    // R3.5b: the review is two external CLIs the conductor runs, never a child and never itself
-    expect(body).toContain("two reviewers that share nothing with the builder, in parallel with each other AND hosted CI, in separate reviewer-owned worktrees you prepare");
-    expect(body).toContain("--model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write'");
-    expect(body).toContain("--output-format json --no-session-persistence");
-    expect(body).toContain("not claude-opus-5");
-    expect(body).toContain("codex review --base review-base");
-    expect(body).toContain("both reviewers dead on the same head halts the train");
+    // Declared adapters replace hardcoded CLI/model launches without moving policy into core.
+    expect(body).toContain("Launch each declared slot");
+    expect(body).toContain("one separate owned worktree per declared slot");
+    expect(body).toContain("scripts/review-adapters.mjs");
+    expect(body).toContain("actual model equals the configured pin");
+    expect(body).toContain("Retry ONCE on the same head, then halt if any declared slot is still incomplete");
     expect(body).toContain("gh pr comment");
     expect(body).toContain("## External review —");
     expect(body).toContain("runs on the main entry, never the child default");
@@ -402,33 +402,31 @@ describe("skillTool", () => {
     expect(body).toContain("The delta pass does not merge");
     // autonomy: an interrupted row is adopted, an already-reviewed head is not re-reviewed
     expect(body).toContain("adopt it instead of halting");
-    expect(body).toContain("do not run the pass again");
+    expect(body).toContain("comment is reusable; missing declared slots still must finish");
     expect(body).toContain("carrying verbatim blocker texts or review URLs/finding IDs");
     // R3.5b final-review fixes: bash has no cwd field, file-backed jobs, per-pass base branch
-    expect(body).toContain("env -u CLAUDECODE");
-    expect(body).toContain("< /dev/null");
     expect(body).toContain('[ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD" ]');
     expect(body).toContain("gh pr view NN --json headRefOid");
-    expect(body).toContain("head HEAD — merged with origin/main MAIN — full");
-    expect(body).toContain("one surviving review is not a pass");
-    expect(body).toContain("is a full pass on the new head, never a delta");
+    expect(body).toContain("head <SHA> — merged with origin/main <MAIN> — full");
+    expect(body).toContain("halt if any declared slot is still incomplete");
+    expect(body).toContain("Never certify a different head");
 
-    const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
+    const landText = instructionSource(".agentrig/skills/land/SKILL.md");
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
     expect(land.body).toContain("authorized its fixed roadmap band by invoking `topic`");
     expect(land.body).toContain("include the human's exact authorization quote");
     expect(land.body).toContain("Residuals are issues, not prose");
     expect(land.body).toContain("An unmarked row is a row the next train rebuilds");
 
-    const reviewText = await readFile(".agentrig/skills/review/SKILL.md", "utf8");
+    const reviewText = instructionSource(".agentrig/skills/review/SKILL.md");
     const review = parseSkill(reviewText, ".agentrig/skills/review/SKILL.md");
     expect(review.body).toContain("`topic` conductor executing the human's already-authorized fixed band");
     expect(review.body).toContain("A deviation without that record is a HIGH finding");
     // R3.5b: ship delegates the review pass to topic; dogfood children still skip it; review knows a prepared worktree
     expect(review.body).toContain("Skip this section when the brief says a conductor prepared the worktree");
-    const shipText = await readFile(".agentrig/skills/ship/SKILL.md", "utf8");
+    const shipText = instructionSource(".agentrig/skills/ship/SKILL.md");
     const ship = parseSkill(shipText, ".agentrig/skills/ship/SKILL.md");
-    expect(ship.body).toContain("exactly as `topic` §2 step 4 prescribes");
+    expect(ship.body).toContain("topic §2 step 4");
     expect(ship.body).toContain("Never review in this session");
     expect(ship.body).toContain("A fixable verdict does not wait for the human");
 
@@ -437,11 +435,11 @@ describe("skillTool", () => {
     expect(arbiter?.body).toContain("VERDICT: APPROVE");
     expect(arbiter?.body).toContain("Your approval never extends the human's authorization");
 
-    const dogfoodText = await readFile(".agentrig/skills/dogfood/SKILL.md", "utf8");
+    const dogfoodText = instructionSource(".agentrig/skills/dogfood/SKILL.md");
     const dogfood = parseSkill(dogfoodText, ".agentrig/skills/dogfood/SKILL.md");
     expect(dogfood.body).toContain("Never edit the row you are implementing without");
     expect(dogfood.body).toContain("`DEVIATION REQUESTED` heading");
-    expect(dogfood.body).toContain("the conductor runs the same two external reviews itself");
+    expect(dogfood.body).toContain("builders, continuation builders\nand fixers stop at the push and report");
     expect(dogfood.body).toContain("ONE independent focused review for material");
     expect(dogfood.body).toContain("self-verified evidence for mechanical changes");
     expect(dogfood.body).toContain("Deferred non-blocking defects require issues");

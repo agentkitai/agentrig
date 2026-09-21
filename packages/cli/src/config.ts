@@ -180,10 +180,35 @@ const ConfigValuesSchema = z
 
 export type ConfigValues = z.output<typeof ConfigValuesSchema>;
 
+/** External review slots are skill metadata, never runtime launch policy. */
+const reviewerIdentity = z.string().min(1).max(128).regex(/^[a-z][a-z0-9-]*$/);
+const reviewerModel = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/, "model must be a single-token pin");
+const reviewerFields = { name: reviewerIdentity, model: reviewerModel };
+export const ReviewerSlotSchema = z.discriminatedUnion("adapter", [
+  z.object({ ...reviewerFields, adapter: z.literal("api"), provider: z.string().regex(ENTRY_NAME) }).strict(),
+  z.object({ ...reviewerFields, adapter: z.literal("claude-cli") }).strict(),
+  z.object({ ...reviewerFields, adapter: z.literal("codex-cli") }).strict(),
+]);
+export type ReviewerSlot = z.output<typeof ReviewerSlotSchema>;
+const reviewersSetting = z.array(ReviewerSlotSchema).max(2).superRefine((slots, ctx) => {
+  if (new Set(slots.map(slot => slot.name)).size !== slots.length)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "reviewer slot names must be unique" });
+});
+
 // Declarations are file metadata, not runtime launch/evaluation settings.
-const ConfigDeclarationSchema = ConfigValuesSchema.extend({ checks: ProjectChecksSchema.optional() });
+const ConfigDeclarationSchema = ConfigValuesSchema.extend({ checks: ProjectChecksSchema.optional(), reviewers: reviewersSetting.optional() });
 const ConfigFileSchema = ConfigDeclarationSchema.extend({
   profiles: z.record(ConfigDeclarationSchema).optional(),
+}).superRefine((config, ctx) => {
+  const validate = (slots: ReviewerSlot[] | undefined, providers: Record<string, ProviderEntry> | undefined, path: string[]) => {
+    for (const [index, slot] of (slots ?? []).entries()) {
+      if (slot.adapter === "api" && !Object.hasOwn(providers ?? {}, slot.provider))
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [...path, "reviewers", index, "provider"], message: "reviewer provider must reference an existing providers entry" });
+    }
+  };
+  validate(config.reviewers, config.providers, []);
+  for (const [name, profile] of Object.entries(config.profiles ?? {}))
+    validate(profile.reviewers ?? config.reviewers, { ...config.providers, ...profile.providers }, ["profiles", name]);
 });
 export type ConfigFile = z.output<typeof ConfigFileSchema>;
 
@@ -289,7 +314,7 @@ export interface ResolveConfigInput<T extends Record<string, unknown>> {
 
 function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   if (file === undefined) return {};
-  const { profiles: _profiles, checks: _checks, ...values } = file;
+  const { profiles: _profiles, checks: _checks, reviewers: _reviewers, ...values } = file;
   return values;
 }
 

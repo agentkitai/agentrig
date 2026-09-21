@@ -1,5 +1,16 @@
 # Status
 
+## Declared reviewer slots (#396)
+
+Issue-only work, not roadmap advancement: project declarations accept zero, one or two named
+reviewer slots with adapter and pinned model; API slots reference existing provider entries.
+Review launch and landing policy remain skill-side. Independent conductor same-head declared
+checks precede reviewer launch, reviewers judge code without running project checks, and hosted
+CI overlaps review but gates landing. Empty declarations record explicit no-external-review
+coverage; one-slot projects require no phantom second reviewer. Posting checks the declared
+slot and pin. Draft implementation and proof are recorded in the task PR; conductor owns
+independent review and hosted-CI disposition. No merge authorization in this builder task.
+
 ## Declared project checks (#395)
 
 Project config now validates ordered named checks, required bootstrap, optional preflight and

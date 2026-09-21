@@ -7,12 +7,13 @@ are model-facing instructions, not a runtime enforcement mechanism.
 
 ## 1. CI and review are independent tracks
 
-Builders and fixers run the local green trio, fail-first regressions, and meaningful
+Builders and fixers run the local declared checks, fail-first regressions, and meaningful
 mutations before pushing. After opening/updating the PR, report its head and current
 CI state immediately; do not wait for hosted CI or run private external reviews.
-The conductor (or standalone dogfood author) starts the initial Claude Code and
-Codex reviews in separate owned worktrees while hosted CI runs. Record both review
-job IDs, the reviewed SHA, and the CI run IDs; monitor all three tracks together.
+The conductor (or standalone dogfood author) independently proves same-head declared checks
+before starting any declared reviewer slots in separate owned worktrees while hosted CI runs.
+Record each review job ID, reviewed SHA, and CI run IDs; monitor active tracks together.
+Zero slots launches no reviewer; the checks and landing gates still apply.
 
 Reviewers report pending CI as pending and return their code verdict without waiting
 for CI. A code-review pass is not permission to merge. Only the lander joins the
@@ -23,8 +24,8 @@ environment-limited checks, explicitly preserving each reviewer's limitations.
 
 Freeze the author branch during a review batch. If it changes anyway, retain the
 old review as evidence for its SHA, inspect OLD..NEW, and apply §3; do not discard
-valid reviews and restart the whole pair solely because the head moved. An aborted
-initial pass is incomplete: both initial reviews must finish before landing.
+valid reviews and restart the whole batch solely because the head moved. An aborted
+initial pass is incomplete: every declared initial review must finish before landing.
 
 ## 2. Disposition every finding once
 
@@ -88,16 +89,16 @@ Require successful edit and read-back of that receipt before dispatch and quote 
 Land checks the same persisted receipt against the handoff and requires its timestamp before
 dispatch; private notes or retroactive receipt creation do not satisfy the gate.
 
-Collect both initial verdicts before one repair batch. Give the fixer all blocking
+Collect all declared initial verdicts before one repair batch. Give the fixer all blocking
 finding texts/URLs, not the advisory list as new requirements. Keep the same PR.
-Re-run the local trio after repairs, retain fail-first and mutation evidence, push,
+Re-run the declared checks after repairs, retain fail-first and mutation evidence, push,
 then return immediately so CI overlaps any necessary focused review.
 
 Classify the complete delta since the last reviewed SHA, including CI/conflict fixes:
 
 For conflict repairs, merge main into the branch; never rebase or force-push. Before
 preparing a focused pass, verify OLD is an ancestor of NEW. If history was externally
-rewritten, the old coverage chain is invalid: require the initial full pair on the
+rewritten, the old coverage chain is invalid: require the declared initial full pass on the
 rewritten head, preserving the repair counter rather than certifying a false delta.
 
 - **Material:** changes to executable behavior, security/authority, public interfaces,
@@ -111,22 +112,29 @@ rewritten head, preserving the repair counter rather than certifying a false del
   fix is not mechanical. This exemption covers non-blocker bookkeeping only; it cannot replace
   independent focused review to close a blocker. Prior independent reviews remain evidence for unchanged code.
 
-A focused reviewer verifies closure of the assigned blockers, tests the changed
-behavior and relevant mutations, and checks direct regressions. Do not re-audit
-unchanged code or demand optional cleanup. Newly discovered real blockers still
-count; non-blocking observations go to §2, not another repair batch. Initial full
-reviews keep the green trio; focused reviews run the affected checks and mutations,
-with the author's full trio and exact-head hosted CI still required for landing.
+A focused reviewer verifies closure of assigned blockers and direct regressions; optional
+targeted mutation probes are allowed, but reviewers never run project checks, bootstrap or
+preflight. Do not re-audit unchanged code or demand optional cleanup. Newly discovered real
+blockers still count; non-blocking observations go to §2, not another repair batch.
 
-The conductor trio is the Codex trio evidence for the initial full pass, provided it
-runs independently of the author on the same reviewed head using topic §2 step 4's
-install, preflight, exit-code and comment-provenance procedure. Reviewer sandbox
-limitations such as denied sockets, npm cache or GitHub access are an environment limitation
-per docs/TESTING.md, not a blocker when the author's trio, this independent same-head trio
-and exact-head CI are green. Never halt solely because Codex cannot run the suite.
-This evidence does not erase the reviewer's limitation or recast its failed attempt as passing;
-keep that limitation alongside the conductor's results. Real test failures, missing independent
-proof, unresolved review blockers and non-green exact-head CI still prevent landing.
+The reviewed project's config declares zero, one or two named reviewer slots, each with an
+adapter and pinned model. API slots reference existing providers by name without duplicating
+routing. There is no canRunChecks capability. Adapter launch/provenance details live in
+skill-side scripts, never core. The independent conductor runs same-head declared checks
+GREEN BEFORE launching any reviewers (including focused reviews), passing named command,
+exit, UTC time, count and SHA receipts to every slot. Hosted CI overlaps review and is required
+only for landing. Empty checks get a none receipt. Missing proof or real failures halt launch.
+
+Zero slots records `External review: none declared` and follows checks → CI → land with human
+authorization. One slot alone reviews, including material focused deltas. Two slots collect
+both initial verdicts; one declared slot may cover a material delta. A failed declared slot is
+not an opt-out. Landing requires only declared slots, exact pinned models and delta coverage;
+never an undeclared second reviewer. Changing the declaration is a material delta.
+
+Each initial comment uses `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`.
+The landing gate compares each heading's model to that slot's declared pin. Reject missing,
+ambiguous, failed, empty or mismatched adapter provenance. The conductor posts validated full
+outputs through scripts/post-review-comment.mjs, preserving receipts and raw model evidence.
 
 Per PR, at most THREE repair rounds, not a target. Normally there is one batched fix
 and at most one focused review. Each round must close its assigned blockers without

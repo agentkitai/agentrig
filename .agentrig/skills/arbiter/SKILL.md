@@ -5,7 +5,7 @@ description: Judge one proposed deviation from a contract (roadmap row, issue, t
 
 ## Operative declared-checks policy (issue #395)
 
-This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
+This policy implements shipping policy §3 and supersedes conflicting inherited
 ship/land check instructions for this task. Workflow decisions stay in skills, never core or
 a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
 selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
@@ -27,11 +27,11 @@ Record `declared checks: none`; land fallback is exact-head CI plus human merge 
 not a fabricated local pass. Missing CI or authorization cannot be waved through.
 
 The independent conductor runs declared checks on the exact review head and must be
-GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
+GREEN BEFORE launching any declared reviewer (and before a focused delta reviewer). Give all declared
 reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
 contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
 They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
-For empty steps give reviewers the explicit none receipt. Keep the two independent code
+For empty steps give reviewers the explicit none receipt. Keep the declared independent code
 reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
 
 

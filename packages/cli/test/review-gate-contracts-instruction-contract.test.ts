@@ -1,20 +1,21 @@
+import { instructionSource } from "./instruction-source.js";
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { expect, it } from "vitest";
-const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
+const read = (path: string) => instructionSource(path);
 const skill = (name: string) => `.agentrig/skills/${name}/SKILL.md`;
 const checks: Array<[string, string, string, string[]]> = [
  ["M-lander-fixer-receipt",skill("land"),"## 1.",["quote `Repair round: N/3`", "ledger blocker IDs", "`gh pr view NN --json body` read-back receipt BEFORE", "Reject a missing quote", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "match that line against the round, OLD and assigned blockers", "counter repaired by the fixer afterwards cannot retroactively satisfy it"]],
- ["M-claim-documentation",skill("topic"),"## 2.",["Reject 41-or-more hex tokens", "stale `head_sha:`", "stale `Reviewed at`", "fails closed on a prior `reviewed commit <stale>` discussion mention"]],
+ ["M-claim-documentation",skill("topic"),"## 2.",["Validate all reviewed SHA claims, including stripped headings, before appending receipts", "Reject placeholders, stale claims, overlong tokens", "validateVerdict"]],
  ["M-mechanical-closure", "docs/SHIPPING-WORKFLOW.md", "## 3.",["it cannot replace independent focused review to close a blocker"]],
- ...["topic", "ship", "land"].map(name => ["M-model-heading", skill(name), "## Initial full review heading contract", ["initial heading model must equal `claude-opus-5`", "missing required initial review, not a receipt"]] as [string,string,string,string[]]),
- ["M-topic-pin",skill("topic"),"## 2.",["claude -p --model claude-opus-5"]],
- ["M-ship-pin",skill("ship"),"## 2.",["`--model claude-opus-5` verbatim", "`claude -p --model claude-opus-5`"]],
+ ...["topic", "ship", "land"].map(name => ["M-model-heading", skill(name), "## Initial full review heading contract", ["initial heading model must equal its configured pin", "mismatch is a missing required review"]] as [string,string,string,string[]]),
+ ["M-topic-pin",skill("topic"),"## 2.",["actual model equals the configured pin"]],
+ ["M-ship-pin",skill("ship"),"## 2.",["adapter launch, model assertion"]],
  ...[skill("topic"),"docs/SHIPPING-WORKFLOW.md"].map(path => ["M-delta-closure",path,"## 3.", ['git rev-parse --verify "$OLD^{commit}"','git rev-parse --verify "$NEW^{commit}"','[ "$OLD" != "$NEW" ]','git merge-base --is-ancestor "$OLD" "$NEW"',"fixer delta plus independent focused review","ledger rebuttal quoting a reproducible command and its result","arbiter verdict","prohibit re-prompting the raising reviewer under the","conductor’s contract reading as closure"]] as [string,string,string,string[]]),
  ...["topic","ship"].map(name => ["M-fixer-readback",skill(name),"## 3.",["Read back `gh pr view NN --json body` BEFORE spawning", "Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim", "Dispatch only ledger-blocking findings", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "Require edit success and read back the receipt", "Record any reclassification in the ledger first with its rationale", "Nonblocking defects go to residual issues; advisory"]] as [string,string,string,string[]]),
- ...["ship", "topic"].map(name => ["M-land-persistence",skill(name),"Before invoking land",["`gh pr view NN --json body`","Fetch linked review comments too","verify both initial canonical headings", "dispositions for every", "`## Residuals` has issue links or", "explicit `none`", "halt BEFORE land-child spawning", "including the pinned Claude model", "reviewed head and main provenance", "every focused review", "Verify all blocker closures and delta coverage through current head", "Persist edits then read back again if anything changes"]] as [string,string,string,string[]]),
+ ...["ship", "topic"].map(name => ["M-land-persistence",skill(name),"Before invoking land",["`gh pr view NN --json body`","Fetch linked review comments too","verify every declared initial canonical heading", "dispositions for every", "`## Residuals` has issue links or", "explicit `none`", "halt BEFORE land-child spawning", "comparing each model to its declared pin", "reviewed head and main provenance", "every focused review", "Verify all blocker closures and delta coverage through current head", "Persist edits then read back again if anything changes"]] as [string,string,string,string[]]),
 ];
 // Preserve section boundaries before normalizing whitespace for phrase comparisons.
 const sectionFrom = (s: string, start: string) => {
@@ -116,28 +117,6 @@ it("M-section-boundary rejects a delta requirement moved to the next section", (
 it("C4 removes redundant length guards from both topic validators", () => {
  expect(read(skill("topic"))).not.toContain("c.length>40 ||");
 });
-for(const reviewer of ["Claude", "Codex"]) {
- const source=()=>read(skill("topic")).split(`# ${reviewer} posting gate\n`)[1]!.split("\n")[0]!;
- const run=(body:string, mutant=false)=>{
-  const dir=mkdtempSync(join(tmpdir(),"claim-gate-"));
-  try { const input=join(dir,"input"); writeFileSync(input,body);
-   let program=source().match(/node -e '([^']+)'/)![1]!;
-   if(mutant) {
-    if(body.startsWith("head ")) program=program.replace('[0-9a-f]{7,}', '[0-9a-f]{7,40}');
-    else if(body.startsWith("head_sha:")) program=program.replace('headsha|','');
-    else program=program.replace('|at','');
-   }
-   return spawnSync(process.execPath,["-e",program,input,"a".repeat(40)],{env:{...process.env,GIT_TRACE2_EVENT:"0"}}).status;
-  } finally {rmSync(dir,{recursive:true,force:true});}
- };
- for(const [id,claim] of [["M-41hex",`head ${"a".repeat(41)}`],["M-head-sha",`head_sha: ${"c".repeat(40)}`],["M-reviewed-at",`Reviewed at ${"c".repeat(40)}`]]) {
-  it(`${reviewer} ${id} rejects`,()=>expect(run(`${claim}\nverdict`)).toBe(2));
-  it(`${reviewer} ${id} grammar-reversion mutant`,()=>expect(run(`${claim}\nverdict`,true)).toBe(0));
- }
- it(`${reviewer} prior-reviewed-commit discussion fails closed`,()=>expect(run(`Reviewed head ${"a".repeat(40)}\nPreviously reviewed commit ${"c".repeat(40)} had a defect.\nverdict`)).toBe(2));
- it(`${reviewer} current supported claims pass`,()=>expect(run(`head_sha: ${"a".repeat(40)}\nReviewed at ${"a".repeat(7)}\nverdict`)).toBe(0));
-}
-
 // Execute the actual documented shell gate, not a duplicate predicate.
 for (const path of [skill("topic"), "docs/SHIPPING-WORKFLOW.md"]) {
  const gate = () => read(path).split("# Focused delta gate\n")[1]!.split(/\n *```/)[0]!;

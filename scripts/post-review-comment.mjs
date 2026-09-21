@@ -4,15 +4,18 @@
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { declaredSlots } from "./review-adapters.mjs";
 
 try {
   const args = process.argv.slice(2);
   if (args.length !== 7 && args.length !== 8) throw new Error("expected PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]");
   const [pr, reviewer, modelFile, bodyFile, head, main, outputFile, proofFile] = args;
   if (!/^[1-9][0-9]*$/.test(pr)) throw new Error("invalid PR number");
-  if (!["Claude Code", "Codex"].includes(reviewer)) throw new Error("invalid reviewer");
+  const { slots } = declaredSlots(process.env.AGENTRIG_REVIEW_CONFIG, process.env.AGENTRIG_REVIEW_PROFILE);
+  const slot = slots.find(slot => slot.name === reviewer);
+  if (!slot) throw new Error("undeclared reviewer slot");
   const model = readFileSync(modelFile, "utf8").trim();
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(model)) throw new Error("empty or invalid model file");
+  if (model !== slot.model) throw new Error("review model differs from configured pin");
   if (![head, main].every(sha => sha.length === 40 && /^[a-fA-F0-9]{40}$/.test(sha))) throw new Error("HEAD and MAIN must be unquoted 40-hex SHAs");
   const raw = readFileSync(bodyFile, "utf8");
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");
