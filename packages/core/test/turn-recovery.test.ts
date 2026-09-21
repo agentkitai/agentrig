@@ -5,7 +5,8 @@ import { expect, it } from "vitest";
 import { createAgent, RulePolicy, SessionStore, HarnessEvent, type ModelProvider, type ModelEvent, type ModelRequest } from "@agentkitai/agentrig-core";
 import { renderEvent, renderChatEvent } from "../../cli/src/render.js";
 
-async function run(pattern: boolean[], emptyReply = false) {
+async function run(pattern: boolean[], emptyReply = false, exhaustBudget = false) {
+  let time = 0;
   const root = await mkdtemp(join(tmpdir(), "turn-recovery-"));
   const requests: ModelRequest[] = [];
   const provider: ModelProvider = {
@@ -17,6 +18,7 @@ async function run(pattern: boolean[], emptyReply = false) {
         yield { type: "text_delta", text: "discard me" };
         yield { type: "text_delta", text: " too" };
         yield { type: "tool_use", id: "discarded", name: "missing", input: {} };
+        if (exhaustBudget) time = 60_001;
         throw new Error("terminated");
       }
       if (!emptyReply) yield { type: "text_delta", text: "complete" };
@@ -28,7 +30,7 @@ async function run(pattern: boolean[], emptyReply = false) {
   try {
     const store = new SessionStore({ root });
     const session = createAgent({ provider, tools: [], permissions: new RulePolicy([]), systemPrompt: "test", repoMap: false,
-      store, budget: { maxTurns: 10 },
+      store, budget: { maxTurns: 10, ...(exhaustBudget ? { maxMinutes: 1 } : {}) }, now: () => time,
     }).run("test", { cwd: root });
     const events: HarnessEvent[] = [];
     for await (const e of session.events) events.push(e);
@@ -65,6 +67,7 @@ it("the session recovery cap ends repeated disconnected turns fatally", async ()
   const { events, summary, requests } = await run([true, false, true, false, true, false, true, false]);
   expect(summary.reason).toBe("error");
   expect(requests).toHaveLength(7);
+  expect(events.filter(e => e.type === "turn.end")).toHaveLength(summary.turns);
   expect(events.filter(e => e.type === "model.retry")).toHaveLength(3);
 });
 
@@ -74,4 +77,26 @@ it("empty successful recovery never materializes the discarded assistant prefix"
   expect(events.filter(e => e.type === "message.append" && e.message.role === "assistant")).toHaveLength(0);
   expect(messages.filter(message => message.role === "assistant")).toHaveLength(0);
   expect(JSON.stringify(messages)).not.toContain("discard me");
+});
+
+// The recovery allowance is distinct from the ordinary session budget.
+it("ends the turn before fatal session end when recovery budget is exhausted", async () => {
+  const { events, summary, requests } = await run([true, true]);
+  expect(summary.reason).toBe("error");
+  expect(requests).toHaveLength(2);
+  expect(events.filter(e => e.type === "turn.aborted" || e.type === "turn.end" || e.type === "session.end")
+    .map(e => e.type)).toEqual(["turn.aborted", "turn.end", "session.end"]);
+  expect(events.filter(e => e.type === "turn.end")).toMatchObject([{ n: 1 }]);
+  expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "error" });
+  expect(events.filter(e => e.type === "error")).toMatchObject([{ message: "terminated", fatal: true }]);
+});
+
+it("ends the turn on ordinary budget exhaustion during a failed stream without retrying", async () => {
+  const { events, summary, requests } = await run([true], false, true);
+  expect(summary.reason).toBe("budget");
+  expect(requests).toHaveLength(1);
+  expect(events.filter(e => e.type === "turn.aborted" || e.type === "turn.end" || e.type === "session.end")
+    .map(e => e.type)).toEqual(["turn.end", "session.end"]);
+  expect(events.filter(e => e.type === "turn.end")).toMatchObject([{ n: 1 }]);
+  expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "budget" });
 });

@@ -16,8 +16,12 @@ CI capture (including cap/omission rollback) and MCP answer capture. Repair roun
 writes, not per-attempt staging. An explicit discard/retry notice separates an
 abandoned attempt from recovered text; completed log messages retain only recovered
 text. The real browser pre-cancel streaming assertion is restored. Evaluation closes aborted requests and prior stream retries as unknown
-usage. Fatal-uncommitted output remains observable; #472 turn-end balancing is
-intentionally unchanged. Independent delta review remains pending.
+usage. Fatal-uncommitted output remains observable. Follow-up #472 balances
+`turn.end` on both recovery-cap exhaustion (existing fatal `reason=error`) and
+ordinary-budget exhaustion during a failed stream (existing `reason=budget`).
+Fake-provider regressions assert persisted event ordering and no excess requests;
+remove-emit mutation probes verify the terminal-turn assertions. Independent
+review remains pending.
 
 ## R17a dogfood evidence checkpoint — 2026-09-21
 
