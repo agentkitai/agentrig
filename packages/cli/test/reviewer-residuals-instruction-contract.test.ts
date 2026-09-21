@@ -88,3 +88,18 @@ it("pins Markdown-only LF policy and explains Windows tooling tradeoff", () => {
   expect(policy).toMatch(/CRLF-only[^\n]*tooling/);
   expect(policy).toMatch(/generated[^\n]*raw.byte/);
 });
+
+it("dogfood cites declared reviewer gates and the cleanup heading without retired directions", () => {
+  const dogfood = read("dogfood");
+  const policy = dogfood.split("# Dogfood flow")[0];
+  const gates = "Declared reviewer slots and adapter-driven launch gates are defined in the Initial full review heading contract and shipping policy §3.";
+  const cleanup = "Apply the shared **Review scratch cleanup** contract in the **Review scratch cleanup** heading above.";
+  const assertCurrent = (candidate: string) => {
+    expect(candidate.split("# Dogfood flow")[0].replace(/\s+/g, " ")).toContain(gates);
+    expect(candidate).not.toContain("shipping policy §3's reviewer-trio rule");
+    expect((candidate.split("## 8. Independent reviews — standalone only")[1]?.split("## 9.")[0] ?? "").replace(/\s+/g, " ")).toContain(cleanup);
+  };
+  assertCurrent(dogfood);
+  expect(() => assertCurrent(dogfood.replace("Declared reviewer slots and adapter-driven launch gates are defined in the Initial full review\nheading contract and shipping policy §3.", "REMOVED"))).toThrow();
+  expect(() => assertCurrent(dogfood.replace(cleanup, "Apply the shared Review scratch cleanup contract below."))).toThrow();
+});

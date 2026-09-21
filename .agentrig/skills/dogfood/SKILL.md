@@ -5,9 +5,10 @@ description: Build and verify one change - fresh branch, green declared checks, 
 
 ## Operative declared-checks policy (issue #395)
 
-This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
-ship/land check instructions for this task. Workflow decisions stay in skills, never core or
-a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
+This policy supersedes conflicting inherited ship/land check instructions for this task.
+Declared reviewer slots and adapter-driven launch gates are defined in the Initial full review
+heading contract and shipping policy §3. Workflow decisions stay in skills, never core or a CLI
+workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
 selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
 (or inspect that documented JSON boundary); see docs/TESTING.md. Missing declaration is not
 an empty declaration: stop and request one, never guess a language or package manager.
@@ -237,8 +238,9 @@ through `scripts/post-review-comment.mjs` with provenance and receipt attachment
 Every validation or posting failure exits 2 before any success or merge gate.
 The canonical helper must execute its `head -1` assertion before posting.
 Use each returned slot-specific comment URL; never fabricate a fixed pair of URLs.
-Apply the shared Review scratch cleanup contract below to all declared slots only,
-including API jobs and scratch artifacts. For zero slots record cleanup as not applicable.
+Apply the shared **Review scratch cleanup** contract in the **Review scratch cleanup** heading above.
+Apply it to all declared slots only, including API jobs and scratch artifacts. For zero slots record
+cleanup as not applicable.
 
 Reviewers never run full declared checks or edit the author's worktree. A reviewer that
 finds a missing proof returns to the author for a new receipt. If any declared review
