@@ -1,6 +1,23 @@
 # Status
 
-Current roadmap row: drain 171 (#467), implemented pending review; next: next queued drain row under ROADMAP §5 (no dependent work pulled forward).
+Current roadmap row: fatal provider turn lifecycle (#476, #477), implemented pending verification and review; next: next queued drain row under ROADMAP §5 (no dependent work pulled forward).
+
+## Fatal provider turn lifecycle (#476, #477) — implemented, pending review
+
+Pre-delta provider stream failures now close the started turn, preserving fork snapshot
+turn counts against the session summary. Pre-delta and recovery-cap fatal stream exits
+emit one fatal error before `turn.end`, then `session.end` with the existing classified
+reason (`error` for ordinary provider errors, `budget` for spend-cap failures, or
+`aborted` when cancellation takes precedence). Repair round 1/3 narrows the PLAN
+contract to provider stream failures and preserves terminal classification (C1/C2);
+no runtime or tests changed in this repair.
+Fake-provider regressions cover pre-delta failure, per-turn and per-run caps;
+fail-first and named turn-end/order mutants are recorded in the PR. #475 remains
+out of scope. Arbiter session 32a76383 approved updating only the existing CLI
+pre-delta provider-error regression to assert same-session continuation while
+retaining its successful subsequent-response assertion; no CLI runtime changed.
+Full declared-check receipts accompany the PR. Independent review and hosted
+exact-head checks remain pending.
 
 ## Turn-boundary disconnect recovery (#467) — implemented, pending review
 

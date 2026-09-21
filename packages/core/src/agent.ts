@@ -414,6 +414,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
     let streamRecoveries = 0;
     let usd = 0;
     let reason: SessionSummary["reason"] = "done";
+    let failedStreamTurn: number | undefined;
 
     const availableTools = config.tools.length === 0 && !config.toolAllowlist?.includes("read_output")
       ? config.tools : [...config.tools, readOutputTool(store)];
@@ -996,10 +997,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
             // Deltas are observational only: no assistant message or tool execution has
             // been committed yet. A fresh request must not replay the abandoned prefix.
             const partial = text !== "" || assistantContent.length > 0;
-            if (!partial || !streamFailed) throw err;
+            if (!partial || !streamFailed) {
+              failedStreamTurn = turns;
+              throw err;
+            }
             const message = err instanceof Error ? err.message : String(err);
             if (recoveredTurn || streamRecoveries >= 3) {
-              await emit({ type: "turn.end", n: turns });
+              failedStreamTurn = turns;
               throw err;
             }
             const retryBudget = budgetExceeded(turns - 1);
@@ -1241,6 +1245,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
       reason = abortController.signal.aborted ? "aborted" : err instanceof SpendCapError ? "budget" : "error";
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
+      // Keep the fatal error inside the failed turn's window, with one shared error emission.
+      if (failedStreamTurn !== undefined) {
+        await emit({ type: "turn.end", n: failedStreamTurn }).catch(() => {});
+      }
     } finally {
       if (output !== undefined && !outputValidated && reason === "done") {
         reason = "error";

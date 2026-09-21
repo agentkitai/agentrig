@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 import { createAgent, RulePolicy, SessionStore, HarnessEvent, type ModelProvider, type ModelEvent, type ModelRequest } from "@agentkitai/agentrig-core";
 import { renderEvent, renderChatEvent } from "../../cli/src/render.js";
 
-async function run(pattern: boolean[], emptyReply = false, exhaustBudget = false) {
+async function run(pattern: boolean[], emptyReply = false, exhaustBudget = false, preDelta = false) {
   let time = 0;
   const root = await mkdtemp(join(tmpdir(), "turn-recovery-"));
   const requests: ModelRequest[] = [];
@@ -15,6 +15,7 @@ async function run(pattern: boolean[], emptyReply = false, exhaustBudget = false
       requests.push(structuredClone(req));
       const fail = pattern.shift();
       if (fail) {
+        if (preDelta) throw new Error("terminated");
         yield { type: "text_delta", text: "discard me" };
         yield { type: "text_delta", text: " too" };
         yield { type: "tool_use", id: "discarded", name: "missing", input: {} };
@@ -36,7 +37,9 @@ async function run(pattern: boolean[], emptyReply = false, exhaustBudget = false
     for await (const e of session.events) events.push(e);
     const summary = await session.done;
     expect(await store.readAll(summary.id)).toEqual(events);
-    return { events, summary, requests, messages: await store.materializeMessages(summary.id) };
+    const fork = await store.fork(summary.id, events.at(-1)!.seq);
+    const forkSnapshot = await store.materializeSnapshot(fork);
+    return { events, summary, requests, forkSnapshot, messages: await store.materializeMessages(summary.id) };
   } finally { await rm(root, { recursive: true, force: true }); }
 }
 
@@ -69,6 +72,7 @@ it("the session recovery cap ends repeated disconnected turns fatally", async ()
   expect(requests).toHaveLength(7);
   expect(events.filter(e => e.type === "turn.end")).toHaveLength(summary.turns);
   expect(events.filter(e => e.type === "model.retry")).toHaveLength(3);
+  expectFatalWindow(events);
 });
 
 it("empty successful recovery never materializes the discarded assistant prefix", async () => {
@@ -89,6 +93,7 @@ it("ends the turn before fatal session end when recovery budget is exhausted", a
   expect(events.filter(e => e.type === "turn.end")).toMatchObject([{ n: 1 }]);
   expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "error" });
   expect(events.filter(e => e.type === "error")).toMatchObject([{ message: "terminated", fatal: true }]);
+  expectFatalWindow(events);
 });
 
 it("ends the turn on ordinary budget exhaustion during a failed stream without retrying", async () => {
@@ -99,4 +104,29 @@ it("ends the turn on ordinary budget exhaustion during a failed stream without r
     .map(e => e.type)).toEqual(["turn.end", "session.end"]);
   expect(events.filter(e => e.type === "turn.end")).toMatchObject([{ n: 1 }]);
   expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "budget" });
+});
+
+function expectFatalWindow(events: HarnessEvent[]) {
+  expect(events.filter(e => e.type === "error" && e.fatal))
+    .toMatchObject([{ message: "terminated", fatal: true }]);
+  expect(events.slice(-4)).toMatchObject([
+    { type: "error", message: "terminated", fatal: true },
+    { type: "turn.end" },
+    { type: "session.finishing" },
+    { type: "session.end", reason: "error" },
+  ]);
+}
+
+it("balances a pre-delta provider failure and preserves fork turn accounting", async () => {
+  const { events, summary, requests, forkSnapshot } = await run([true], false, false, true);
+  expect(summary.reason).toBe("error");
+  expect(summary.turns).toBe(1);
+  expect(requests).toHaveLength(1);
+  expect(events.filter(e => e.type === "turn.start")).toMatchObject([{ n: 1 }]);
+  expect(events.filter(e => e.type === "turn.end")).toMatchObject([{ n: 1 }]);
+  expect(forkSnapshot?.turns).toBe(summary.turns);
+  expect(events.filter(e => ["model.delta", "turn.aborted", "model.retry", "tool.start"].includes(e.type)))
+    .toHaveLength(0);
+  expect(events.filter(e => e.type === "message.append" && e.message.role === "assistant")).toHaveLength(0);
+  expectFatalWindow(events);
 });
