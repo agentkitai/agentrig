@@ -1,8 +1,8 @@
 # Status
 
-R18b repair candidate (C1–C4, independent delta review pending): resume observations follow balanced interrupted tool exchanges, bound projected plan/own-child state to 12k serialized code units with explicit omissions, and exclude fork ancestors’ children. ROADMAP R18b label restored unchanged pending reviewed delivery.
+R18b complete — PR #481: prior code reviews resolved; operator-sanctioned final completion marker recorded. Final marker delta review and exact-head CI remain landing gates.
 
-Current roadmap row: R18b — implemented, pending independent review. R18a landed; next: (R18c ∥ R18d) → R18e under ROADMAP §5.
+Current roadmap row: R18b — done (PR #481), pending landing. R18a landed; next: (R18c ∥ R18d) → R18e under ROADMAP §5.
 
 ## R18b — conductor resume in place (implementation complete)
 
