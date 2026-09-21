@@ -1545,3 +1545,31 @@ describe("shadow provenance checker", () => {
     expect(report.discrepancies.map(item => item.field)).toEqual(["pullRequestUrl", "runUrl"]);
   });
 });
+
+it.each([false, true])("child stream recovery exhaustion=%s precedes parent end", async (exhaust) => {
+  let attempts = 0;
+  const provider: ModelProvider = {
+    id: "disconnect", model: "fake", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
+    async *stream() {
+      attempts++;
+      yield say(attempts === 1 || exhaust ? "abandoned" : "recovered");
+      yield say(" text");
+      if (attempts === 1 || exhaust) throw new Error("terminated");
+      yield usage(1, 1);
+      yield stop("end_turn");
+    },
+  };
+  const { tool, ctx, emitted } = bareTool(provider);
+  const result = await tool.execute({ task: "recover" }, ctx);
+  expect(attempts).toBe(2);
+  expect(result.isError === true).toBe(exhaust);
+  expect(result.display).not.toContain("abandoned");
+  const spawnEvent = emitted.find(e => e.type === "subagent.spawn") as { type: string; id: string };
+  const store = new SessionStore({ root });
+  const events: HarnessEvent[] = [];
+  for await (const e of store.read(spawnEvent.id)) events.push(e);
+  expect(events.filter(e => e.type === "turn.aborted")).toHaveLength(exhaust ? 2 : 1);
+  expect(events.filter(e => e.type === "model.retry")).toHaveLength(1);
+  expect(events.at(-1)).toMatchObject({ type: "session.end", reason: exhaust ? "error" : "done" });
+  expect(emitted.at(-1)).toMatchObject({ type: "subagent.end", reason: exhaust ? "error" : "done" });
+});

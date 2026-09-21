@@ -264,6 +264,17 @@ interface Agent { run(task: string, opts?: { cwd?: string; resume?: string; id?:
 
 Session persistence: one JSONL file per session under `.agentrig/sessions/<id>.jsonl` (events) + periodic snapshot of the message array for cheap resume.
 
+Mid-reply provider stream failures abort the uncommitted assistant turn (`turn.aborted`
+with the provider error). Core discards partial text, reasoning and tool calls, then
+re-requests the same history once per turn, at most three times per session run.
+A second failure in a turn or exhausted recovery cap follows the fatal error path;
+cancellation and ordinary budgets still bind. Observational deltas stay in the log,
+but no partial assistant message is committed and no partial tool call executes.
+Recovered responses have incomplete usage accounting because failed-attempt usage is
+unknown. Child agents recover independently; subagent answer buffers discard aborted
+turns and parent completion follows the child terminal outcome. Provider transport
+retry policy is unchanged: it must never replay a consumed prefix.
+
 H6 keeps `agent.ts` as the model-loop coordinator. Internal `tool-execution.ts` owns the sequential
 tool pipeline and registered-name emission authority; `session-lifecycle.ts` owns ordered event
 delivery, pause/cancellation, orphan settlement and terminal resource release. Live plan state

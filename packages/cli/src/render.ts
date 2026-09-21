@@ -81,6 +81,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "eval.result": return `${p} ${JSON.stringify(e.task)} ${e.outcome} (baseline ${e.baselineOutcome}) profile=${JSON.stringify(e.profile)} reportedTokens=${e.reportedTokens} usage=${e.usageComplete ? "complete" : "unknown"} advisory=${e.advisoryPass === null ? "unavailable" : e.advisoryPass ? "pass" : "fail"}`;
     case "turn.start":
     case "turn.end": return `${p} n=${e.n}`;
+    case "turn.aborted": return `${p} n=${e.n} reason=${e.reason}`;
     case "turn.continued": return `${p} n=${e.n} from=${e.from} attempt=${e.attempt}/${e.maxAttempts} reason=${e.reason}`;
     case "model.request": return `${p} tokensIn=${e.tokensIn}`;
     case "budget.cap": return `${p} configured-estimate cap ${e.reason} (not invoice accounting)`;
@@ -507,6 +508,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return `! ${oneLine(e.message, 200)}`;
     case "budget.cap":
       return `! Configured-estimate daily cap: ${e.reason}; not invoice accounting`;
+    case "turn.aborted":
+      return `⚠ Partial response discarded (turn ${e.n}): ${oneLine(e.reason, 200)}`;
     case "turn.continued":
       return `↻ Response truncated; continuing (${e.attempt}/${e.maxAttempts}, turn ${e.n})`;
     case "permission.decision":
