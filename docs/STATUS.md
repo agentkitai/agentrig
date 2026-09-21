@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: define the R18 band: unattended trains — documentation implemented, pending review. Next: R18a → R18b → (R18c ∥ R18d) → R18e under ROADMAP §5.
+Current roadmap row: define the R18 band: unattended trains — documentation implemented, pending review. R18a landed; next: R18b → (R18c ∥ R18d) → R18e under ROADMAP §5.
 
 ## R18 band definition — 2026-09-21
 
@@ -10,12 +10,12 @@ Builder: AgentRig (documentation-only ship child). Amit agreed: "agree on R18."
 [band contract](plans/R18.md) define five rows for recovery, same-session conductor
 resume, a train command, structured/base-pinned review and cost/concurrency.
 The September 19–21 drain and #320 replay trial motivate the band; no product code
-or runtime acceptance is claimed here. R18a is in flight as drain row 172 (#467);
+or runtime acceptance is claimed here. R18a landed in PR #471 (`54420e4c`, #467 closed); follow-up #472 landed in PR #474 (`23e1d157`);
 its existing recovery deliveries do not mark the whole band complete. Doc-only
 link/consistency and declared-check receipts travel with the PR. LOW own-wording
 observations remain advisories, not residual issues.
 
-## Turn-boundary disconnect recovery (#467) — implemented, pending review
+## Turn-boundary disconnect recovery (#467) — landed in PR #471; follow-up #472 landed in PR #474
 
 Core discards uncommitted partial assistant output on provider stream failure and
 re-requests once per turn, capped at three recoveries per run. `turn.aborted` records
@@ -33,8 +33,8 @@ usage. Fatal-uncommitted output remains observable. Follow-up #472 balances
 `turn.end` on both recovery-cap exhaustion (existing fatal `reason=error`) and
 ordinary-budget exhaustion during a failed stream (existing `reason=budget`).
 Fake-provider regressions assert persisted event ordering and no excess requests;
-remove-emit mutation probes verify the terminal-turn assertions. Independent
-review remains pending.
+remove-emit mutation probes verify the terminal-turn assertions. Delivery receipts
+are recorded in PR #471 (`54420e4c`) and PR #474 (`23e1d157`).
 
 ## R17a dogfood evidence checkpoint — 2026-09-21
 
@@ -2973,7 +2973,7 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 ### R18 band — open
 
 Deliver [unattended trains](plans/R18.md) in ROADMAP §5 order:
-R18a → R18b → (R18c ∥ R18d) → R18e. R18a is in flight (drain row 172, #467).
+R18a → R18b → (R18c ∥ R18d) → R18e. R18a landed in PR #471 (`54420e4c`, #467 closed); follow-up #472 landed in PR #474 (`23e1d157`).
 Acceptance requires a comparable ≥30-row drain with zero bookkeeping resume rows,
 same-session recovery after conductor death and review independent of PR adapters.
 Security defaults and task-specific merge authority remain unchanged.
