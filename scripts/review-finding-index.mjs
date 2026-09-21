@@ -105,7 +105,7 @@ function findingHeadings(body, unsupported = () => {}) {
       // actual unsupported openings wrapped in common Markdown list/emphasis.
       const probe = line.replace(/`[^`\r\n]+`/g, " ")
         .replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "")
-        .replace(/^\*+/, "")
+        .replace(/^\s*\*+/, "")
         .trimStart();
       const malformedOpening = /^(?:(?:F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b)|(?:\[P\d+\])|(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(probe);
       if (!/^\s*>/.test(line) && (unsupportedOpening || malformedOpening)) unsupported(line);

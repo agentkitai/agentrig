@@ -47,6 +47,12 @@ it.each([
   expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
 });
 
+it("M-whitespace-before-emphasis: fails closed on space/tab-indented bold findings", () => {
+  for (const body of ["  **F1 — HIGH — indented bold finding**", "\t**[P4] Indented unknown priority**"]) {
+    expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+  }
+});
+
 it("clean verdict and fenced/quoted non-ATX examples are not omissions", () => {
   expect(findingIndex(url, { html_url: url, body: "VERDICT: PASS\nNo findings.\n~~~md\nF1: HIGH example\n~~~\n> [P4] quoted" })).toEqual([]);
 });
