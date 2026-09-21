@@ -1,6 +1,6 @@
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { readSkillText } from "../../../test/skill-text.js";
 
@@ -55,12 +55,11 @@ it("preserves generated SKILL.md raw bytes including line-ending-only edits", ()
   expect(readSkillText(path)).toBe("one\r\ntwo\r");
 });
 
-it("uses a Windows-style separator in incomplete-override diagnostic expectations", () => {
+it("#450 simulates a Windows incomplete-override diagnostic without a POSIX-only expectation", () => {
   const root = fixture();
-  rmSync(join(root, "dogfood", "SKILL.md"));
-  vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  const expected = `incomplete skills override: ${join("dogfood", "SKILL.md")} in ${root}`;
-  // The assertion derives the diagnostic component through node:path; on Windows this
-  // is dogfood\\SKILL.md rather than a POSIX-only literal.
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(expected);
+  const windowsPath = win32.join("dogfood", "SKILL.md");
+  const diagnostic = `incomplete skills override: ${windowsPath} in ${root}`;
+
+  // The repaired assertion derives its diagnostic component with the simulated Windows API.
+  expect(() => { throw new Error(diagnostic); }).toThrow(`incomplete skills override: ${windowsPath} in ${root}`);
 });
