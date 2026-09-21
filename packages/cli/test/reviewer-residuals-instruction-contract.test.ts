@@ -88,3 +88,17 @@ it("pins Markdown-only LF policy and explains Windows tooling tradeoff", () => {
   expect(policy).toMatch(/CRLF-only[^\n]*tooling/);
   expect(policy).toMatch(/generated[^\n]*raw.byte/);
 });
+
+it("dogfood cites current declared-check ordering rather than the retired trio rule", () => {
+  const opening = read("dogfood").split("Commands are project-controlled data")[0];
+  expect(opening).toContain("implements shipping policy §3's declared reviewer slots and check ordering");
+  expect(opening).toContain("(docs/SHIPPING-WORKFLOW.md)");
+  expect(opening).not.toMatch(/supersedes|reviewer-trio/);
+});
+
+it("dogfood cleanup cross-reference names the existing heading without a direction", () => {
+  const text = read("dogfood");
+  expect(text).toContain("## Review scratch cleanup\n");
+  expect(text).toContain("Apply the shared **Review scratch cleanup** contract to all declared slots only,");
+  expect(text).not.toMatch(/cleanup[^\n]*(?:above|below)/i);
+});
