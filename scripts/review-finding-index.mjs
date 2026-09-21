@@ -4,7 +4,7 @@ import { cliAdapters, normalizeReviewerHead } from "./reviewer-adapters.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { hasVerdictBlock, parseVerdict } from "./review-verdict.mjs";
+import { START, END, hasVerdictBlock, parseVerdict } from "./review-verdict.mjs";
 
 // Current adapters already return verdict-only text (.last for Codex, .result for Claude).
 // Also support old transcript artifacts without cutting a markerless verdict's provenance.
@@ -46,14 +46,27 @@ export function findingIndex(url, comment) {
   if (typeof comment.body !== 'string') throw new Error('live comment body missing');
   assertReviewerVerdict(comment.body);
   return findingHeadings(comment.body, line => {
-    console.warn(`review-verdict: legacy prose fallback (nonfatal), unindexed finding in ${url}: ${line}`);
+    console.warn(`review-verdict: prose divergence (nonfatal), unindexed finding or verdict inconsistency in ${url}: ${line}`);
   }).map(heading => ({ comment: url, heading }));
 }
 
 // Share heading recognition without fabricating live provenance for unposted text.
 // Legacy unsupported openings are logged, not fatal; only schema can authorize landing.
 export function findingHeadings(body, unsupported = () => {}) {
-  if (hasVerdictBlock(body)) return parseVerdict(body).findings.map(f => f.heading);
+  if (hasVerdictBlock(body)) {
+    const verdict = parseVerdict(body);
+    const headings = verdict.findings.map(f => f.heading);
+    // Inspect only surrounding prose, never JSON string values in the wire block.
+    const prose = body.slice(0, body.indexOf(START)) + body.slice(body.indexOf(END) + END.length);
+    for (const heading of proseFindings(prose, unsupported, verdict.verdict)) {
+      if (!headings.includes(heading)) unsupported(heading);
+    }
+    return headings;
+  }
+  return proseFindings(body, unsupported);
+}
+
+function proseFindings(body, unsupported, verdict) {
   const findings = [];
   let fence;
   for (const line of body.split(/\r?\n/)) {
@@ -63,6 +76,10 @@ export function findingHeadings(body, unsupported = () => {}) {
       continue;
     }
     if (marker) { fence = marker; continue; }
+    // Blockquotes and indented code are evidence/data, not review assertions.
+    if (/^(?: {4}|\t| {0,3}>)/.test(line)) continue;
+    const proseVerdict = /^ {0,3}(?:#{1,6} +)?(?:\*\*)?VERDICT:\s*(PASS|FAIL)\b/i.exec(line);
+    if (verdict && proseVerdict && proseVerdict[1].toUpperCase() !== verdict) unsupported(line);
     // Review skill requires per-finding headings. Other section headings are not findings.
     // Explicit delimiters distinguish severity labels from High-level prose.
     // Strip only Markdown's permitted ATX indentation; preserve original bytes.
