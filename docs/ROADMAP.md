@@ -103,7 +103,8 @@ design conflicts (notably #446 versus #452) and closed advisory residuals. LOW
 wording/test-quality observations remain advisories, not new residual issues.
 
 The #307 overlap/review-round advisories now have live drain evidence (#414/#446
-and #455), not a new milestone band. **The next band is a product decision.**
+and #455), not a new milestone band. **Amit agreed to R18 on 2026-09-21 ("agree on R18."); see the
+[unattended-trains contract](plans/R18.md).**
 September 10 limits and R17f measurements below are history, not instructions to
 rerun or defer the completed drain.
 
@@ -1149,6 +1150,44 @@ already-authorised operations, never toward wider authority.
 
 ---
 
+### R18 — Unattended trains *(sixth pass, 2026-09-21)*
+
+*Evidence: the first sustained workload, the 2026-09-19..21 drain, recorded 30 DONE
+row outcomes and 18 HALTED attempts in `~/.agentrig/trains/drain/logs/drain.log`
+(the [current checkpoint](#current-checkpoint--r17a-dogfood-evidence-2026-09-19-to-2026-09-21)
+explains the operator reclassification and counting limits). Together with the
+[#320 replay trial](https://github.com/agentkitai/agentrig/issues/320), this exposed
+costs dominated by operational friction, not missing capabilities: bookkeeping
+halts over receipts, canonical headings, residual metadata, merge sequencing and
+reopened blockers, each requiring an operator-written resume row and a fresh
+conductor re-clone/rebuild/re-orientation. Concurrent load on one provider login
+was fragile: mid-reply disconnects were fatal to children (#467), and two conductors
+hit fetch failures. Prose-pattern review gates produced false positives (#424,
+#425, #456, #459); review tooling PRs reviewed themselves with their own adapters
+(#320 row-115 replays deadlocked both arms). These are observed costs, not a claim
+that every halt was a code defect or that the drain was already unattended.*
+
+Amit agreed on 2026-09-21: "agree on R18." [Band contract](plans/R18.md).
+
+| Row | Deliverable | Package |
+|---|---|---|
+| R18a *(landed — PR #471, `54420e4c`, #467 closed; follow-up #472 landed in PR #474, `23e1d157`)* | **Turn-boundary recovery and resumable children**: discard a partial failed model stream, record `turn.aborted`, and re-request once within a bounded per-session recovery budget, then fail. Parent `subagent.end` reports error only after child recovery is exhausted | core |
+| R18b | **Conductor resume in place**: a halted/crashed conductor continues its own session from persisted PR ledger/receipts. `agentrig run --resume <session>` for headless ship/topic restores the plan, repair-round counter and child inventory; ship defines resume at each phase | core + cli + skills |
+| R18c | **Train as a command**: `agentrig train <dir>` owns queue-directory row files with a zod schema for task, authorization quote, scope and environment; validates checkout between rows, runs headless, verifies landed PR and green post-merge CI, moves rows to done/halted with machine-readable halt reasons, and prints status after each row. Replaces `drain.sh`/`train.sh` | cli + core |
+| R18d | **Structured verdicts and base-pinned review tooling**: a zod verdict records reviewed head, asserted model, findings with severity, file:line and verbatim heading, and verdict. Posting helper and land consume it instead of regex prose; reviews use base-branch skills/adapters, never PR copies | cli + scripts + skills |
+| R18e | **Per-row cost and concurrency**: roll up row/child usage into a ledger priced at configured rates and expose queue status; a per-provider-entry concurrency limit queues work instead of overloading a shared login | core + cli |
+
+Acceptance: a comparable drain of at least 30 rows needs zero operator resume rows
+for bookkeeping; a killed conductor resumes without creating a new session; a
+review-tooling change completes review without using the PR's own adapters.
+Row-specific proof and baseline limits are in the [contract](plans/R18.md).
+
+Renunciation: no new capability in this band. Every row makes existing unattended
+shipping cheaper, more resumable or more verifiable. Security defaults do not
+widen authority; recovery and queueing do not supply task or merge authorization.
+
+---
+
 ## 4. What AgentRig deliberately does not copy
 
 Written down so future sessions don't "helpfully" build them (pi's lesson: renunciations are a
@@ -1230,7 +1269,8 @@ of AgentRig's vision and will be implemented. There is no demand/evidence activa
 Evidence still governs honest benefit claims and default enablement; generated skills remain
 opt-in until a separate comparison establishes benefit. E3 remains inconclusive, not rewritten.
 New live evaluation spending still needs an agreed budget, but does not block network-free
-implementation and verification. Optional polish remains at the literal end of this roadmap.
+implementation and verification. R18 is the next committed band, agreed on 2026-09-21;
+its [contract](plans/R18.md) and order 18 below extend this continuation. Optional polish remains at the literal end of this roadmap.
 
 The following is the default delivery order, chosen for impact and dependencies. Arrows are
 order within a group, not new milestone identifiers. Independent rows may be implemented in
@@ -1260,6 +1300,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 15 | R15l (done, PR #194) | R10c is delivered; ordinary trusted SDK composition is supported, external workflow engines remain renounced. Documentation-only and independent of the remaining R15 implementations. |
 | 16 | R16a (done, PR #199 + repair #206) → R16b (done, PR #203 + repair #208) → R16c (done, PR #198) → R16d (done, PR #200) → R16e (done, PR #201) → R16f (done, PR #204) → R16g (done, PR #210) → R16h (done implementation, PR #211) | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
 | 17 | R17a (gate) + R17b → R17c → R17d → R17e → R17f → R17g | Feel and defaults after every capability row. R17a is the gate under which the band is built, not a row the train expands: its artifacts are R17b's first commit, so the defaults pass is the first PR and carries its own before numbers. Measurement locks the gain in; the follow-ups sweep is last because it does not change feel. |
+| 18 | R18a → R18b → (R18c ∥ R18d) → R18e | Unattended trains: R18b needs R18a session recovery; R18c and R18d are independent after R18b; R18e consumes R18c queue and R18d verdict schema. [Contract](plans/R18.md). |
 
 R6a has started independently after R5e merged: its memory-hardening dependencies are complete
 and procedure detection does not depend on MCP pinning or extension loading. This parallel start
@@ -1288,7 +1329,9 @@ Exit criteria for active work: appropriate build/typecheck/regression checks pas
 negative case fails without the fix; current guarantees and limitations are updated; and the
 relevant real surface is exercised where the row claims runtime behavior. A skipped OS test is
 a skip, not validation. Documentation-only changes need link and consistency checks rather
-than unrelated runtime tests.
+than unrelated runtime tests. For the R18 band-definition PR, verify §3/§5/STATUS and
+[the band contract](plans/R18.md) agree and their links resolve; run instruction-contract
+tests if their pinned sentences change. This doc-only exit does not satisfy R18 runtime acceptance.
 
 Dogfooding remains a source of feedback, not the sole success criterion. Behavioral improvements
 must cite E's independent checks and report costs and failures. No requirement to invent a

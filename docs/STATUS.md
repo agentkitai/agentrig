@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: fatal provider turn lifecycle (#476, #477), implemented pending verification and review; next: next queued drain row under ROADMAP §5 (no dependent work pulled forward).
+Current roadmap row: define the R18 band: unattended trains — documentation implemented, pending review. R18a landed; next: R18b → (R18c ∥ R18d) → R18e under ROADMAP §5.
 
 ## Fatal provider turn lifecycle (#476, #477) — implemented, pending review
 
@@ -19,7 +19,20 @@ retaining its successful subsequent-response assertion; no CLI runtime changed.
 Full declared-check receipts accompany the PR. Independent review and hosted
 exact-head checks remain pending.
 
-## Turn-boundary disconnect recovery (#467) — implemented, pending review
+## R18 band definition — 2026-09-21
+
+Builder: AgentRig (documentation-only ship child). Amit agreed: "agree on R18."
+[ROADMAP §3](ROADMAP.md#r18--unattended-trains-sixth-pass-2026-09-21),
+[§5 sequencing](ROADMAP.md#5-sequencing-and-exit-criteria) and the
+[band contract](plans/R18.md) define five rows for recovery, same-session conductor
+resume, a train command, structured/base-pinned review and cost/concurrency.
+The September 19–21 drain and #320 replay trial motivate the band; no product code
+or runtime acceptance is claimed here. R18a landed in PR #471 (`54420e4c`, #467 closed); follow-up #472 landed in PR #474 (`23e1d157`);
+its existing recovery deliveries do not mark the whole band complete. Doc-only
+link/consistency and declared-check receipts travel with the PR. LOW own-wording
+observations remain advisories, not residual issues.
+
+## Turn-boundary disconnect recovery (#467) — landed in PR #471; follow-up #472 landed in PR #474
 
 Core discards uncommitted partial assistant output on provider stream failure and
 re-requests once per turn, capped at three recoveries per run. `turn.aborted` records
@@ -37,8 +50,8 @@ usage. Fatal-uncommitted output remains observable. Follow-up #472 balances
 `turn.end` on both recovery-cap exhaustion (existing fatal `reason=error`) and
 ordinary-budget exhaustion during a failed stream (existing `reason=budget`).
 Fake-provider regressions assert persisted event ordering and no excess requests;
-remove-emit mutation probes verify the terminal-turn assertions. Independent
-review remains pending.
+remove-emit mutation probes verify the terminal-turn assertions. Delivery receipts
+are recorded in PR #471 (`54420e4c`) and PR #474 (`23e1d157`).
 
 ## R17a dogfood evidence checkpoint — 2026-09-21
 
@@ -49,7 +62,8 @@ and 40 merged PRs in the September 19–21 date-window cross-check. R17a accepta
 is met for the drained work, not retroactively for operator-built R17 batches.
 Operator queueing, resumes, design decisions and advisory closure remain explicit.
 September 10/R17f limits stay history; #307 advisories now have live drain receipts.
-No new milestone band; the next band is a product decision. No runtime behavior changed.
+At that checkpoint the next band was a product decision; R18 is now agreed above.
+No runtime behavior changed in the checkpoint documentation.
 
 ## Reviewer first-line robustness and arbiter citation (#456, #458)
 
@@ -2971,7 +2985,15 @@ Repair exact-head CI `34039760450` and repaired-main post-CI are green; the orig
 Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R15j is done (PR #205, all-four post-main green); R15k is done (PR #207, all-four post-main green); R15l is done (PR #194); R16g is done (PR #210); R16h implementation is done (PR #211; delivery checkpoint above); R16b is done (PR #203 + repair #208); R16e is done (PR #201, all four post-main green); R16f is done (PR #204, all four post-main checks green); R16a is done (PR #199, restored by repair #206 with all four repaired-main checks green); R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
-## Current priorities — revised 2026-09-06
+## Current priorities — revised 2026-09-21
+
+### R18 band — open
+
+Deliver [unattended trains](plans/R18.md) in ROADMAP §5 order:
+R18a → R18b → (R18c ∥ R18d) → R18e. R18a landed in PR #471 (`54420e4c`, #467 closed); follow-up #472 landed in PR #474 (`23e1d157`).
+Acceptance requires a comparable ≥30-row drain with zero bookkeeping resume rows,
+same-session recovery after conductor death and review independent of PR adapters.
+Security defaults and task-specific merge authority remain unchanged.
 
 ### R15l done — PR #194; historical decision and verification checkpoints
 
