@@ -101,12 +101,29 @@ authorization are forwarded verbatim as data, not converted into tool permission
   returned by the bounded GitHub query must be green (conservative on reruns).
 - `halted/`: the first failed row; no subsequent row starts. Exit code 1.
 - `logs/<id>.log`: commands, stdout/stderr and retry markers. The headless child is
-  asked to write `logs/<id>.result.json` containing only `{"pr":123}`. This is a PR
-  pointer, **not** landing proof. `logs/<id>.state.json` records progress, PR/head,
+  given a host-owned `--output-schema` and returns final assistant JSON `{"pr":123}`.
+  The host captures `message.append` plus successful `output.validated` events from
+  existing `run --json` stdout and atomically writes `logs/<id>.result.json`. No
+  model tool writes outside the checkout, and no permission rule is widened. Missing,
+  malformed or unvalidated output halts. This receipt is a PR pointer, **not** landing proof. `logs/<id>.state.json` records progress, PR/head,
   merge commit and observed session IDs. `logs/<id>.halt.json` records machine-readable
   `row`, `phase`, `reason`, `pr`, `head`, `mergeCommit`, `sessionIds`; unavailable IDs
   are null/empty, never invented. Files in logs are operational metadata, not session
   JSONL; canonical session logs remain owned by the existing run/session store.
+
+The prompt serializes the entire row as one JSON value: only its `authorization`
+field is the verbatim human quote, not a heading forged inside task text. Each
+invocation supplies a fresh host-generated `agentrig-train-row:<UUID>` line for the
+PR body. Unless the operator explicitly pinned that PR in `resume.pr`, the landing
+gate requires this exact line and rejects merges already in the starting base.
+It freshly fetches the configured base and checks merge ancestry; missing objects,
+fetch failures and ancestry errors halt. Pinned resumes still require the configured
+repository/base, reachable merge commit and exact-merge green CI.
+
+All queue entries must have valid `.json` row names; an unexpected extension is an
+error, never silently skipped as an empty queue. Atomic metadata writes use fresh
+exclusive-create temporary names, so an interrupted stale `.tmp` cannot prevent a
+recovery halt record. Stale evidence is left intact.
 
 Before **each** row, including resumes, validate repository root, clean checkout,
 base branch and exact GitHub origin; fetch, fast-forward only, and refuse a locally

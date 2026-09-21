@@ -1,6 +1,11 @@
 # Status
 
-## R18c — train as a command (builder handoff; review/landing pending)
+## R18c — train as a command (repair round 1; review/landing pending)
+
+Repair round 1: JSON-encoded authority; host-owned validated final-PR transport
+without permission widening; row-marker/fresh-ancestry landing binding with an exact
+pinned-resume exception; six checkout gate regressions; invalid-extension refusal
+and stale-temp-safe recovery records.
 
 `agentrig train <dir>` now drains strict JSON rows via a core queue transport and
 the existing headless run path. Each row validates and rebuilds its checkout; done
