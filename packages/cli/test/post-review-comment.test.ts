@@ -387,7 +387,7 @@ it("M-quoted-contract: allows explicit contract quotation inside a real finding 
 });
 it("F2/F3 accepts quoted contract citations only inside a bounded finding section", () => {
   const phrase = echoPhrases[1];
-  const body = `VERDICT: FAIL\r\nReviewed head ${head}\r\n### LOW: Contract citation\r\nThe contract is wrong; update the guard.\r\n> ${phrase.slice(0, 30)}\r\n> ${phrase.slice(30)}\r\n\`${phrase}\`\r\n\`\`\`text\r\n${phrase}\r\n\`\`\`\r\n    ${phrase}\r\n`;
+  const body = `VERDICT: FAIL\r\nReviewed head ${head}\r\n### LOW: Contract citation\r\nThe contract is wrong; update the guard.\r\n> ${phrase.slice(0, 30)}\r\n> ${phrase.slice(30)}\r\n\`${phrase}\`\r\n\`\`\`text\r\n${phrase}\r\n\`\`\`\r\n`;
   expect(run(body).posted).toBe(`${heading}\n\n${body}`);
   const outside = `${body}\r\n\r\nLater unheaded prose:\r\n> ${phrase}\r\n`;
   expect(run(outside).args).toBeUndefined();
@@ -456,4 +456,14 @@ it.each([
   expect(run(body + echoPhrases[0]).stderr).toContain("reviewer body echoes instructions; not a verdict");
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
+});
+it("F1 refuses a four-space lazy paragraph echo inside a finding", () => {
+  const phrase = echoPhrases[0];
+  const body = `VERDICT: FAIL\n### LOW: Guard wording\nThe guard is too strict; relax it.\n    ${phrase}\n`;
+  expect(run(body).args).toBeUndefined();
+});
+it("F2 permits a blockquote citation in a non-ATX indexed finding", () => {
+  const phrase = echoPhrases[1];
+  const body = `VERDICT: FAIL\n**Findings**\nF1 — HIGH, blocking — the contract sentence is wrong\nThe wording misleads; reword it.\n> ${phrase}\n`;
+  expect(run(body).args).toBeDefined();
 });

@@ -84,3 +84,11 @@ it.each([
 it("F1 still fails closed for a real delimiter-less ALL-CAPS heading", () => {
   expect(() => findingIndex(url, { html_url: url, body: "### HIGH title" })).toThrow(/unindexed finding/);
 });
+it.each([
+  "**F2:** HIGH — unsupported bolded numbered finding",
+  "- F2: HIGH — unsupported list-item finding",
+  "* F3 — MEDIUM — unsupported bullet finding",
+  "**[P4]** Unknown priority",
+])("F3 refuses unsupported decorated finding grammar: %s", body => {
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+});

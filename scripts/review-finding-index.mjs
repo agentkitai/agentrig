@@ -39,6 +39,9 @@ export function assertReviewerVerdict(body) {
     if (/^ {0,3}#{1,6} /.test(line)) {
       inFinding = headings.has(line);
       fence = undefined;
+    } else if (headings.has(line)) {
+      inFinding = true;
+      fence = undefined;
     }
     if (!line.trim()) {
       // A later unheaded paragraph is not part of the preceding finding.
@@ -47,7 +50,7 @@ export function assertReviewerVerdict(body) {
       continue;
     }
     const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
-    if (inFinding && (fence || marker || /^ {0,3}> /.test(line) || /^ {4}/.test(line) || /^`[^`]+`$/.test(line.trim()))) {
+    if (inFinding && (fence || marker || /^ {0,3}> /.test(line) || /^`[^`]+`$/.test(line.trim()))) {
       if (marker) {
         if (fence && marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
         else if (!fence) fence = marker;
@@ -98,9 +101,13 @@ function findingHeadings(body, unsupported = () => {}) {
     // Priority planning sections are the explicit prose exception, not all P1 prose.
     const unsupportedOpening = /^ {0,3}#{1,6} +/.test(line) && /^(?:\*\*)?(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])\b/.test(candidate)
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
+    // Recognize an optional Markdown list or bold wrapper before applying the
+    // beginning-of-line fallback. This keeps inline prose out while refusing
+    // unsupported findings formatted as list entries or bold labels.
+    const unsupportedCandidate = line.replace(/^\s{0,3}(?:[-*+]\s+)?(?:\*{1,2})?/, '');
     if (finding) {
       findings.push(line);
-    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:^\s*F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|^\s*\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:^F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|^\[P\d+\]|^(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(unsupportedCandidate))) {
       unsupported(line);
     }
   }
