@@ -1,6 +1,18 @@
 # Status
 
-Current roadmap row: define the R18 band: unattended trains — documentation implemented, pending review. R18a landed; next: R18b → (R18c ∥ R18d) → R18e under ROADMAP §5.
+Current roadmap row: R18b — implemented, pending independent review. R18a landed; next: (R18c ∥ R18d) → R18e under ROADMAP §5.
+
+## R18b — conductor resume in place (implementation complete)
+
+Headless `run --resume` no longer requires a replacement task. Same-session replay
+prefers committed message logs to stale snapshots and restores plan/child observations
+without executing recorded tools. Ship/topic resume instructions reconcile repair counters,
+read-back receipts and child outcomes with the live PR head before phase continuation;
+missing child terminal events do not assert death. No core workflow decision engine,
+TUI change or expansion of authorization/trust is introduced. Named fail-first/mutation,
+full declared-check and CRLF instruction receipts accompany the PR; review/landing remain
+with the parent. PLAN §2.6 now explicitly documents balanced fatal-uncommitted subagent
+terminal output, completing #475. R18a and #472 are already landed (#471/#474).
 
 ## Fatal provider turn lifecycle (#476, #477) — implemented, pending review
 
@@ -12,8 +24,7 @@ reason (`error` for ordinary provider errors, `budget` for spend-cap failures, o
 contract to provider stream failures and preserves terminal classification (C1/C2);
 no runtime or tests changed in this repair.
 Fake-provider regressions cover pre-delta failure, per-turn and per-run caps;
-fail-first and named turn-end/order mutants are recorded in the PR. #475 remains
-out of scope. Arbiter session 32a76383 approved updating only the existing CLI
+fail-first and named turn-end/order mutants are recorded in the PR. #475 is reconciled by the R18b PLAN contract below. Arbiter session 32a76383 approved updating only the existing CLI
 pre-delta provider-error regression to assert same-session continuation while
 retaining its successful subsequent-response assertion; no CLI runtime changed.
 Full declared-check receipts accompany the PR. Independent review and hosted

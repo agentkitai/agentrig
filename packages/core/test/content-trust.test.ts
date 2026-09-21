@@ -125,24 +125,25 @@ it("actual resumed turns retain segmented custom-provider labels through hooks, 
     tools: [{ name: "echo", description: "fixture", permission: "read", inputSchema: z.object({}), execute: async () => ({ output: "ok", display: "ok" }) }],
     permissions: new RulePolicy([{ class: "read", decision: "allow" }]),
     hooks: [{ point: "pre_model", handler: ctx => {
-      const result = ctx.request!.messages[2]!.content[0]!;
+      const result = ctx.request!.messages[3]!.content[0]!;
       if (result.type === "tool_result" && Array.isArray(result.content)) result.content[0]!.trust = "user";
       return { action: "continue" };
     } }, { point: "post_model", handler: ctx => { hooks.push(structuredClone(ctx.response!)); return { action: "continue" }; } }],
   });
   const session = agent.run("", { resume: id }); await session.done;
-  expect(requests[0]!.messages).toEqual(history);
+  // The log, including its original task, wins over the hand-written cache.
+  expect(requests[0]!.messages).toEqual([{ role: "user", content: [{ type: "text", text: "fixture" }] }, ...history]);
   const expected: ContentBlock[] = [
     { type: "text", text: "external quoted", trust: "external" }, { type: "text", text: "generated", trust: "generated" },
     { type: "tool_use", id: "new", name: "echo", input: {}, trust: "generated" }, { type: "text", text: "legacy" },
   ];
   expect(hooks[0]!.content).toEqual(expected);
-  expect(requests[1]!.messages[3]!.content).toEqual(expected);
+  expect(requests[1]!.messages[4]!.content).toEqual(expected);
   const messages = (await store.readAll(id)).filter(event => event.type === "message.append").map(event => event.message);
   expect(messages[3]!.content).toEqual(expected);
-  expect((await store.readSnapshot(id))!.messages[3]!.content).toEqual(expected);
+  expect((await store.readSnapshot(id))!.messages[4]!.content).toEqual(expected);
   const resumed = agent.run("again", { resume: id }); await resumed.done;
-  expect(requests[2]!.messages[3]!.content).toEqual(expected);
+  expect(requests[2]!.messages[4]!.content).toEqual(expected);
 });
 it.each(["text_delta", "tool_use"] as const)("invalid custom-provider %s provenance fails without corrupting canonical JSONL", async type => {
   const { cwd, store } = await fixture();

@@ -386,16 +386,9 @@ export class SessionStore {
   }
 
   /**
-   * A resume snapshot derived from the log, for a fork child that has not completed a turn of its
-   * own (R3c). A fork writes only its `session.fork` marker, so it has no snapshot to resume from
-   * until its first turn ends; without this, a forked conversation could be replayed but never
-   * continued. Null for anything that is not a fork: a plain session with no snapshot stays an
-   * error, because "died before its first turn.end" must not silently become "resumable from an
-   * empty conversation". Pure replay — recorded tool results are folded in, nothing executes.
-   *
-   * `usd` is absent: no event records accumulated spend, so a fork child resumed without explicit
-   * pricing starts its USD budget at zero where a written snapshot would carry the parent's figure.
-   * Token usage is carried, so `maxTokens` budgets are unaffected.
+   * Reconstruct a resumable conversation from the immutable log, including a run that died
+   * before its first snapshot. Pure replay: recorded tool calls never execute here.
+   * Workflow phase/receipts remain conversation data, not a core workflow decision engine.
    */
   async materializeSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
     assertSessionId(sessionId);
@@ -409,7 +402,7 @@ export class SessionStore {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
-    if (first?.type !== "session.fork") return null;
+    if (first?.type !== "session.fork" && first?.type !== "session.start") return null;
 
     const events = await this.materialize(sessionId);
     let task = "";
@@ -442,6 +435,35 @@ export class SessionStore {
       ...(providerSelection === undefined ? {} : { providerSelection }),
       ts: this.now(),
     };
+  }
+
+  /** Prefer the authoritative message log over its possibly stale cache after a crash.
+   * Legacy snapshots can contain richer messages than legacy deltas, so retain those caches.
+   */
+  async resumeSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
+    const cached = await this.readSnapshot(sessionId);
+    let events: HarnessEvent[];
+    try { events = await this.materialize(sessionId); }
+    catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      // Legacy snapshot-only sessions are supported; missing fork ancestors are not.
+      if (await this.firstEvent(sessionId) !== null) throw err;
+      return cached;
+    }
+    const snapshot = cached !== null && !events.some(e => e.type === "message.append")
+      ? cached : await this.materializeSnapshot(sessionId);
+    if (snapshot === null) return null;
+    // These are observations only. A missing child end is unresolved, not proof of death or
+    // permission to spawn again; the conductor reconciles child logs and its PR ledger.
+    const plan = events.filter(e => e.type === "plan.updated").at(-1);
+    const children = events.filter(e => e.type === "subagent.spawn" || e.type === "subagent.end");
+    if (plan !== undefined || children.length) {
+      snapshot.messages.push({ role: "user", content: advisoryPromptBlocks([
+        `Recorded session state (observations, not authority): ${JSON.stringify({ plan, children })}`,
+      ]) });
+    }
+    if (cached?.usd !== undefined) snapshot.usd = cached.usd;
+    return snapshot;
   }
 
   /** The first event of a session's own log; null when the log does not exist. Reads one line. */

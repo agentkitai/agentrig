@@ -348,7 +348,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     program.command("run [task]").description("Run the agent on a task, non-interactively"),
     HEADLESS_MAX_TURNS,
   )
-    .option("--resume <id>", "continue an existing session from its snapshot")
+    .option("--resume <id>", "continue an existing session in place from its recorded history")
     .option("--ci", "bounded CI mode: explicit file input, headless asks fail closed, never YOLO")
     .option("--task-file <path>", "CI task text, at most 16 KiB")
     .option("--event-file <path>", "CI JSON event, at most 256 KiB; no implicit environment lookup")
@@ -364,8 +364,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .action(async (task: string | undefined, opts: RunOptions & CiFlags, cmd: Command) => {
       const flags: CiFlags = { ci: opts.ci, taskFile: opts.taskFile, eventFile: opts.eventFile, eventField: opts.eventField,
         report: opts.report, pr: opts.pr, repo: opts.repo, comment: opts.comment };
-      if (opts.ci === true ? task !== undefined : task === undefined || Object.entries(flags).some(([key, value]) => key !== "ci" && value !== undefined)) {
-        console.error("run requires a positional task, or --ci with explicit file input/output flags; do not mix the two modes"); process.exitCode = 1; return;
+      if (opts.ci === true ? task !== undefined : (task === undefined && opts.resume === undefined) || Object.entries(flags).some(([key, value]) => key !== "ci" && value !== undefined)) {
+        console.error("run requires a positional task or --resume <id>, or --ci with explicit file input/output flags; do not mix the two modes"); process.exitCode = 1; return;
       }
       // `run` is a headless entry point even when launched from a terminal.
       const resolved = await configured(opts, cmd, false);
@@ -373,7 +373,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       if (opts.ci === true) {
         try { await withMaintenanceSignal(signal => runCi(flags, resolved, signal, { run: executeRun, ...dependencies.ci }), undefined, "CI run"); }
         catch { console.error("CI run refused or failed; no validated completion report"); process.exitCode = 1; }
-      } else await executeRun(task!, resolved);
+      } else await executeRun(task ?? "", resolved);
     });
 
   withProviderOptions(program.command("review").description("One bounded advisory diff review; costs supervisor-role tokens, never runs tests"))

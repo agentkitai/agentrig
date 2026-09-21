@@ -336,3 +336,14 @@ describe("--drift-contract's default is load-bearing", () => {
     expect((await run(["run", "x"]))?.opts.driftScope).toEqual([]);
   });
 });
+
+it("run --resume accepts no replacement task and forwards the same session id", async () => {
+  const { buildProgram } = await import("../src/program.js");
+  let received: { task: string; resume: string | undefined } | undefined;
+  const program = buildProgram({ run: async (task, opts) => {
+    received = { task, resume: opts.resume };
+    return undefined;
+  } });
+  await program.parseAsync(["node", "agentrig", "run", "--resume", "recorded-conductor"]);
+  expect(received).toEqual({ task: "", resume: "recorded-conductor" });
+});

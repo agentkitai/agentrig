@@ -264,6 +264,14 @@ interface Agent { run(task: string, opts?: { cwd?: string; resume?: string; id?:
 
 Session persistence: one JSONL file per session under `.agentrig/sessions/<id>.jsonl` (events) + periodic snapshot of the message array for cheap resume.
 
+R18b headless `agentrig run --resume <session>` continues that same session without a
+new positional task. Modern committed-message logs take precedence over snapshot caches;
+a run that crashed before its first snapshot is also resumable. Recorded plan and child
+spawn/end observations are restored as advisory context. The conversation retains PR-ledger
+read-back receipts and repair counters; ship/topic reconcile them with the live PR head
+before acting. Core neither interprets phases nor grants authority from replayed text.
+Legacy snapshot-only conversation details remain supported.
+
 Mid-reply provider stream failures abort the uncommitted assistant turn (`turn.aborted`
 with the provider error). Core discards partial text, reasoning and tool calls, then
 re-requests the same history once per turn, at most three times per session run.
@@ -291,7 +299,9 @@ Fatal provider stream failures (including pre-delta failures and recovery-cap ex
 one fatal `error` before the matching `turn.end`, then `session.end` with the existing
 classified reason (`error` for ordinary provider errors, `budget` for spend-cap failures,
 or `aborted` when cancellation takes precedence); ordinary-budget exhaustion during a
-failed stream also closes the turn before session end.
+failed stream also closes the turn before session end. A balanced `turn.end` promotes
+fatal-uncommitted terminal subagent text to its answer buffer; only `turn.aborted`
+discards an attempt. This is the delivered #472/#475 contract, not separately tracked work.
 
 H6 keeps `agent.ts` as the model-loop coordinator. Internal `tool-execution.ts` owns the sequential
 tool pipeline and registered-name emission authority; `session-lifecycle.ts` owns ordered event
