@@ -1,5 +1,17 @@
 # Status
 
+## R18d — structured verdicts and base-pinned review tooling (implementation; review pending)
+
+A versioned zod review wire contract binds full reviewed head, model/source, slot,
+PASS/FAIL and structured findings. Adapter output preserves human prose; posting,
+finding indexing and land use schema validation with a logged nonfatal historical
+prose fallback that cannot authorize landing. Review helpers and skills are pinned
+to the fetched base checkout, not PR copies. Shipping policy owns completion-marker
+timing; the conductor adds the marker only after review disposition, before land.
+ROADMAP completion is deliberately not set by this builder. #473 heading variants
+and #487 timing are pinned by tests. Named fail-first/mutation and full-check receipts
+travel with the PR; R18c/e remain out of scope.
+
 R18b complete — PR #481: prior code reviews resolved; operator-sanctioned final completion marker recorded. Final marker delta review and exact-head CI remain landing gates.
 
 Current roadmap row: R18b — done (PR #481), pending landing. R18a landed; next: (R18c ∥ R18d) → R18e under ROADMAP §5.

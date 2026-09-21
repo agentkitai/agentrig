@@ -30,7 +30,7 @@ function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?
       writeFileSync(join(dir, "head"), "#!/bin/sh\nprintf 'damaged\\n'\n");
       chmodSync(join(dir, "head"), 0o755);
     }
-    if (source !== undefined) writeFileSync(join(dir, "helper.mjs"), source.replaceAll('"./review-finding-index.mjs"', JSON.stringify(new URL("../../../scripts/review-finding-index.mjs", import.meta.url).href)));
+    if (source !== undefined) writeFileSync(join(dir, "helper.mjs"), source.replaceAll('"./review-verdict.mjs"', JSON.stringify(new URL("../../../scripts/review-verdict.mjs", import.meta.url).href)).replaceAll('"./review-finding-index.mjs"', JSON.stringify(new URL("../../../scripts/review-finding-index.mjs", import.meta.url).href)));
     const result = spawnSync(process.execPath, [source === undefined ? helper : join(dir, "helper.mjs"), "372", reviewer, join(dir, "model"), join(dir, "body"), sha, base, join(dir, "comment")], {
       cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: sizeReason === undefined ? "" : join(dir, "size-ledger"), PATH: `${dir}:${process.env.PATH}` },
     });
@@ -373,17 +373,17 @@ it("M-contract-drift: pins literal echo phrases to current review skill", () => 
   const contract = readSkillText(new URL("../../../.agentrig/skills/review/SKILL.md", import.meta.url));
   for (const phrase of echoPhrases) expect(contract).toContain(phrase);
 });
-it.each(echoPhrases)("M-echo-gate: rejects instruction echo before gh: %s", phrase => {
+it.each(echoPhrases)("M-legacy-echo: logs nonfatal fallback for instruction quotation: %s", phrase => {
   const result = run(`VERDICT: PASS\nReviewed head ${head}\n${phrase}\n`);
-  expect(result.status).not.toBe(0);
-  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
-  expect(result.args).toBeUndefined();
+  expect(result.status).toBe(0);
+  expect(result.stderr).toContain("legacy prose fallback");
+  expect(result.args).toBeDefined();
 });
-it("M-quoted-contract: allows explicit contract quotation inside a real finding only", () => {
+it("M-quoted-contract: allows legacy contract quotations without echo heuristics", () => {
   const body = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\nscripts/post-review-comment.mjs:30 lacks evidence; fix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body).posted).toBe(`${heading}\n\n${body}`);
-  expect(run(`VERDICT: PASS\n> ${echoPhrases[1]}\n`).args).toBeUndefined();
-  expect(run(body + "\n" + echoPhrases[0]).args).toBeUndefined();
+  expect(run(`VERDICT: PASS\n> ${echoPhrases[1]}\n`).args).toBeDefined();
+  expect(run(body + "\n" + echoPhrases[0]).args).toBeDefined();
 });
 it("M-size-gate: large genuine review requires nonempty conductor ledger before gh", () => {
   const body = `VERDICT: PASS\nReviewed head ${head}\n` + "Evidence from targeted probe.\n".repeat(2000);
@@ -436,12 +436,12 @@ it.each([
     { comment: url, heading: atx },
   ]);
   // Prose must neither disable the echo guard nor discard a supported finding's escape.
-  expect(run(body + "\n" + echoPhrases[0]).stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(run(body + "\n" + echoPhrases[0]).stderr).toContain("legacy prose fallback");
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
 });
 
-it.each(["blockquote", "fence", "indent"])("M-bounded-quote: posts %s citations only inside a finding", form => {
+it.each(["blockquote", "fence", "indent"])("M-bounded-quote: posts %s legacy citations without section heuristics", form => {
   const phrase = echoPhrases[1];
   const wrapped = phrase.replace("probed and", "probed\n and");
   const citation = form === "blockquote" ? wrapped.split("\n").map(line => `> ${line}`).join("\n")
@@ -452,18 +452,18 @@ it.each(["blockquote", "fence", "indent"])("M-bounded-quote: posts %s citations 
   expect(run(body).posted).toBe(`${heading}\n\n${body}`);
   for (const boundary of ["\nUnrelated summary\n", "## Summary\n", "---\n"]) {
     const refused = run(prefix + boundary + citation);
-    expect(refused.status).not.toBe(0);
-    expect(refused.args).toBeUndefined();
+    expect(refused.status).toBe(0);
+    expect(refused.args).toBeDefined();
   }
-  expect(run(`VERDICT: PASS\n${citation}`).args).toBeUndefined();
+  expect(run(`VERDICT: PASS\n${citation}`).args).toBeDefined();
 });
-it.each(["\n", "\r\n", " \t "])("M-normalized-echo: refuses literal whitespace reflow %j", whitespace => {
+it.each(["\n", "\r\n", " \t "])("M-normalized-echo: logs legacy whitespace reflow %j", whitespace => {
   for (const phrase of echoPhrases) {
     const body = "VERDICT: PASS\n" + phrase.split(" ").join(whitespace);
     const result = run(body);
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
-    expect(result.args).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("legacy prose fallback");
+    expect(result.args).toBeDefined();
   }
 });
 
@@ -474,41 +474,68 @@ it.each(["> ", "    ", "\t", "```text\n"])("R1-F2 blank lines preserve finding s
   expect(result.status, result.stderr).toBe(0);
   expect(result.posted).toBe(`${heading}\n\n${body}`);
 });
-it.each(["    ", "\t"])("R1-F3 lazy indented prose is not code: %j", indent => {
+it.each(["    ", "\t"])("R1-F3 lazy indented prose is legacy data: %j", indent => {
   for (const paragraph of ["Scenario prose.", "- List paragraph.", "1. Ordered paragraph."]) {
     const result = run(`### LOW: Evidence\n${paragraph}\n${indent}${echoPhrases[0]}\n`);
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("echoes instructions");
-    expect(result.args).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("legacy prose fallback");
+    expect(result.args).toBeDefined();
   }
   const body = `### LOW: Evidence\n${indent}${echoPhrases[0]}\n`;
   expect(run(body).posted).toBe(`${heading}\n\n${body}`);
 });
-it.each(["Summary:", "Unrelated summary", "**Summary**", "## Evidence", "---"])("R1-F2 explicit section boundary revokes citation: %s", boundary => {
+it.each(["Summary:", "Unrelated summary", "**Summary**", "## Evidence", "---"])("R1-F2 legacy section boundaries do not revoke citation: %s", boundary => {
   const result = run(`### LOW: Evidence\n\nFinding prose.\n\n${boundary}\n\n> ${echoPhrases[0]}\n`);
-  expect(result.status).not.toBe(0);
-  expect(result.args).toBeUndefined();
+  expect(result.status).toBe(0);
+  expect(result.args).toBeDefined();
 });
 
 // Round 2 operator contract: inline spans are prose, not code-block permission.
-it.each(["- List paragraph.", "1. Ordered paragraph."])("R2-F3 list blank continuation refuses: %s", list => {
+it.each(["- List paragraph.", "1. Ordered paragraph."])("R2-F3 legacy list blank continuation accepted: %s", list => {
   for (const indent of ["    ", "\t"]) {
     const result = run(`### LOW: Evidence\n\n${list}\n\n${indent}${echoPhrases[0]}\n`);
-    expect(result.status).toBe(2);
-    expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
-    expect(result.args).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("legacy prose fallback");
+    expect(result.args).toBeDefined();
   }
 });
-it.each([false, true])("R2-F3 inline spans remain echo checked, wrapped=%s", wrapped => {
+it.each([false, true])("R2-F3 legacy inline spans remain unparsed, wrapped=%s", wrapped => {
   const phrase = wrapped ? echoPhrases[0].replace("not the author", "not\nthe author") : echoPhrases[0];
   const result = run(`### LOW: Evidence\n\nContract: \`${phrase}\`\n`);
-  expect(result.status).toBe(2);
-  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
-  expect(result.args).toBeUndefined();
+  expect(result.status).toBe(0);
+  expect(result.stderr).toContain("legacy prose fallback");
+  expect(result.args).toBeDefined();
 });
 it.each(["      ", "        "])("R2-F3 actual nested list code passes: %j", indent => {
   const body = `### LOW: Evidence\n\n- List paragraph.\n\n${indent}${echoPhrases[0]}\n`;
   const result = run(body);
   expect(result.status, result.stderr).toBe(0);
   expect(result.posted).toBe(`${heading}\n\n${body}`);
+});
+
+// @ts-expect-error standalone schema helper
+import { verdictBlock } from "../../../scripts/review-verdict.mjs";
+const structured = {version:1, reviewedHead:head, slot:"Codex", assertedModel:"gpt-5.5", modelSource:"codex launch banner", verdict:"PASS", findings:[]};
+it("M-post-schema: binds head, model and slot before gh, regardless of prose", () => {
+  const prose = "Reviewed head: stale~1..HEAD\nA pass verdict lists what you probed and which mutants you ran\n";
+  const valid = run(prose + verdictBlock(structured));
+  expect(valid.status, valid.stderr).toBe(0);
+  expect(valid.posted).toContain(prose);
+  expect(JSON.parse(valid.receipt).verdict).toEqual(structured);
+  for (const change of [{reviewedHead:main}, {slot:"other"}, {assertedModel:"wrong"}, {modelSource:""}]) {
+    const result = run(prose + verdictBlock({...structured, ...change}));
+    expect(result.status).not.toBe(0);
+    expect(result.args).toBeUndefined();
+    expect(result.stderr).not.toContain("legacy prose fallback");
+  }
+});
+
+it("M-split-block: chunking never breaks the machine verdict", () => {
+  const large = run("Prose evidence\n".repeat(4300) + verdictBlock(structured), undefined, undefined, undefined, undefined, false, 0, "Codex", undefined, "Conductor ledger: schema chunk boundary evidence");
+  expect(large.status, large.stderr).toBe(0);
+  const receipt = JSON.parse(large.receipt);
+  expect(receipt.total).toBeGreaterThan(1);
+  const blocks = large.posts.filter(part => part.includes("<!-- agentrig-verdict:v1 -->"));
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toContain("<!-- /agentrig-verdict -->");
 });

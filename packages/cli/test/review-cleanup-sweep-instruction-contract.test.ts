@@ -94,6 +94,9 @@ it("D1 slot lead-in prescribes only targeted shell substitution", () => {
 });
 it("D1 substitution touches only shell paths and expected head", () => {
   const source = validator();
-  const targeted = source.replaceAll("<PREFIX>", "/tmp/owned/codex").replace('"HEAD" >', `"${"a".repeat(40)}" >`);
-  expect(targeted.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
+  const targeted = source.replaceAll("<PREFIX>", "/tmp/owned/codex").replace("'HEAD'", `'${"a".repeat(40)}'`);
+  expect(source).toContain("--validate");
+  expect(targeted).toContain("--validate '/tmp/owned/codex.verdict.md'");
+  expect(targeted).toContain("a".repeat(40));
+  expect(targeted).not.toContain("node -e");
 });

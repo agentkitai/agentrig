@@ -384,7 +384,7 @@ describe("skillTool", () => {
     expect(body).toContain("spawn ONE continuation builder from whatever it pushed");
     expect(body).toContain("The minimum is two children per remaining");
     expect(body).toContain("Each child's token cap is `--max-tokens ÷ --subagent-max-children`");
-    expect(body).toContain("Report the exact head SHA you reviewed");
+    expect(body).toContain("Return one delimited agentrig-verdict:v1 JSON block matching the base schema");
     expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
     expect(body).toContain("restate it in your own reply text in that same turn");
     // Slot count changes review preparation, not authorization or stop gates.

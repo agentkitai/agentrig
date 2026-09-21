@@ -158,3 +158,7 @@ that the roadmap edit matches the RECORD line.
   inside it. Under `topic`, an approved deviation still lands without the human; that is why the
   bar in §2 is high and why `needs the human` is a normal answer.
 - Never build, push, or merge.
+
+For tooling-changing PRs, use the conductor-recorded base-pinned arbiter skill and review
+helpers, never PR copies. Review verdict schema validation is not scope arbitration: preserve
+actual reviewed head, asserted model/source and verbatim findings without parsing prose claims.

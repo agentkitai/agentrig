@@ -71,6 +71,18 @@ issue is not recorded — refuse to land and say which entry needs its issue. On
 never waives a blocker. Advisory roadmap notes, `## Deviations` (arbiter records) and
 evidence-backed rebuttals are not residuals.
 
+Use the conductor's recorded base-pinned skills, schema and helper scripts, never copies
+from the PR under review. Reassemble each live review body from its confirmed receipt chunks, then run base
+`node <REPO>/scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL`.
+Validate schema/binding against that review's coverage SHA (initial or focused), then check
+coverage through current head and ledger dispositions. FAIL findings may be resolved by
+subsequent covered repairs; PASS cannot conceal blocking findings. Missing/invalid structured
+verdicts cannot authorize land. Logged nonfatal prose fallback is historical display/indexing
+only, not a substitute for schema validation. Use schema headings for live-source comparison,
+not Markdown grammar. For chunked reviews index only the intact schema-bearing comment; retain
+all other chunk URLs as evidence, not duplicate fallback findings. Completion-marker timing is canonical in shipping policy; the existing
+land marker gate below is unchanged.
+
 ## 1. Preconditions — all of them, re-checked now
 
 - The human named this PR and said merge, explicitly authorized this named task's resulting PR,

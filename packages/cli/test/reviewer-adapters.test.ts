@@ -47,7 +47,7 @@ it.each(["max_tokens", "error", undefined])("API incomplete run %s fails closed"
   await expect(runApi({ providers: { one: { model: "pinned" } } }, { adapter: "api:one", model: "pinned" }, "bundle", () => ({ model: "pinned", async *stream() { yield { type: "text_delta", text: "partial" }; yield { type: "stop", reason }; } }))).rejects.toThrow();
 });
 
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,7 +58,15 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
   try {
     const command = adapter === "claude-cli" ? "claude" : "codex";
     const binary = join(dir, command);
-    writeFileSync(binary, `#!${process.execPath}\nconst fs=require('node:fs'); fs.writeFileSync('${dir}/argv',JSON.stringify(process.argv.slice(2))); fs.writeFileSync('${dir}/env',JSON.stringify(process.env)); const prompt=fs.readFileSync(0,'utf8'); if(!prompt.includes('checks green')) process.exit(3); ${command === "claude" ? `console.log(JSON.stringify({subtype:'success',modelUsage:{pinned:{}},result:${JSON.stringify(preservedReviews[1])}}));` : `console.error('model: pinned'); fs.writeFileSync(process.argv[process.argv.indexOf('--output-last-message')+1], ${JSON.stringify(preservedReviews[1])});`}\n`);
+    spawnSync("git", ["init", "-q", dir]);
+    spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-qm", "PR source"]);
+    const head = spawnSync("git", ["-C", dir, "rev-parse", "HEAD"], {encoding:"utf8"}).stdout.trim();
+    // M-PR-adapter: a tooling-changing PR must not execute its own adapter.
+    mkdirSync(join(dir, "scripts"));
+    writeFileSync(join(dir, "scripts/reviewer-adapters.mjs"), 'throw new Error("PR adapter executed");');
+    const verdict = {version:1, reviewedHead:head, slot:"custom", assertedModel:"pinned", modelSource:"fixture transport", verdict:"PASS", findings:[]};
+    const reviewText = `I independently reviewed de6915934d1ae98650b04f721b5568c9b4c9cdf1..cb8e779dcee47694d70f98674de870a76bdb630e\n${preservedReviews[1]}\n<!-- agentrig-verdict:v1 -->\n${JSON.stringify(verdict)}\n<!-- /agentrig-verdict -->`;
+    writeFileSync(binary, `#!${process.execPath}\nconst fs=require('node:fs'); fs.writeFileSync('${dir}/argv',JSON.stringify(process.argv.slice(2))); fs.writeFileSync('${dir}/env',JSON.stringify(process.env)); const prompt=fs.readFileSync(0,'utf8'); if(!prompt.includes('checks green')) process.exit(3); ${command === "claude" ? `console.log(JSON.stringify({subtype:'success',modelUsage:{pinned:{}},result:${JSON.stringify(reviewText)}}));` : `console.error('model: pinned'); fs.writeFileSync(process.argv[process.argv.indexOf('--output-last-message')+1], ${JSON.stringify(reviewText)});`}\n`);
     chmodSync(binary, 0o755);
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ reviewers: { custom: { adapter, model: "pinned" } } }));
@@ -73,9 +81,9 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     expect(childEnv).toMatchObject({ PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" });
     const provenance = JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"));
     expect(provenance).toMatchObject({ slot: "custom", adapter, model: "pinned", modelSource: cliAdapters[adapter].modelSource, cwd: dir, exit: 0 });
-    expect(provenance.headExtraction.tolerances).toEqual(["leading-cleanup-status"]);
-    expect(readFileSync(`${prefix}.md`, "utf8")).toBe(normalizeReviewerHead(preservedReviews[1]).text);
-    expect(adapter === "claude-cli" ? JSON.parse(readFileSync(`${prefix}.stdout`, "utf8")).result : readFileSync(`${prefix}.last`, "utf8")).toBe(preservedReviews[1]);
+    expect(provenance.verdict).toEqual(verdict);
+    expect(readFileSync(`${prefix}.md`, "utf8")).toBe(reviewText);
+    expect(adapter === "claude-cli" ? JSON.parse(readFileSync(`${prefix}.stdout`, "utf8")).result : readFileSync(`${prefix}.last`, "utf8")).toBe(reviewText);
     expect(Date.parse(provenance.finished)).toBeGreaterThanOrEqual(Date.parse(provenance.started));
     expect(invoke(prefix).status).not.toBe(0);
     writeFileSync(binary, `#!${process.execPath}\nprocess.stdout.write('partial'); process.exit(1);\n`);
