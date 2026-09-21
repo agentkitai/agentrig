@@ -10,6 +10,6 @@
   },
   "reviewers": [
     { "name": "primary", "adapter": "claude-cli", "model": "claude-opus-5" },
-    { "name": "secondary", "adapter": "codex-cli", "model": "gpt-5.3-codex" }
+    { "name": "secondary", "adapter": "codex-cli", "model": "gpt-5.5" }
   ]
 }
