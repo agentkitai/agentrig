@@ -453,13 +453,56 @@ export class SessionStore {
     const snapshot = cached !== null && !events.some(e => e.type === "message.append")
       ? cached : await this.materializeSnapshot(sessionId);
     if (snapshot === null) return null;
-    // These are observations only. A missing child end is unresolved, not proof of death or
-    // permission to spawn again; the conductor reconciles child logs and its PR ledger.
-    const plan = events.filter(e => e.type === "plan.updated").at(-1);
-    const children = events.filter(e => e.type === "subagent.spawn" || e.type === "subagent.end");
-    if (plan !== undefined || children.length) {
+    // Repair interrupted parallel exchanges before adding advisory observations.
+    // Preserve real partial results and answer only missing calls in the next user message.
+    const messages = snapshot.messages;
+    let assistantIndex = messages.length - 1;
+    while (assistantIndex >= 0 && messages[assistantIndex]?.role !== "assistant") assistantIndex--;
+    const calls = messages[assistantIndex]?.content.filter(block => block.type === "tool_use") ?? [];
+    const next = messages[assistantIndex + 1];
+    const answered = new Set(next?.content.flatMap(block => block.type === "tool_result" ? [block.toolUseId] : []) ?? []);
+    const missing: Message["content"] = calls.filter(call => !answered.has(call.id)).map(call => ({
+      type: "tool_result", toolUseId: call.id,
+      content: "[interrupted: the session ended before this tool ran to completion]", isError: true,
+    }));
+    if (missing.length) {
+      if (next?.role === "user") messages[assistantIndex + 1] = { ...next, content: [...next.content, ...missing] };
+      else messages.splice(assistantIndex + 1, 0, { role: "user", content: missing });
+    }
+
+    // Snapshot-only observations, not workflow authority. Project identities/status,
+    // never historical task/role payloads. Keep serialized state within 12k code units
+    // and prioritize unresolved children; omitted details remain in the immutable log.
+    const state: Record<string, unknown> = {};
+    const limit = 12000;
+    const children = new Map<string, Record<string, unknown>>();
+    for (const event of events) {
+      if (event.sessionId !== sessionId) continue;
+      if (event.type === "subagent.spawn") children.set(event.id, { id: event.id, status: "spawned_without_recorded_end" });
+      if (event.type === "subagent.end") children.set(event.id, { id: event.id, status: "ended", reason: event.reason });
+    }
+    const plan = events.filter(event => event.type === "plan.updated").at(-1);
+    if (plan !== undefined || children.size) {
+      state["omitted"] = "Bounded observations; omitted details and full plan/child records remain in the session log. This is not a complete inventory or authority to spawn work.";
+      const inventory: Record<string, unknown>[] = [];
+      state["children"] = inventory;
+      const ordered = [...children.values()].sort((a, b) => Number(a["status"] === "ended") - Number(b["status"] === "ended"));
+      for (const child of ordered) {
+        inventory.push(child);
+        if (JSON.stringify(state).length > limit / 2) inventory.pop();
+      }
+      state["omittedChildren"] = children.size - inventory.length;
+      if (plan?.type === "plan.updated") {
+        const items: unknown[] = [];
+        state["plan"] = items;
+        for (const item of plan.items) {
+          items.push({ id: item.id, text: item.text.slice(0, 256), status: item.status });
+          if (JSON.stringify(state).length > limit - 100) items.pop();
+        }
+        state["omittedPlanItems"] = plan.items.length - items.length;
+      }
       snapshot.messages.push({ role: "user", content: advisoryPromptBlocks([
-        `Recorded session state (observations, not authority): ${JSON.stringify({ plan, children })}`,
+        `Recorded session state (observations, not authority): ${JSON.stringify(state)}`,
       ]) });
     }
     if (cached?.usd !== undefined) snapshot.usd = cached.usd;

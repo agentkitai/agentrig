@@ -54,12 +54,76 @@ it.each(["after handoff", "mid repair round", "awaiting reviews", "awaiting land
   const text = JSON.stringify(request?.messages);
   expect(text).toContain(ledger);
   expect(text).toContain("Recorded session state (observations, not authority)");
-  expect(text).toContain("plan.updated");
-  expect(text).toContain("subagent.spawn");
-  expect(text).toContain("subagent.end");
+  expect(text).toContain("in_progress");
+  expect(text).toContain("spawned_without_recorded_end");
+  expect(text).toContain("ended");
   expect(text).toContain("review");
   expect(calls).toEqual(["read_pr", "verify:moved-head"]);
   expect(text).toContain("builder");
   expect(text).toContain("fixer");
   expect(text).not.toContain("stale before builder");
+});
+
+it.each([false, true])("balances interrupted parallel tool calls before observations (partial results: %s)", async partial => {
+  root = await mkdtemp(join(tmpdir(), "conductor-interrupted-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  await store.append(id, { type: "session.start", task: "continue", cwd: root, provider: "fake", model: "fake" });
+  await store.append(id, { type: "plan.updated", items: [{ id: "repair", text: "retain round", status: "in_progress" }] });
+  await store.append(id, { type: "subagent.spawn", id: "child", task: "already started" });
+  await store.append(id, { type: "message.append", message: { role: "assistant", content: [
+    { type: "tool_use", id: "a", name: "child", input: {} },
+    { type: "tool_use", id: "b", name: "child", input: {} },
+  ] } });
+  if (partial) await store.append(id, { type: "message.append", message: { role: "user", content: [{ type: "tool_result", toolUseId: "a", content: "real result" }] } });
+  let seen = false;
+  const provider: ModelProvider = { id: "fake", model: "fake", capabilities: { tools: true, parallelTools: true, caching: false, contextWindow: 100000 }, async *stream(req) {
+    const index = req.messages.findIndex(m => m.content.some(b => b.type === "tool_use"));
+    const results = req.messages[index + 1]?.content.filter(b => b.type === "tool_result");
+    expect(results?.map(b => b.toolUseId).sort()).toEqual(["a", "b"]);
+    expect(results?.find(b => b.toolUseId === "a")?.content).toBe(partial ? "real result" : "[interrupted: the session ended before this tool ran to completion]");
+    expect(results?.find(b => b.toolUseId === "b")?.isError).toBe(true);
+    expect(JSON.stringify(req.messages.slice(index + 2))).toContain("Recorded session state");
+    seen = true;
+    yield { type: "stop", reason: "end_turn" };
+  } };
+  const session = createAgent({ provider, store, tools: [], permissions: new RulePolicy([]), systemPrompt: "test", repoMap: false, trustedProjectRoot: root }).run("", { resume: id });
+  for await (const _ of session.events) { /* drain */ }
+  expect((await session.done).reason).toBe("done");
+  expect(seen).toBe(true);
+});
+
+it("bounds compacted child observations without replaying bulky task or role payloads", async () => {
+  root = await mkdtemp(join(tmpdir(), "conductor-bounded-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  await store.append(id, { type: "session.start", task: "continue", cwd: root, provider: "fake", model: "fake" });
+  await store.append(id, { type: "plan.updated", items: [{ id: "review", text: "plan-secret".repeat(5000), status: "in_progress" }] });
+  for (let i = 0; i < 120; i++) {
+    await store.append(id, { type: "subagent.spawn", id: `child-${i}`, task: "dropped-secret".repeat(5000) });
+    if (i !== 119) await store.append(id, { type: "subagent.end", id: `child-${i}`, reason: "done" });
+  }
+  await store.append(id, { type: "context.compact", before: 100000, after: 10, messages: [{ role: "user", content: [{ type: "text", text: "compacted ledger; round 2/3" }] }] });
+  const snapshot = await store.resumeSnapshot(id);
+  const text = JSON.stringify(snapshot?.messages);
+  expect(text.length).toBeLessThan(20000);
+  expect(text).not.toContain("dropped-secret");
+  expect(text).toContain("child-119");
+  expect(text).toContain("omitted");
+  expect(text).toContain("compacted ledger; round 2/3");
+  expect(text).toContain("session log");
+});
+
+it("does not attribute ancestor children to a resumed fork", async () => {
+  root = await mkdtemp(join(tmpdir(), "conductor-fork-inventory-"));
+  const store = new SessionStore({ root });
+  const parent = store.create();
+  await store.append(parent, { type: "session.start", task: "parent", cwd: root, provider: "fake", model: "fake" });
+  await store.append(parent, { type: "subagent.spawn", id: "ancestor-child", task: "parent-only" });
+  const events = await store.materialize(parent);
+  const fork = await store.fork(parent, events.at(-1)!.seq);
+  await store.append(fork, { type: "subagent.spawn", id: "own-child", task: "fork-only" });
+  const text = JSON.stringify((await store.resumeSnapshot(fork))?.messages);
+  expect(text).toContain("own-child");
+  expect(text).not.toContain("ancestor-child");
 });

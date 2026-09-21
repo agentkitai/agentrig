@@ -6,3 +6,9 @@ it.each(["ship", "topic"])("%s resumes recorded phases without re-orientation or
   const section = text.split("## Resuming")[1]?.split("\n## ")[0]?.replace(/\s+/g, " ") ?? "";
   for (const phrase of ["agentrig run --resume <session>", "same session", "Do not repeat recorded re-orientation", "Repair round", "read-back receipts", "current PR head", "before any further work", "ran / handed off / died", "does not consume another repair round", "Do not spawn a second builder", "before builder", "after handoff", "mid repair round", "awaiting reviews", "awaiting landing", "scope, authorization, trust and denies"]) expect(section).toContain(phrase);
 });
+
+it("preserves the unapproved R18b roadmap contract label until reviewed delivery", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const roadmap = await readFile(new URL("../../../docs/ROADMAP.md", import.meta.url), "utf8");
+  expect(roadmap.split("\n").find(line => line.includes("**Conductor resume in place**"))).toMatch(/^\| R18b \|/);
+});
