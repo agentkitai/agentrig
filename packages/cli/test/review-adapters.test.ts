@@ -27,7 +27,7 @@ for (const [name, args] of [
  ["malformed JSON", [cli, "not JSON"]], ["failed exit", [cli, json(), "", 1]],
  ["missing banner", [other, "PASS", ""]], ["wrong banner model", [other, "PASS", "model: wrong"]],
  ["duplicate banner", [other, "PASS", "model: pin-b\nmodel: pin-b"]],
- ["empty stdout", [other, "  ", "model: pin-b"]], ["error banner", [other, "PASS", "model: pin-b\nERROR: failed"]],
+ ["empty last-message file", [other, "  ", "model: pin-b"]], ["error banner", [other, "PASS", "model: pin-b\nERROR: failed"]],
  ["failed other exit", [other, "PASS", "model: pin-b", 1]],
 ] as const) it(`fails closed on ${name}`, () => expect(run("assertCliResult", [...args]).status).toBe(2));
 for (const claim of [`head ${"a".repeat(41)}`, `head_sha: ${"c".repeat(40)}`, `Reviewed at ${"c".repeat(40)}`, "Reviewed head HEAD", `## External review — slot — head ${"c".repeat(40)}\nReviewed head ${head}`, `Reviewed head ${head}\nPreviously reviewed commit ${"c".repeat(40)} had a bug`]) it(`M-claim rejects ${claim}`, () => expect(run("validateVerdict", [claim + "\nPASS", head]).status).toBe(2));
@@ -59,3 +59,28 @@ it("absent config has zero slots; unknown profiles are not inherited properties"
  expect(run("declaredSlots", [absent, "constructor"]).status).toBe(2);
 });
 it("API provider pin mismatch is rejected, no silent routing fallback", () => expect(run("describe", [{name:"x",adapter:"api",provider:"one",model:"pin"},{one:{model:"other"}}]).status).toBe(2));
+
+const codexLaunch = "codex --ask-for-approval never exec --model <MODEL> --sandbox workspace-write --output-last-message <FILE> -";
+function codexTemplateWitness(description: { launch: string; failureDetection: string; modelAssertion: string }) {
+ expect(description.launch).toBe(codexLaunch);
+ expect(description.failureDetection).toContain("last-message file");
+ expect(description.modelAssertion).toContain("stderr startup banner model:");
+}
+it("CLI-2 Codex template uses stdin, last-message file and stderr provenance", () => {
+ codexTemplateWitness(actual.describe(other));
+ // The output argument is the last-message file contents, not progress on stdout.
+ const lastMessage = `Reviewed head ${head}\nPASS`;
+ const result = actual.assertCliResult(other, lastMessage, "model: pin-b\n");
+ expect(result.verdict).toBe(lastMessage);
+ expect(result.model).toBe("pin-b");
+});
+it("M-CLI-2-full-auto copy-only launch mutant is killed by the same witness", () => {
+ const description = actual.describe(other);
+ codexTemplateWitness(description);
+ expect(() => codexTemplateWitness({...description,
+  launch: "codex exec --model <MODEL> --full-auto <PROMPT> < /dev/null",
+ })).toThrow();
+});
+it("CLI-2 preserves the Claude launch template", () => {
+ expect(actual.describe(cli).launch).toBe("env -u CLAUDECODE claude --model <MODEL> --print --output-format json --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' --disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)' --no-session-persistence <PROMPT> < /dev/null");
+});

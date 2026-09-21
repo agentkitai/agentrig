@@ -21,9 +21,9 @@ export const adapters = {
     failureDetection: "nonzero launch exit, malformed JSON, is_error, empty result or missing modelUsage",
   },
   "codex-cli": {
-    launch: "codex exec --model <MODEL> --full-auto <PROMPT> < /dev/null",
+    launch: "codex --ask-for-approval never exec --model <MODEL> --sandbox workspace-write --output-last-message <FILE> -",
     modelAssertion: "captured stderr startup banner model: field; compare with configured pin (do not use --json, which suppresses the banner)",
-    failureDetection: "nonzero launch exit, ERROR in stderr, empty stdout final verdict or missing model banner",
+    failureDetection: "nonzero launch exit, ERROR in stderr, empty last-message file final verdict or missing model banner",
   },
   api: {
     launch: "agentrig run --profile <REVIEW_PROFILE> --json <PROMPT> (profile roles.main references slot.provider; model equals slot.model)",
@@ -57,6 +57,7 @@ export function assertCliResult(slot, output, banner = "", exitCode = 0) {
     model = models[0]; verdict = result.result;
   } else if (slot.adapter === "codex-cli") {
     if (/^\s*ERROR\b/im.test(banner)) throw new Error("failed result");
+    // Caller supplies the --output-last-message file contents; prompt is sent on stdin.
     verdict = output;
     const models = [...banner.matchAll(/^model:\s*(\S+)\s*$/gm)].map(match => match[1]);
     if (models.length !== 1) throw new Error("missing or ambiguous model banner");

@@ -2,6 +2,10 @@
 
 ## Declared reviewer slots (#396)
 
+PR #468 CLI-2 repair: Codex uses explicit never-approval/workspace-write flags,
+stdin prompt and last-message-file verdict; stderr model-banner pin assertion remains.
+Claude launch is unchanged. Exact template and legacy full-auto mutant coverage added.
+
 Issue-only work, not roadmap advancement: project declarations accept zero, one or two named
 reviewer slots with adapter and pinned model; API slots reference existing provider entries.
 Review launch and landing policy remain skill-side. Independent conductor same-head declared
