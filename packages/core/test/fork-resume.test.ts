@@ -178,17 +178,17 @@ describe("resuming a fork", () => {
     expect(msgs.at(-1)!.content[0]).toMatchObject({ type: "text", text: "carry on" });
   });
 
-  it("still refuses a plain session with no snapshot — materialization is for forks only", async () => {
+  it("resumes a plain session that crashed before its first snapshot", async () => {
     const store = new SessionStore({ root, newId: () => "plain" });
     await store.append("plain", { type: "session.start", task: "t", cwd: root, provider: "fake", model: "m" });
-    expect(await store.materializeSnapshot("plain")).toBeNull();
+    expect(await store.materializeSnapshot("plain")).toMatchObject({ task: "t", turns: 0 });
     expect(await store.materializeSnapshot("never-existed")).toBeNull();
 
     const provider = new FakeProvider([]);
     const session = createAgent(config(provider, store)).run("more", { resume: "plain" });
     const events = await collect(session);
-    expect((await session.done).reason).toBe("error");
-    expect(events.some((e) => e.type === "error" && e.fatal && /no snapshot/.test(e.message))).toBe(true);
-    expect(provider.requests).toHaveLength(0);
+    expect((await session.done).reason).toBe("done");
+    expect(events.some((e) => e.type === "session.resume")).toBe(true);
+    expect(provider.requests).toHaveLength(1);
   });
 });

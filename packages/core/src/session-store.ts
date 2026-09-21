@@ -386,16 +386,9 @@ export class SessionStore {
   }
 
   /**
-   * A resume snapshot derived from the log, for a fork child that has not completed a turn of its
-   * own (R3c). A fork writes only its `session.fork` marker, so it has no snapshot to resume from
-   * until its first turn ends; without this, a forked conversation could be replayed but never
-   * continued. Null for anything that is not a fork: a plain session with no snapshot stays an
-   * error, because "died before its first turn.end" must not silently become "resumable from an
-   * empty conversation". Pure replay — recorded tool results are folded in, nothing executes.
-   *
-   * `usd` is absent: no event records accumulated spend, so a fork child resumed without explicit
-   * pricing starts its USD budget at zero where a written snapshot would carry the parent's figure.
-   * Token usage is carried, so `maxTokens` budgets are unaffected.
+   * Reconstruct a resumable conversation from the immutable log, including a run that died
+   * before its first snapshot. Pure replay: recorded tool calls never execute here.
+   * Workflow phase/receipts remain conversation data, not a core workflow decision engine.
    */
   async materializeSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
     assertSessionId(sessionId);
@@ -409,7 +402,7 @@ export class SessionStore {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
-    if (first?.type !== "session.fork") return null;
+    if (first?.type !== "session.fork" && first?.type !== "session.start") return null;
 
     const events = await this.materialize(sessionId);
     let task = "";
@@ -442,6 +435,67 @@ export class SessionStore {
       ...(providerSelection === undefined ? {} : { providerSelection }),
       ts: this.now(),
     };
+  }
+
+  /** Prefer the authoritative message log over its possibly stale cache after a crash.
+   * Legacy snapshots can contain richer messages than legacy deltas, so retain those caches.
+   */
+  async resumeSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
+    const cached = await this.readSnapshot(sessionId);
+    let events: HarnessEvent[];
+    try { events = await this.materialize(sessionId); }
+    catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      // Legacy snapshot-only sessions are supported; missing fork ancestors are not.
+      if (await this.firstEvent(sessionId) !== null) throw err;
+      return cached;
+    }
+    const snapshot = cached !== null && !events.some(e => e.type === "message.append")
+      ? cached : await this.materializeSnapshot(sessionId);
+    if (snapshot === null) return null;
+    // Reconstruct every interrupted exchange on every resume. Repairs are a projection,
+    // not log rewrites: subsequent committed messages must not hide older missing results.
+    if (events.some(e => e.type === "message.append")) snapshot.messages = messagesFromEvents(events, true);
+    else balanceInterruptedExchanges(snapshot.messages);
+    const messages = snapshot.messages;
+
+    // Snapshot-only observations, not workflow authority. Project identities/status,
+    // never historical task/role payloads. Keep serialized state within 12k code units
+    // and prioritize unresolved children; omitted details remain in the immutable log.
+    const state: Record<string, unknown> = {};
+    const limit = 12000;
+    const children = new Map<string, Record<string, unknown>>();
+    for (const event of events) {
+      if (event.sessionId !== sessionId) continue;
+      if (event.type === "subagent.spawn") children.set(event.id, { id: event.id, status: "spawned_without_recorded_end" });
+      if (event.type === "subagent.end") children.set(event.id, { id: event.id, status: "ended", reason: event.reason });
+    }
+    const plan = events.filter(event => event.type === "plan.updated").at(-1);
+    if (plan !== undefined || children.size) {
+      state["omitted"] = "Bounded observations; omitted details and full plan/child records remain in the session log. This is not a complete inventory or authority to spawn work.";
+      const inventory: Record<string, unknown>[] = [];
+      state["children"] = inventory;
+      const ordered = [...children.values()].sort((a, b) => Number(a["status"] === "ended") - Number(b["status"] === "ended"));
+      for (const child of ordered) {
+        inventory.push(child);
+        if (JSON.stringify(state).length > limit / 2) inventory.pop();
+      }
+      state["omittedChildren"] = children.size - inventory.length;
+      if (plan?.type === "plan.updated") {
+        const items: unknown[] = [];
+        state["plan"] = items;
+        for (const item of plan.items) {
+          items.push({ id: item.id, text: item.text.slice(0, 256), status: item.status });
+          if (JSON.stringify(state).length > limit - 100) items.pop();
+        }
+        state["omittedPlanItems"] = plan.items.length - items.length;
+      }
+      snapshot.messages.push({ role: "user", content: advisoryPromptBlocks([
+        `Recorded session state (observations, not authority): ${JSON.stringify(state)}`,
+      ]) });
+    }
+    if (cached?.usd !== undefined) snapshot.usd = cached.usd;
+    return snapshot;
   }
 
   /** The first event of a session's own log; null when the log does not exist. Reads one line. */
@@ -575,7 +629,8 @@ export class SessionStore {
 }
 
 /** Shared data-only fold; callers remain responsible for validating and bounding events. */
-export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
+export function messagesFromEvents(events: readonly HarnessEvent[], recoverInterrupted = false): Message[] {
+  const recovered = new Map<Message, Map<string, Extract<ContentBlock, { type: "tool_result" }>>>();
   const messages: Message[] = [];
   let streamedText = "";
   let activeAssistant: Message | undefined;
@@ -612,6 +667,23 @@ export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
       activeAssistant = undefined;
       authoritativeMessages = true;
       continue;
+    }
+    // The tool event can be durable before the user message is appended. Associate
+    // evidence with its actual exchange, not a global call-id table (IDs may recur).
+    if (recoverInterrupted && authoritativeMessages && (event.type === "tool.result" || event.type === "tool.result.patched")) {
+      const exchange = [...messages].reverse().find(m => m.role === "assistant" && m.content.some(b => b.type === "tool_use" && b.id === event.id));
+      if (exchange) {
+        let results = recovered.get(exchange);
+        if (!results) { results = new Map(); recovered.set(exchange, results); }
+        if (event.type === "tool.result") {
+          results.set(event.id, { type: "tool_result", toolUseId: event.id, content: event.display,
+            ...(event.diagnostics === undefined ? {} : { diagnostics: structuredClone(event.diagnostics) }),
+            ...(!event.ok ? { isError: true } : {}) });
+        } else {
+          const result = results.get(event.id);
+          if (result) result.content = event.mode === "inject" ? `${result.content}\n\n${event.display}` : event.display;
+        }
+      }
     }
     if (
       authoritativeMessages &&
@@ -693,7 +765,25 @@ export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
         break;
     }
   }
+  if (recoverInterrupted) balanceInterruptedExchanges(messages, recovered);
   return messages;
+}
+
+/** Idempotent projection: committed user results win; event evidence beats uncertainty. */
+function balanceInterruptedExchanges(messages: Message[], recovered = new Map<Message, Map<string, Extract<ContentBlock, { type: "tool_result" }>>>()) {
+  for (let i = 0; i < messages.length; i++) {
+    const assistant = messages[i]!;
+    if (assistant.role !== "assistant") continue;
+    const next = messages[i + 1];
+    const answered = new Set(next?.role === "user" ? next.content.flatMap(b => b.type === "tool_result" ? [b.toolUseId] : []) : []);
+    const missing: ContentBlock[] = assistant.content.flatMap(call => call.type !== "tool_use" || answered.has(call.id) ? [] : [
+      recovered.get(assistant)?.get(call.id) ?? { type: "tool_result" as const, toolUseId: call.id,
+        content: "[interrupted: no completion result was recorded; execution and side effects are unknown — reconcile before retrying]", isError: true, context: { principal: "platform" as const, authority: "advisory" as const } },
+    ]);
+    if (!missing.length) continue;
+    if (next?.role === "user") messages[i + 1] = { ...next, content: [...next.content, ...missing] };
+    else messages.splice(i + 1, 0, { role: "user", content: missing });
+  }
 }
 
 /** Stable content hash used for `tool.call.inputHash` and `file.changed.contentHash`. */

@@ -501,9 +501,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
 
     try {
       if (resume !== undefined) {
-        // A fork child has no snapshot until its first turn ends; its conversation is the
-        // materialized tree (R3c). Anything else without a snapshot is still unresumable.
-        const snap = (await store.readSnapshot(id)) ?? (await store.materializeSnapshot(id));
+        // Resume the recorded conversation, not an older cache left by a crashed run.
+        const snap = await store.resumeSnapshot(id);
         if (snap === null) throw new Error(`cannot resume session ${id}: no snapshot found`);
         cwd = opts.cwd ?? snap.cwd;
         turns = snap.turns;
