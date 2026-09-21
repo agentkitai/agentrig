@@ -7524,3 +7524,12 @@ existing shipping heading in a section-scoped regression. A child-process wiring
 returns identical removal sentinels in both scans and requires rejection independently
 of inventory differences. Broken-anchor fail-first and sentinel-loop-removal mutation
 receipts, plus restored controls and full trio, are recorded in PR #370.
+
+R18b repair round 2 (D1/D2): resume reconstructs missing results in every retained
+exchange on each replay, so a second or later resume remains balanced without
+rewriting the append-only log. Durable `tool.result`/post-tool patches recover
+completed outcomes before uncertain interruption placeholders; committed user
+results remain authoritative. Unknown completion does not assert that a side
+effect never ran. Regressions cover three real resumes, partial parallel results,
+success/failure and hook patches; named tail-only/discard-result/drop-patch mutants
+are rejected. D3 and other deferred review items remain outside this repair.

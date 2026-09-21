@@ -81,7 +81,7 @@ it.each([false, true])("balances interrupted parallel tool calls before observat
     const index = req.messages.findIndex(m => m.content.some(b => b.type === "tool_use"));
     const results = req.messages[index + 1]?.content.filter(b => b.type === "tool_result");
     expect(results?.map(b => b.toolUseId).sort()).toEqual(["a", "b"]);
-    expect(results?.find(b => b.toolUseId === "a")?.content).toBe(partial ? "real result" : "[interrupted: the session ended before this tool ran to completion]");
+    expect(results?.find(b => b.toolUseId === "a")?.content).toBe(partial ? "real result" : "[interrupted: no completion result was recorded; execution and side effects are unknown — reconcile before retrying]");
     expect(results?.find(b => b.toolUseId === "b")?.isError).toBe(true);
     expect(JSON.stringify(req.messages.slice(index + 2))).toContain("Recorded session state");
     seen = true;
@@ -126,4 +126,50 @@ it("does not attribute ancestor children to a resumed fork", async () => {
   const text = JSON.stringify((await store.resumeSnapshot(fork))?.messages);
   expect(text).toContain("own-child");
   expect(text).not.toContain("ancestor-child");
+});
+
+it("balances every historical exchange across three real resumes without rewriting the log", async () => {
+  root = await mkdtemp(join(tmpdir(), "resume-again-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  await store.append(id, { type: "session.start", task: "continue", cwd: root, provider: "fake", model: "fake" });
+  await store.append(id, { type: "message.append", message: { role: "assistant", content: [{ type: "tool_use", id: "lost", name: "side_effect", input: {} }] } });
+  const before = await store.readAll(id);
+  let requests = 0;
+  const provider: ModelProvider = { id: "fake", model: "fake", capabilities: { tools: true, parallelTools: true, caching: false, contextWindow: 100000 }, async *stream(req) {
+    requests++;
+    const index = req.messages.findIndex(m => m.content.some(b => b.type === "tool_use" && b.id === "lost"));
+    expect(req.messages[index + 1]?.content.filter(b => b.type === "tool_result").map(b => b.toolUseId)).toEqual(["lost"]);
+    yield { type: "text_delta", text: "continued" };
+    yield { type: "stop", reason: "end_turn" };
+  } };
+  for (let i = 0; i < 3; i++) {
+    const session = createAgent({ provider, store, tools: [], permissions: new RulePolicy([]), systemPrompt: "test", repoMap: false, trustedProjectRoot: root }).run("", { resume: id });
+    for await (const _ of session.events) { /* drain */ }
+    expect((await session.done).reason).toBe("done");
+  }
+  expect(requests).toBe(3);
+  expect((await store.readAll(id)).slice(0, before.length)).toEqual(before);
+});
+
+it.each([true, false])("recovers persisted parallel tool results and patches before stubbing missing calls (ok=%s)", async ok => {
+  root = await mkdtemp(join(tmpdir(), "resume-results-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  await store.append(id, { type: "session.start", task: "continue", cwd: root, provider: "fake", model: "fake" });
+  await store.append(id, { type: "message.append", message: { role: "assistant", content: ["done", "patched", "missing"].map(id => ({ type: "tool_use" as const, id, name: "write", input: {} })) } });
+  for (const call of ["done", "patched"]) {
+    const event = await store.append(id, { type: "tool.call", id: call, name: "write", input: {}, inputHash: "hash" });
+    await store.append(id, { type: "tool.result", id: call, toolCallSeq: event.seq, ok, display: "committed side effect", durationMs: 1 });
+  }
+  await store.append(id, { type: "tool.result.patched", id: "patched", by: "hook", display: "replacement", mode: "modify" });
+  await store.append(id, { type: "tool.result.patched", id: "patched", by: "hook", display: "extra", mode: "inject" });
+  const snapshot = await store.resumeSnapshot(id);
+  const results = snapshot!.messages.flatMap(m => m.content).filter(b => b.type === "tool_result");
+  expect(results.map(b => b.toolUseId)).toEqual(["done", "patched", "missing"]);
+  expect(results[0]).toMatchObject({ content: "committed side effect", ...(ok ? {} : { isError: true }) });
+  expect(results[0]?.isError ?? false).toBe(!ok);
+  expect(results[1]?.content).toBe("replacement\n\nextra");
+  expect(results[2]).toMatchObject({ isError: true });
+  expect(String(results[2]?.content)).toContain("interrupted");
 });

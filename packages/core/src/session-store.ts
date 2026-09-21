@@ -453,22 +453,11 @@ export class SessionStore {
     const snapshot = cached !== null && !events.some(e => e.type === "message.append")
       ? cached : await this.materializeSnapshot(sessionId);
     if (snapshot === null) return null;
-    // Repair interrupted parallel exchanges before adding advisory observations.
-    // Preserve real partial results and answer only missing calls in the next user message.
+    // Reconstruct every interrupted exchange on every resume. Repairs are a projection,
+    // not log rewrites: subsequent committed messages must not hide older missing results.
+    if (events.some(e => e.type === "message.append")) snapshot.messages = messagesFromEvents(events, true);
+    else balanceInterruptedExchanges(snapshot.messages);
     const messages = snapshot.messages;
-    let assistantIndex = messages.length - 1;
-    while (assistantIndex >= 0 && messages[assistantIndex]?.role !== "assistant") assistantIndex--;
-    const calls = messages[assistantIndex]?.content.filter(block => block.type === "tool_use") ?? [];
-    const next = messages[assistantIndex + 1];
-    const answered = new Set(next?.content.flatMap(block => block.type === "tool_result" ? [block.toolUseId] : []) ?? []);
-    const missing: Message["content"] = calls.filter(call => !answered.has(call.id)).map(call => ({
-      type: "tool_result", toolUseId: call.id,
-      content: "[interrupted: the session ended before this tool ran to completion]", isError: true,
-    }));
-    if (missing.length) {
-      if (next?.role === "user") messages[assistantIndex + 1] = { ...next, content: [...next.content, ...missing] };
-      else messages.splice(assistantIndex + 1, 0, { role: "user", content: missing });
-    }
 
     // Snapshot-only observations, not workflow authority. Project identities/status,
     // never historical task/role payloads. Keep serialized state within 12k code units
@@ -640,7 +629,8 @@ export class SessionStore {
 }
 
 /** Shared data-only fold; callers remain responsible for validating and bounding events. */
-export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
+export function messagesFromEvents(events: readonly HarnessEvent[], recoverInterrupted = false): Message[] {
+  const recovered = new Map<Message, Map<string, Extract<ContentBlock, { type: "tool_result" }>>>();
   const messages: Message[] = [];
   let streamedText = "";
   let activeAssistant: Message | undefined;
@@ -677,6 +667,23 @@ export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
       activeAssistant = undefined;
       authoritativeMessages = true;
       continue;
+    }
+    // The tool event can be durable before the user message is appended. Associate
+    // evidence with its actual exchange, not a global call-id table (IDs may recur).
+    if (recoverInterrupted && authoritativeMessages && (event.type === "tool.result" || event.type === "tool.result.patched")) {
+      const exchange = [...messages].reverse().find(m => m.role === "assistant" && m.content.some(b => b.type === "tool_use" && b.id === event.id));
+      if (exchange) {
+        let results = recovered.get(exchange);
+        if (!results) { results = new Map(); recovered.set(exchange, results); }
+        if (event.type === "tool.result") {
+          results.set(event.id, { type: "tool_result", toolUseId: event.id, content: event.display,
+            ...(event.diagnostics === undefined ? {} : { diagnostics: structuredClone(event.diagnostics) }),
+            ...(!event.ok ? { isError: true } : {}) });
+        } else {
+          const result = results.get(event.id);
+          if (result) result.content = event.mode === "inject" ? `${result.content}\n\n${event.display}` : event.display;
+        }
+      }
     }
     if (
       authoritativeMessages &&
@@ -758,7 +765,25 @@ export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
         break;
     }
   }
+  if (recoverInterrupted) balanceInterruptedExchanges(messages, recovered);
   return messages;
+}
+
+/** Idempotent projection: committed user results win; event evidence beats uncertainty. */
+function balanceInterruptedExchanges(messages: Message[], recovered = new Map<Message, Map<string, Extract<ContentBlock, { type: "tool_result" }>>>()) {
+  for (let i = 0; i < messages.length; i++) {
+    const assistant = messages[i]!;
+    if (assistant.role !== "assistant") continue;
+    const next = messages[i + 1];
+    const answered = new Set(next?.role === "user" ? next.content.flatMap(b => b.type === "tool_result" ? [b.toolUseId] : []) : []);
+    const missing: ContentBlock[] = assistant.content.flatMap(call => call.type !== "tool_use" || answered.has(call.id) ? [] : [
+      recovered.get(assistant)?.get(call.id) ?? { type: "tool_result" as const, toolUseId: call.id,
+        content: "[interrupted: no completion result was recorded; execution and side effects are unknown — reconcile before retrying]", isError: true, context: { principal: "platform" as const, authority: "advisory" as const } },
+    ]);
+    if (!missing.length) continue;
+    if (next?.role === "user") messages[i + 1] = { ...next, content: [...next.content, ...missing] };
+    else messages.splice(i + 1, 0, { role: "user", content: missing });
+  }
 }
 
 /** Stable content hash used for `tool.call.inputHash` and `file.changed.contentHash`. */
