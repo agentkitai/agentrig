@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { preservedReviews } from "./preserved-review-455.js";
 // @ts-expect-error standalone helper
-import { parseVerdict, verdictBlock } from "../../../scripts/review-verdict.mjs";
+import { parseVerdict, parseVerdictReceipt, verdictBlock } from "../../../scripts/review-verdict.mjs";
 const head = "a".repeat(40);
 const expected = { reviewedHead: head, slot: "Codex", assertedModel: "gpt-5.5" };
 const valid = { version: 1, ...expected, modelSource: "codex-launch", verdict: "PASS", findings: [] };
@@ -25,6 +25,14 @@ it("schema headings have no grammar and PASS cannot conceal blocking findings", 
   const finding = {severity:"HIGH", heading:"any verbatim heading", location:"scripts/tool.mjs:12", blocking:true, scenario:"A stale model assertion is accepted."};
   expect(parseVerdict(verdictBlock({...valid, verdict:"FAIL", findings:[finding]}), expected).findings).toEqual([finding]);
   expect(() => parseVerdict(verdictBlock({...valid, findings:[finding]}), expected)).toThrow();
+});
+it("accepts a complete finding carrying fix, drops the extra key, and keeps required fields strict", () => {
+  const finding = {severity:"LOW", heading:"Advisory with suggested repair", location:"scripts/tool.mjs:14", blocking:false, scenario:"The reviewer adds a useful suggestion.", fix:"Use the normalized receipt."};
+  const body = verdictBlock({...valid, findings:[finding]});
+  const parsed = parseVerdict(body, expected);
+  expect(parsed.findings).toEqual([{severity:finding.severity, heading:finding.heading, location:finding.location, blocking:finding.blocking, scenario:finding.scenario}]);
+  expect(parseVerdictReceipt(body, expected).ignoredKeys).toEqual([{findingIndex:0, keys:["fix"]}]);
+  expect(() => parseVerdict(verdictBlock({...valid, findings:[{...finding, scenario:undefined}]}), expected)).toThrow();
 });
 it("requires exactly one complete machine block", () => {
   expect(() => parseVerdict("VERDICT: PASS", expected)).toThrow();

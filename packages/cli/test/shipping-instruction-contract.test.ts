@@ -1,11 +1,29 @@
 import { readSkillText } from "../../../test/skill-text.js";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
 const skills = ["topic", "ship", "dogfood", "review", "land", "arbiter"] as const;
+const reviewerProtocolRetry = "A reviewer schema-shape rejection where all required finding fields validate is a reviewer-protocol retry and does not consume the slot's single reviewer retry.";
+const ship = readSkillText(new URL("../../../.agentrig/skills/ship/SKILL.md", import.meta.url), "utf8");
+const shippingWorkflow = readFileSync(new URL("../../../docs/SHIPPING-WORKFLOW.md", import.meta.url), "utf8");
+function assertReviewerProtocolRetry(text: string): void { expect(text).toContain(reviewerProtocolRetry); }
+it("ship skill and shipping workflow preserve schema-shape rejections as reviewer-protocol retries", () => {
+  assertReviewerProtocolRetry(ship);
+  assertReviewerProtocolRetry(shippingWorkflow);
+});
+it.each([
+  ["M-required-fields", "all required finding fields", "some required finding fields"],
+  ["M-protocol-class", "a reviewer-protocol retry", "a reviewer retry"],
+  ["M-single-retry-charge", "does not consume", "consumes"],
+])("%s is rejected by the reviewer-protocol retry contract", (_name, from, to) => {
+  const mutant = reviewerProtocolRetry.replace(from, to);
+  expect(() => assertReviewerProtocolRetry(ship.replace(reviewerProtocolRetry, mutant))).toThrow();
+  expect(() => assertReviewerProtocolRetry(shippingWorkflow.replace(reviewerProtocolRetry, mutant))).toThrow();
+});
+
 const heading = "## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full — transport: <transport>; home: <JSON-home>";
 const rule = `The two initial external review comments must each start with this exact heading form:
 \`${heading}\`
