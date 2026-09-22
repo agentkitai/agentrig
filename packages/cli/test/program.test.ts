@@ -347,3 +347,19 @@ it("run --resume accepts no replacement task and forwards the same session id", 
   await program.parseAsync(["node", "agentrig", "run", "--resume", "recorded-conductor"]);
   expect(received).toEqual({ task: "", resume: "recorded-conductor" });
 });
+
+
+it.each([[[]], [["Continue", "review"]]])("sessions resume forwards optional continuation without synthetic text (%j)", async words => {
+  let received: { task: string; resume: string | undefined } | undefined;
+  const { buildProgram } = await import("../src/program.js");
+  const program = buildProgram({ run: async (task, opts) => {
+    received = { task, resume: opts.resume };
+  } });
+  program.exitOverride();
+  await program.parseAsync(["node", "agentrig", "sessions", "resume", "recorded-conductor", ...words]);
+  expect(received).toEqual({ task: words.join(" "), resume: "recorded-conductor" });
+  const help = program.commands.find(c => c.name() === "sessions")!.commands.find(c => c.name() === "resume")!.helpInformation();
+  expect(help).toContain("recorded history");
+  expect(help).toContain("optional task");
+  expect(help).not.toContain("snapshot");
+});

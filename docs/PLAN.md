@@ -270,7 +270,15 @@ a run that crashed before its first snapshot is also resumable. Recorded plan an
 spawn/end observations are restored as advisory context. The conversation retains PR-ledger
 read-back receipts and repair counters; ship/topic reconcile them with the live PR head
 before acting. Core neither interprets phases nor grants authority from replayed text.
-Legacy snapshot-only conversation details remain supported.
+Legacy snapshot-only conversation details remain supported. Durable tool results and their
+stored bounded displays are recovered before unknown-result placeholders; results precede
+continuation text in the provider-independent conversation.
+
+The resume ledger sums recorded token usage; with pricing configured, the agent reprices
+those cumulative tokens. Without pricing, USD comes only from the cached snapshot and
+can lag the log after a crash. A configured `maxUsd` cannot reconstruct that missing
+dollar spend: token usage alone is not a dollar estimate.
+This unpriced crash-accounting limitation means `maxUsd` is not a hard billing cap.
 
 Mid-reply provider stream failures abort the uncommitted assistant turn (`turn.aborted`
 with the provider error). Core discards partial text, reasoning and tool calls, then

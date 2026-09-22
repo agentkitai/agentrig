@@ -751,11 +751,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   withRunOptions(
     sessions
       .command("resume <id> [task...]")
-      .description("Continue a session from its snapshot; the task becomes the next user message"),
+      .description("Continue a session in place from its recorded history; an optional task becomes the next user message"),
     HEADLESS_MAX_TURNS,
   ).action(async (id: string, taskWords: string[], opts: RunOptions, cmd: Command) => {
     const resolved = await configured({ ...opts, resume: id }, cmd, false);
-    if (resolved !== undefined) await executeRun(taskWords.join(" ") || "Continue the task.", resolved);
+    if (resolved !== undefined) await executeRun(taskWords.join(" "), resolved);
   });
 
   sessions
