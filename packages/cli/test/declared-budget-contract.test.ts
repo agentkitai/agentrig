@@ -21,3 +21,22 @@ it.each(cases)("%s: %s retains its explicit Vitest budget", (file, title, budget
   expect(found).toHaveLength(1);
   expect(Number(found[0]?.arguments[2]?.getText(source).replaceAll("_", ""))).toBe(budget);
 });
+
+it("evalset prepareMechanics retains its explicit hook budget independent of testTimeout", () => {
+  const file = "evalset.test.ts";
+  const source = ts.createSourceFile(file, readFileSync(new URL(file, import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
+  const found: ts.CallExpression[] = [];
+  function preparesMechanics(node: ts.Node): boolean {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "prepareMechanics") return true;
+    return ts.forEachChild(node, preparesMechanics) === true;
+  }
+  function walk(node: ts.Node): void {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "beforeAll"
+      && node.arguments[0] && preparesMechanics(node.arguments[0])) found.push(node);
+    ts.forEachChild(node, walk);
+  }
+  walk(source);
+  expect(found).toHaveLength(1);
+  // Vitest takes hook timeouts in argument two, unlike the test budgets above.
+  expect(Number(found[0]?.arguments[1]?.getText(source).replaceAll("_", ""))).toBe(30_000);
+});

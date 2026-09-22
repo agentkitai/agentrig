@@ -32,12 +32,12 @@ let mechanicsRoot: string | undefined;
 let mechanicsSetup: Promise<void> | undefined;
 const mechanicsSources: Record<string, string> = {};
 beforeAll(() => {
-  // One owned dependency copy/source compilation per suite, under the existing hook deadline.
+  // One owned dependency copy/source compilation per suite, under a scoped hook deadline.
   // Child fixtures resolve this private dependency through ordinary Node parent lookup. Nothing
   // borrows a repository dist or symlinks into its dependency tree; only the leaf files mutate.
   mechanicsSetup = prepareMechanics();
   return mechanicsSetup;
-});
+}, 30_000); // #405: prepareMechanics spawns work; testTimeout does not cover hooks.
 async function prepareMechanics() {
   mechanicsRoot = await mkdtemp(join(tmpdir(), "agentrig-eval-mechanics-"));
   mechanicsRoot = await realpath(mechanicsRoot);
