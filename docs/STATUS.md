@@ -1,5 +1,14 @@
 # Status
 
+## User-directed Codex reviewer slot update (implementation; proof pending)
+
+The live Codex `codex-cli` slot now uses the updated exact model pin in
+`.agentrig/config.json` (`reviewers.Codex.model`), the single source of truth.
+Review/ship/land and shipping policy reference that config rather than duplicate
+the pin. Standalone reviewer fixtures are unchanged. Repair round: 0/3.
+Conductor checks and a committed-head adapter proof must precede PR creation;
+independent review and exact-head CI remain pending. No roadmap completion claimed.
+
 PR #504 repair round 1 addresses C1/X1 only: API configured echoes no longer authorize
 family relaxation (exact API assertions remain usable); landing and all workflow copies
 retain the actual adapter receipt, transport-pinned headings, and honest assertions.
