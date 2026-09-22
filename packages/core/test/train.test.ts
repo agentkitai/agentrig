@@ -39,7 +39,43 @@ describe("train", () => {
     expect(TrainRowSchema.safeParse({ ...row, environment: { ...row.environment, yolo: "yes" } }).success).toBe(false);
     expect(await runTrain(f.root, { command: f.command })).toBe("halted");
     expect(f.calls).toEqual([]);
-    expect(JSON.parse(await readFile(join(f.root, "logs/1.halt.json"), "utf8"))).toMatchObject({ phase: "schema", pr: null, sessionIds: [] });
+    expect(await readdir(join(f.root, "queue"))).toEqual(["1.json"]);
+    expect(await readdir(join(f.root, "halted"))).toEqual([]);
+    expect((await trainStatus(f.root)).invalidEntries[0]).toContain("queue/1.json:");
+  });
+  it("C1 runs the valid first row before stopping at a malformed later row", async () => {
+    const f = await fixture(2);
+    await writeFile(join(f.root, "queue/2.json"), "{}");
+    expect((await trainStatus(f.root)).invalidEntries[0]).toContain("queue/2.json:");
+    expect(await readdir(join(f.root, "queue"))).toEqual(["1.json", "2.json"]);
+    expect(await runTrain(f.root, { command: f.command })).toBe("halted");
+    expect(f.calls.filter(call => call.startsWith("run --headless"))).toHaveLength(1);
+    expect(await readdir(join(f.root, "done"))).toEqual(["1.json"]);
+    expect(await readdir(join(f.root, "queue"))).toEqual(["2.json"]);
+    expect(await readdir(join(f.root, "halted"))).toEqual([]);
+    expect(await readdir(join(f.root, "logs"))).not.toContain("2.halt.json");
+  });
+  it("C1 never skips an invalid selected first row to run a valid later row", async () => {
+    const f = await fixture(2);
+    await writeFile(join(f.root, "queue/1.json"), "{}");
+    expect(await runTrain(f.root, { command: f.command })).toBe("halted");
+    expect(f.calls).toEqual([]);
+    expect(await readdir(join(f.root, "queue"))).toEqual(["1.json", "2.json"]);
+    expect(await readdir(join(f.root, "active"))).toEqual([]);
+    expect(await readdir(join(f.root, "halted"))).toEqual([]);
+    expect(await readdir(join(f.root, "logs"))).toEqual([]);
+  });
+  for (const folder of ["done", "halted"]) it(`C2 historical ${folder} noise is diagnostic, not a dispatch gate`, async () => {
+    const f = await fixture();
+    await mkdir(join(f.root, folder));
+    await writeFile(join(f.root, folder, ".DS_Store"), "historical noise");
+    expect((await trainStatus(f.root)).invalidEntries).toEqual([`${folder}/.DS_Store`]);
+    expect(await runTrain(f.root, { command: f.command })).toBe("empty");
+    expect(f.calls.filter(call => call.startsWith("run --headless"))).toHaveLength(1);
+    expect(await readdir(join(f.root, "queue"))).toEqual([]);
+    expect(await readFile(join(f.root, "done/1.json"), "utf8")).toBe(JSON.stringify(row));
+    expect(await readFile(join(f.root, folder, ".DS_Store"), "utf8")).toBe("historical noise");
+    expect((await trainStatus(f.root)).invalidEntries).toEqual([`${folder}/.DS_Store`]);
   });
   it("validates checkout between every row and prints each status", async () => {
     const f = await fixture(2); const statuses: unknown[] = [];
@@ -326,7 +362,8 @@ it.each([undefined, 15000])("logs and forwards the declared train test budget %s
   expect(await runTrain(f.root, { command: f.command, testTimeout: async (checkout, profile) => {
     resolved.push(checkout); expect(profile).toBeUndefined(); return testTimeout;
   } })).toBe("empty");
-  expect(resolved).toEqual([row.environment.checkout, row.environment.checkout]);
+  // Preclaim validates each selected row once; checkout reloads each budget after fast-forward.
+  expect(resolved).toEqual(Array(4).fill(row.environment.checkout));
   const argv = testTimeout === undefined ? ["test"] : ["test", "--testTimeout=15000"];
   expect(f.calls.filter(c => c === argv.join(" "))).toHaveLength(2);
   for (const id of [1, 2]) {
@@ -352,5 +389,7 @@ it("M-train-home: resolve environment before any child and carry it on every req
   const blocked = await fixture();
   expect(await runTrain(blocked.root, { command: blocked.command, childEnvironment: async () => { throw new Error("REVIEWER_HOME_MISSING: reviewers:Primary requires CODEX_HOME"); } })).toBe("halted");
   expect(blocked.calls).toEqual([]);
-  expect(await readFile(join(blocked.root, "logs/1.halt.json"), "utf8")).toContain("REVIEWER_HOME_MISSING");
+  expect(await readdir(join(blocked.root, "queue"))).toEqual(["1.json"]);
+  expect(await readdir(join(blocked.root, "halted"))).toEqual([]);
+  expect((await trainStatus(blocked.root, { childEnvironment: async () => { throw new Error("REVIEWER_HOME_MISSING"); } })).invalidEntries[0]).toContain("REVIEWER_HOME_MISSING");
 });

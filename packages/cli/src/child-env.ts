@@ -3,14 +3,19 @@ import { isAbsolute, join } from "node:path";
 import { readConfigFile, resolveConfig, type ConfigFile, type ReviewerSlot } from "./config.js";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
+/** Use the same boundary guard and file loader as CLI preAction. */
+export async function loadChildUserConfig(cwd: string, home = homedir()): Promise<ConfigFile | undefined> {
+  const boundary = await resolveProjectBoundary(cwd, home);
+  return boundary.userStateSafe ? readConfigFile(join(home, ".agentrig", "config.json")) : undefined;
+}
+
 /** Only operator-owned USER profiles may supply process environment. Project profiles
  * continue to resolve normal options but never grant environment-setting authority. */
-export async function resolveChildEnvironment(options: { cwd?: string; home?: string; profile?: string; env?: NodeJS.ProcessEnv; validateProfile?: boolean; explicitTrust?: boolean; project?: ConfigFile } = {}): Promise<NodeJS.ProcessEnv> {
+export async function resolveChildEnvironment(options: { cwd?: string; home?: string; profile?: string; env?: NodeJS.ProcessEnv; validateProfile?: boolean; explicitTrust?: boolean; project?: ConfigFile; user?: ConfigFile } = {}): Promise<NodeJS.ProcessEnv> {
   const cwd = options.cwd ?? process.cwd(), home = options.home ?? homedir();
   const env = { ...(options.env ?? process.env) };
   const profile = options.profile ?? env.AGENTRIG_CHILD_PROFILE;
-  const boundary = await resolveProjectBoundary(cwd, home);
-  const user = boundary.userStateSafe ? await readConfigFile(join(home, ".agentrig", "config.json")) : undefined;
+  const user = options.user ?? await loadChildUserConfig(cwd, home);
   if (profile !== undefined && profile !== "recommended") {
     // Reuse normal built-in/unknown-profile validation; trusted project declarations
     // may name profiles, but never contribute environment authority.
@@ -36,7 +41,8 @@ export function assertReviewerHomes(reviewers: Record<string, ReviewerSlot> | un
 export async function trainChildEnvironment(cwd: string, profile?: string): Promise<NodeJS.ProcessEnv> {
   const trust = await resolveProjectTrust(cwd, { home: homedir(), interactive: false });
   const config = trust.trusted ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json")) : undefined;
-  const env = await resolveChildEnvironment({ cwd, validateProfile: true, ...(config === undefined ? {} : { project: config }), ...(profile === undefined ? {} : { profile }) });
+  const user = await loadChildUserConfig(cwd);
+  const env = await resolveChildEnvironment({ cwd, ...(user === undefined ? {} : { user }), validateProfile: true, ...(config === undefined ? {} : { project: config }), ...(profile === undefined ? {} : { profile }) });
   assertReviewerHomes(config?.reviewers, env);
   return env;
 }

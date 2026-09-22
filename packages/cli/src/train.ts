@@ -10,7 +10,7 @@ export function registerTrainCommand(program: Command): void {
     .description("Drain validated queue rows through headless ship; stop on an unverified landing")
     .option("--status", "show queue counts and per-row/session usage without dispatch")
     .action(async (directory: string, flags: { status?: boolean }) => {
-      if (flags.status) { console.log(JSON.stringify(await trainStatus(directory))); return; }
+      if (flags.status) { console.log(JSON.stringify(await trainStatus(directory, { testTimeout: resolveTrainTestTimeout, childEnvironment: trainChildEnvironment }))); return; }
       const result = await runTrain(directory, {
         testTimeout: resolveTrainTestTimeout, childEnvironment: trainChildEnvironment,
         cli: fileURLToPath(new URL("./index.js", import.meta.url)),
