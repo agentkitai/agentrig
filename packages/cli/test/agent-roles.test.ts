@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { buildProgram } from "../src/program.js";
+import { cliEnv } from "./cli-env.js";
 import { renderChatEvent, renderEvent } from "../src/render.js";
 import * as providers from "../src/provider.js";
 import { buildAgent } from "../src/agent-builder.js";
@@ -43,7 +44,7 @@ it.each([undefined, "2", "2.0"])("actual trusted CLI role discovery reaches the 
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   try {
     const address = server.address(); if (!address || typeof address === "string") throw Error("fixture address");
-    await buildProgram({ config: { cwd, home } }).parseAsync(["run", "delegate inspection", "--trust", "--yolo",
+    await buildProgram({ config: { cwd, home, env: cliEnv() } }).parseAsync(["run", "delegate inspection", "--trust", "--yolo",
       "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`, "--max-turns", "3",
       ...(turns === undefined ? [] : ["--subagent-max-turns", turns])], { from: "user" });
     expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(0);
@@ -68,7 +69,7 @@ it.each(["flag", "config-number", "config-string"])("actual CLI refuses fraction
   vi.spyOn(process, "cwd").mockReturnValue(cwd);
   const construct = vi.spyOn(providers, "buildProviders").mockImplementation(() => { throw Error("PROVIDER_CONSTRUCTION_CANARY"); });
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
-  await buildProgram({ config: { cwd, home } }).parseAsync(["run", "task", "--trust", "--provider", "openai", "--model", "fixture",
+  await buildProgram({ config: { cwd, home, env: cliEnv() } }).parseAsync(["run", "task", "--trust", "--provider", "openai", "--model", "fixture",
     ...(source === "flag" ? ["--subagent-max-turns", "1.5"] : [])], { from: "user" });
   expect(process.exitCode).toBe(1); expect(construct).not.toHaveBeenCalled();
   expect(error.mock.calls.flat().join("\n")).toMatch(/integer/);

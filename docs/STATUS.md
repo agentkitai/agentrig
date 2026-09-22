@@ -1,5 +1,12 @@
 # Status
 
+## Pending review — issue #524, in-process CLI fixture environment
+
+In-process CLI fixtures now share the spawned-fixture environment boundary: inherited
+`AGENTRIG_CHILD_PROFILE`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` are removed before
+program construction. Intentional profile tests remain explicit. Regression and named
+mutation proofs accompany the PR; no roadmap completion marker is set.
+
 ## Complete — issue #521, declared-check user-only profiles (PR #528)
 
 The public resolver now loads safe user config for `run --profile`-compatible name

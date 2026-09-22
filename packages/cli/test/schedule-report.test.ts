@@ -8,6 +8,7 @@ import { SessionStore, type AuxiliaryReport, type HarnessEvent } from "@agentkit
 import { ScheduleReports, ScheduleReceipt, ScheduledUsage, type ReceiptInput } from "../src/schedule-report.js";
 import { ScheduleStore } from "../src/schedule.js";
 import { buildProgram } from "../src/program.js";
+import { cliEnv } from "./cli-env.js";
 
 const roots: string[] = [];
 const now = new Date("2026-09-06T12:30:00Z");
@@ -124,7 +125,7 @@ it.each([[undefined, false], [false, false], [true, false], [true, true]] as con
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   try {
     const address = server.address(); if (!address || typeof address === "string") throw new Error("fixture address");
-    const deps = { config: { cwd: f.project, home: f.home }, scheduleNow: () => now };
+    const deps = { config: { cwd: f.project, home: f.home, env: cliEnv() }, scheduleNow: () => now };
     const args = ["schedule", "tick", "--execute", "--trust", "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`];
     await buildProgram(deps).parseAsync(args, { from: "user" });
     expect(calls).toBe(ingestOnEnd === false ? 2 : 3); expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(failedMaintenance ? 1 : 0);
@@ -149,7 +150,7 @@ it("launch or reporting failure stays visible with retained claims, and never re
   const f = await fixture(); await f.schedules.add({ id: "one", cron: "30 12 * * *", task: "one" });
   const run = vi.fn(async () => { throw new Error("private error text must not enter durable receipt"); });
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-  const deps = { run, config: { cwd: f.project, home: f.home }, scheduleNow: () => now };
+  const deps = { run, config: { cwd: f.project, home: f.home, env: cliEnv() }, scheduleNow: () => now };
   await buildProgram(deps).parseAsync(["schedule", "tick", "--execute", "--trust"], { from: "user" });
   const bytes = await readFile(join(f.project, ".agentrig/schedule.log"), "utf8");
   expect(bytes).not.toContain("private"); expect(JSON.parse(bytes)).toMatchObject({ outcome: "error", sessionId: null, accounting: null });
@@ -174,7 +175,7 @@ it("marker write failure remains a visible nonzero result without replacing an u
   const f = await fixture(); await f.schedules.add({ id: "one", cron: "30 12 * * *", task: "one" });
   await symlink(f.home, join(f.project, ".agentrig/schedule-report-uncertain.json"), "junction");
   const run = vi.fn(async () => {}); const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-  await buildProgram({ run, config: { cwd: f.project, home: f.home }, scheduleNow: () => now }).parseAsync(["schedule", "tick", "--execute", "--trust"], { from: "user" });
+  await buildProgram({ run, config: { cwd: f.project, home: f.home, env: cliEnv() }, scheduleNow: () => now }).parseAsync(["schedule", "tick", "--execute", "--trust"], { from: "user" });
   expect(run).toHaveBeenCalledTimes(1); expect(process.exitCode).toBe(1);
   expect(errors.mock.calls.flat().join(" ")).toContain("stderr/exit status are the only failure record");
   expect((await f.schedules.read()).entries[0]?.lastClaimedMinute).toBe(input().minute);
