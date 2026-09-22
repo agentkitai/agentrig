@@ -228,7 +228,7 @@ describe("argv parsing", () => {
     expect(await capture(["--profile", "leading", "run", "x"])).toBe("leading");
   });
 
-  it("says --profile is ignored on commands that never consult config, instead of silence", async () => {
+  it("does not claim --profile is ignored now that childEnv applies to all commands", async () => {
     // an alias appends --profile to EVERY forwarded subcommand, so these paths are hit
     // constantly; accepted-but-silently-dead is the timeoutMs failure mode all over again
     const notes: string[] = [];
@@ -239,8 +239,8 @@ describe("argv parsing", () => {
     try {
       await parse(["--profile", "p", "memory", "ls"]);
       await parse(["dream", "--profile", "p", "--structural-only"]);
-      expect(notes.filter((n) => n.includes("--profile is ignored by `ls`"))).toHaveLength(1);
-      expect(notes.filter((n) => n.includes("--profile is ignored by `dream`"))).toHaveLength(1);
+      expect(notes.filter((n) => n.includes("--profile is ignored by `ls`"))).toHaveLength(0);
+      expect(notes.filter((n) => n.includes("--profile is ignored by `dream`"))).toHaveLength(0);
       notes.length = 0;
       await parse(["--profile", "p", "run", "x"]);
       await parse(["--profile", "p"]);

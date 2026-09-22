@@ -130,10 +130,10 @@ it('review accepts the built-in recommended baseline without enabling run hooks'
   expect(errors.join("\n")).toContain("--comment requires --pr");
 });
 
-it('profile-ignorant commands explicitly note that recommended is ignored', async () => {
+it('childEnv-aware commands do not claim the profile is wholly ignored', async () => {
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
   await buildProgram().parseAsync(['sessions', 'ls', '--profile', 'recommended'], {from: 'user'});
-  expect(errors.mock.calls.flat().join('\n')).toContain('note: --profile is ignored by `ls`');
+  expect(errors.mock.calls.flat().join('\n')).not.toContain('note: --profile is ignored by `ls`');
 });
 it('recommended on a config-aware non-run command notes that run defaults do not apply', async () => {
   const root = await mkdtemp(join(tmpdir(), 'recommended-note-')); roots.push(root);

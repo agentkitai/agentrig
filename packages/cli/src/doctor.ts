@@ -1,3 +1,4 @@
+import { reviewerHome } from "./child-env.js";
 import { execFile } from "node:child_process";
 import { formatFeelBudgets } from "./feel-budgets.js";
 import { feelReference } from "./feel-reference.js";
@@ -34,6 +35,7 @@ export interface DoctorFileInfo {
 }
 
 export interface DoctorProbes {
+  run(command: string, args: string[], cwd?: string, env?: NodeJS.ProcessEnv): Promise<{ code: number; stdout: string; stderr: string }>;
   readFile(path: string): Promise<string>;
   access(path: string, mode: number): Promise<void>;
   stat(path: string): Promise<DoctorFileInfo>;
@@ -138,6 +140,10 @@ async function defaultGitState(cwd: string): Promise<DoctorGitState> {
 
 function defaultProbes(): DoctorProbes {
   return {
+    async run(command, args, cwd, env) {
+      try { const result = await execFileAsync(command, args, { cwd, env, timeout: 15_000, maxBuffer: 64 * 1024 }); return { code: 0, ...result }; }
+      catch { return { code: 1, stdout: "", stderr: "" }; }
+    },
     readFile: (path) => readFile(path, "utf8"),
     access,
     stat,
@@ -585,6 +591,31 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
         // Provider exceptions may contain credential-bearing URLs/output. Never echo them.
         checks.push(line("fail", "probe", "probe construction, observation or cache write failed; no raw provider error is printed"));
       }
+    }
+  }
+
+  // Never inspect CLI credential files or echo raw status/errors.
+  const reviewerEnv = { ...env, ...(profile === undefined ? {} : user?.profiles?.[profile]?.childEnv) };
+  for (const [slot, binding] of Object.entries(project?.reviewers ?? {})) {
+    const label = `reviewers:${slot}`;
+    try {
+      const home = reviewerHome(slot, binding.adapter, reviewerEnv);
+      if (!home) { checks.push(line("skip", label, "API adapter; no CLI login-status")); continue; }
+      const codex = binding.adapter === "codex-cli";
+      const status = await probes.run(codex ? "codex" : "claude", codex ? ["login", "status"] : ["auth", "status"], cwd, reviewerEnv);
+      let identity = "identity unavailable from CLI status";
+      if (codex) {
+        if (/Logged in using ChatGPT/u.test(status.stdout + status.stderr)) identity = "ChatGPT login (account identity not exposed by CLI)";
+        else if (/Logged in using an API key/u.test(status.stdout + status.stderr)) identity = "API key login (key redacted)";
+      } else {
+        try {
+          const data = JSON.parse(status.stdout) as Record<string, unknown>;
+          if (typeof data.email === "string" && /^[^\s@<>]{1,128}@[^\s@<>]{1,128}$/u.test(data.email)) identity = `account ${display(data.email)}`;
+        } catch { /* Unsupported status shape is not safe to echo. */ }
+      }
+      checks.push(line(status.code === 0 ? "pass" : "fail", label, `${home.variable}=${display(home.home)}; ${status.code === 0 ? identity : "login-status failed; authenticate this CLI home"}`));
+    } catch (error) {
+      checks.push(line("fail", label, error instanceof Error && error.name.startsWith("ReviewerHome") ? error.message : "login-status unavailable (raw output suppressed)"));
     }
   }
 

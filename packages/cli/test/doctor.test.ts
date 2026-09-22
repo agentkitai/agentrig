@@ -34,6 +34,7 @@ function fixture(): Fixture {
   const reads: string[] = [];
   const accesses: string[] = [];
   const probes: DoctorProbes = {
+    async run() { return { code: 0, stdout: "", stderr: "" }; },
     async readFile(path) {
       reads.push(path);
       const value = files.get(path);
@@ -638,4 +639,26 @@ it("prints all five measured feel references through ordinary doctor without pro
     expect(text).toContain(`feel:E1:${task}`);
   }
   expect(text).not.toContain("probe:usage");
+});
+
+it("M-doctor-home: reviewer login status receives profile home and reports only visible identity", async () => {
+  const f = fixture();
+  f.files.set(join(ROOT, ".agentrig", "config.json"), JSON.stringify({ reviewers: { Personal: { adapter: "claude-cli", model: "sonnet" } } }));
+  f.files.set(join(HOME, ".agentrig", "config.json"), JSON.stringify({ profiles: { personal: { childEnv: { CLAUDE_CONFIG_DIR: "/accounts/personal" } } } }));
+  f.options.cli = { profile: "personal" };
+  const calls: unknown[] = [];
+  f.probes.run = async (command, args, cwd, env) => { calls.push({ command, args, env }); return { code: 0, stdout: JSON.stringify({ email: "person@example.test", accessToken: "NEVER_PRINT_THIS" }), stderr: "NEVER_PRINT_THIS" }; };
+  const result = await diagnose(f.options);
+  expect(find(result.lines, "reviewers:Personal")).toContain("person@example.test");
+  expect(result.lines.join("\n")).not.toContain("NEVER_PRINT_THIS");
+  expect(calls).toContainEqual(expect.objectContaining({ command: "claude", args: ["auth", "status"], env: expect.objectContaining({ CLAUDE_CONFIG_DIR: "/accounts/personal" }) }));
+});
+
+it("M-doctor-missing-home: distinct per-slot failure and no login-status launch", async () => {
+  const f = fixture();
+  f.files.set(join(ROOT, ".agentrig", "config.json"), JSON.stringify({ reviewers: { Primary: { adapter: "codex-cli", model: "pin" } } }));
+  let calls = 0;
+  f.probes.run = async () => { calls++; return { code: 0, stdout: "", stderr: "" }; };
+  expect(find((await diagnose(f.options)).lines, "reviewers:Primary")).toContain("REVIEWER_HOME_MISSING");
+  expect(calls).toBe(0);
 });

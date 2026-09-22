@@ -276,3 +276,30 @@ Posting supplies `--provenance <PREFIX>.provenance.json`. Land retrieves the sam
 and runs `node scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`
 on the reassembled canonical body. Never reconstruct a receipt from the configured pin
 or reviewer prose; missing or mismatched artifacts require recovery or an adapter rerun.
+
+
+### Profile-scoped reviewer launch homes (#506)
+
+Configure `profiles.<name>.childEnv` in `~/.agentrig/config.json` with nonsecret,
+absolute `CODEX_HOME` and `CLAUDE_CONFIG_DIR` paths (see
+[train operations](TRAIN-OPERATIONS.md#profile-scoped-child-environment-506)).
+`agentrig --profile personal ...` passes the selected user environment to all CLI
+children. A standalone adapter uses the same safe user-profile resolver:
+
+```sh
+node scripts/reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix> --profile personal
+```
+
+The existing five-argument form still works with explicitly inherited homes or the
+CLI's inherited profile marker. The explicit config argument remains the operator's
+reviewer declaration; project childEnv never overrides the user environment.
+The adapter refuses missing homes with `REVIEWER_HOME_MISSING` before running a
+reviewer or creating output. Run `agentrig doctor --profile personal` first to see
+per-slot login status and visible identity without reading/printing credentials.
+
+Adapter provenance now includes `resolvedHome` and `homeVariable` for CLI transports.
+Pass the receipt via `post-review-comment.mjs --provenance <receipt>` as usual: the
+posted heading displays the resolved home beside transport model. Preserve that
+receipt through repair/posting; a home path is provenance, not proof of account
+identity. API adapters have no CLI home. Historical receipts without a home retain
+their historical heading; new adapter receipts always carry the resolved home.

@@ -554,3 +554,18 @@ it("#490 quoted delimiter mentions do not redirect the protected posting range",
   expect(parsed).toEqual([value]);
   expect(result.posts.some(part => part.includes(mention))).toBe(true);
 });
+
+it("M-heading-home: resolved home is posted beside transport identity", () => {
+  const dir = mkdtempSync(join(tmpdir(), "post-home-"));
+  try {
+    fixtureConfig(dir);
+    const verdict = { version: 1, reviewedHead: head, slot: "Codex", assertedModel: "gpt-5.5", modelSource: "codex-launch", verdict: "PASS", findings: [] };
+    writeFileSync(join(dir, "body"), `<!-- agentrig-verdict:v1 -->\n${JSON.stringify(verdict)}\n<!-- /agentrig-verdict -->\n`);
+    writeFileSync(join(dir, "model"), "gpt-5.5");
+    writeFileSync(join(dir, "proof.json"), JSON.stringify({ exit: 0, reviewedHead: head, slot: "Codex", adapter: "codex-cli", model: "gpt-5.5", transportModel: "gpt-5.5", assertedModel: "gpt-5.5", resolvedHome: "/accounts/personal", verdict: parseVerdict(verdictBlock(verdict)) }));
+    writeFileSync(join(dir, "gh"), `#!/bin/sh\nexit 0\n`); chmodSync(join(dir, "gh"), 0o755);
+    const result = spawnSync(process.execPath, [helper, "506", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment"), "--provenance", join(dir, "proof.json")], { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(join(dir, "comment"), "utf8").split("\n")[0]).toContain('transport: gpt-5.5; home: "/accounts/personal"');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

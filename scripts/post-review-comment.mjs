@@ -2,6 +2,7 @@
 // Usage: node scripts/post-review-comment.mjs PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]
 // Validate the structured verdict and caller binding before any remote side effect.
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
@@ -39,7 +40,13 @@ try {
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");
   if (!body.trim()) throw new Error("empty reviewer body");
   const expected = { reviewedHead: head, assertedModel: model, slot: reviewer };
-  if (provenanceFile) expected.transportModel = receiptTransport(JSON.parse(readFileSync(provenanceFile, "utf8")), expected, parseVerdict(body, { reviewedHead: head, slot: reviewer }), slots[reviewer].adapter);
+  let resolvedHome;
+  if (provenanceFile) {
+    const provenance = JSON.parse(readFileSync(provenanceFile, "utf8"));
+    expected.transportModel = receiptTransport(provenance, expected, parseVerdict(body, { reviewedHead: head, slot: reviewer }), slots[reviewer].adapter);
+    resolvedHome = provenance.resolvedHome;
+    if (resolvedHome !== undefined && (typeof resolvedHome !== "string" || !isAbsolute(resolvedHome) || /[\x00-\x1f\x7f]/u.test(resolvedHome))) throw new Error("invalid reviewer home provenance");
+  }
   const verdict = assertReviewerVerdict(body, expected);
   let sizeExplanation;
   if (Buffer.byteLength(body, "utf8") > 40 * 1024) {
@@ -50,7 +57,7 @@ try {
   }
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");
-  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full`;
+  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full${resolvedHome === undefined ? "" : ` — transport: ${expected.transportModel ?? "unknown"}; home: ${JSON.stringify(resolvedHome)}`}`;
   const payload = `${body}${proofFile === undefined ? "" : `\n${proof}`}`;
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;

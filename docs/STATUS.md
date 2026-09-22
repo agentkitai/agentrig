@@ -1,5 +1,16 @@
 # Status
 
+## Pending review — issue #506, profile-scoped child environment
+
+Implementation adds optional validated user-profile childEnv, CLI-wide inheritance,
+per-row train environment and pre-launch reviewer-home guards, safe per-slot doctor
+login-status diagnostics, and adapter/comment home provenance. Project environment
+maps are never applied. Schema, environment precedence/trust, CLI dispatch, train,
+adapter, doctor, and posted-heading regressions have targeted tests. Build/declared
+proof and named mutation receipts travel in the PR. Launch documentation is updated.
+This is **not landed/done**: independent conductor reviews and exact-head CI remain
+the gates; no ROADMAP row has been marked complete early.
+
 ## Reviewer adapter usage and review-policy residuals (#505, #508, #510, #511; implementation, proof pending)
 
 Reviewer CLI argument-count and output-prefix mistakes now fail with EX_USAGE before launch without consuming a reviewer retry. Transport-proven numeric GPT major-family assertions cover suffixed minor pins while retaining exact transport proof. Shipping instructions distinguish dispatched fixer tasks from durable fixer pre-push handoffs and preserve the sole verbatim-human-authorization-quote exception to identifier bans in PR and squash bodies. Repair round: 0/3; review disposition pending; residuals none. No roadmap completion is claimed.

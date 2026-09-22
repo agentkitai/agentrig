@@ -1,3 +1,4 @@
+import { trainChildEnvironment } from "./child-env.js";
 import { fileURLToPath } from "node:url";
 import { runTrain, trainStatus } from "@agentkitai/agentrig-core";
 import { resolveTrainTestTimeout } from "./project-checks.js";
@@ -11,7 +12,7 @@ export function registerTrainCommand(program: Command): void {
     .action(async (directory: string, flags: { status?: boolean }) => {
       if (flags.status) { console.log(JSON.stringify(await trainStatus(directory))); return; }
       const result = await runTrain(directory, {
-        testTimeout: resolveTrainTestTimeout,
+        testTimeout: resolveTrainTestTimeout, childEnvironment: trainChildEnvironment,
         cli: fileURLToPath(new URL("./index.js", import.meta.url)),
         status: status => { process.stdout.write(JSON.stringify({ type: "train.status", ...status }) + "\n"); },
       });
