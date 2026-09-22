@@ -57,9 +57,9 @@ try {
   }
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");
-  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full`;
-  const provenance = resolvedHome === undefined ? "" : `Reviewer provenance — transport: ${expected.transportModel ?? "unknown"}; home: ${JSON.stringify(resolvedHome)}\n\n`;
-  const payload = `${provenance}${body}${proofFile === undefined ? "" : `\n${proof}`}`;
+  const provenance = resolvedHome === undefined ? "" : ` — transport: ${expected.transportModel ?? "unknown"}; home: ${JSON.stringify(resolvedHome)}`;
+  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full${provenance}`;
+  const payload = `${body}${proofFile === undefined ? "" : `\n${proof}`}`;
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;
   const capacity = 60000 - heading.length - 2 - (2 * digits + 7);

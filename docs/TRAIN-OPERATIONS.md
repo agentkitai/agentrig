@@ -241,4 +241,4 @@ lock errors are command errors before execution, not evidence of a landed row.
 
 Reviewer adapter preflight: missing homes and invalid profiles exit 64 before launch and
 do not consume the single exit-2 retry. Fix configuration before re-dispatch. Review
-headings remain canonical; transport/home provenance is a separate body line.
+headings include transport model and JSON-quoted resolved home in the canonical suffix.

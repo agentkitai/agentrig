@@ -2,6 +2,11 @@
 
 ## Pending review — issue #506, profile-scoped child environment
 
+Repair round 2 repairs dispatched D1/D2/CI2: CLI review receipts put resolved home
+and transport in the posted heading; cookie aliases are refused; argv fixtures
+isolate HOME and USERPROFILE and verify awaited asynchronous dispatch.
+Focused review and hosted exact-head checks remain pending.
+
 Repair round 1 addresses dispatched C1/C2/A1/A3/CI1: credential aliases rejected;
 unknown profiles refused before child launch; doctor skips login probes for invalid
 configuration; review headings remain canonical with separate home provenance;

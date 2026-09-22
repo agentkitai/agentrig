@@ -205,7 +205,7 @@ export type ReviewerSlot = z.output<typeof ReviewerSlotSchema>;
 // Declarations are file metadata, not runtime launch/evaluation settings.
 export const ChildEnvSchema = z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/u), z.string().max(4096).refine(value => !/[\x00-\x1f\x7f]/u.test(value), "child environment values must be plain strings")).superRefine((env, ctx) => {
   for (const [key, value] of Object.entries(env)) {
-    if (/(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|CREDS|PAT|AUTH)(?:_|$)/iu.test(key)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: "secrets are forbidden in childEnv" });
+    if (/(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|CREDS|PAT|AUTH|COOKIES|COOKIE)(?:_|$)/iu.test(key)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: "secrets are forbidden in childEnv" });
     if (["CODEX_HOME", "CLAUDE_CONFIG_DIR"].includes(key) && !isAbsolute(value)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: "reviewer home must be an absolute path" });
   }
 });

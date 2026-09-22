@@ -53,6 +53,20 @@ function stub(program: Command): { run: (argv: string[]) => Promise<Captured | n
 }
 
 describe("argv parsing", () => {
+  it("M-CI2-portable-home: isolates both platform home selectors", () => {
+    expect(process.env.HOME).toBe(profileHome);
+    expect(process.env.USERPROFILE).toBe(profileHome);
+  });
+  it("M-CI2-await-dispatch: waits for asynchronous preAction before capture", async () => {
+    const program = buildProgram();
+    let ready = false;
+    program.hook("preAction", async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      ready = true;
+    });
+    expect((await stub(program).run(["--profile", "p", "run", "task"]))?.path).toBe("run");
+    expect(ready).toBe(true);
+  });
   it("carries explicit argv-prefix permissions for run, TUI and resume", async () => {
     for (const argv of [["run", "task"], ["tui"], ["sessions", "resume", "s"]]) {
       expect((await stub(buildProgram()).run([...argv, "--allow-command", '["git","status"]']))?.opts.allowCommand).toEqual([["git", "status"]]);
@@ -372,6 +386,7 @@ beforeEach(async () => {
   await mkdir(join(profileHome, ".agentrig"));
   await writeFile(join(profileHome, ".agentrig", "config.json"), JSON.stringify({ profiles: { p: {}, leading: {}, trailing: {} } }));
   vi.stubEnv("HOME", profileHome);
+  vi.stubEnv("USERPROFILE", profileHome);
   vi.stubEnv("AGENTRIG_CHILD_PROFILE", undefined);
 });
 afterEach(async () => { vi.unstubAllEnvs(); await rm(profileHome, { recursive: true, force: true }); });

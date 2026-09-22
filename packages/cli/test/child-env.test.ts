@@ -89,7 +89,7 @@ it("M-train-slot-config: trusted checkout slots fail fast under the selected use
   }
 });
 
-it.each(["AWS_CREDENTIALS", "credentials", "MY_CREDENTIALS_FILE", "GITHUB_PAT", "GH_PAT", "PASSWD", "PASSWD_FILE", "AWS_CREDS", "NPM_AUTH_TOKEN", "ApiKey"]) ("M-C1-secret-alias: rejects %s without value disclosure", key => {
+it.each(["SESSION_COOKIE", "session_cookie", "COOKIE", "COOKIES", "SESSION_COOKIES", "COOKIE_FILE", "AWS_CREDENTIALS", "credentials", "MY_CREDENTIALS_FILE", "GITHUB_PAT", "GH_PAT", "PASSWD", "PASSWD_FILE", "AWS_CREDS", "NPM_AUTH_TOKEN", "ApiKey"]) ("M-C1-secret-alias: rejects %s without value disclosure", key => {
   expect(() => parse({ [key]: "do-not-echo" })).toThrow();
   try { parse({ [key]: "do-not-echo" }); } catch (error) { expect(String(error)).not.toContain("do-not-echo"); }
 });

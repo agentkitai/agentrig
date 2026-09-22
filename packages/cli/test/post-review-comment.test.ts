@@ -555,7 +555,7 @@ it("#490 quoted delimiter mentions do not redirect the protected posting range",
   expect(result.posts.some(part => part.includes(mention))).toBe(true);
 });
 
-it("M-heading-home: resolved home is posted beside transport identity", () => {
+it("M-D1-heading-home: resolved home is posted beside transport identity", () => {
   const dir = mkdtempSync(join(tmpdir(), "post-home-"));
   try {
     fixtureConfig(dir);
@@ -567,7 +567,6 @@ it("M-heading-home: resolved home is posted beside transport identity", () => {
     const result = spawnSync(process.execPath, [helper, "506", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment"), "--provenance", join(dir, "proof.json")], { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
     expect(result.status, result.stderr).toBe(0);
     const posted = readFileSync(join(dir, "comment"), "utf8");
-    expect(posted.split("\n")[0]).toBe(`## External review — Codex (gpt-5.5) — head ${head} — merged with origin/main ${main} — full`);
-    expect(posted).toContain('transport: gpt-5.5; home: "/accounts/personal"');
+    expect(posted.split("\n")[0]).toBe(`## External review — Codex (gpt-5.5) — head ${head} — merged with origin/main ${main} — full — transport: gpt-5.5; home: "/accounts/personal"`);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

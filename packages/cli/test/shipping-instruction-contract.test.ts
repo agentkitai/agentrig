@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 
 const skills = ["topic", "ship", "dogfood", "review", "land"] as const;
-const heading = "## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full";
+const heading = "## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full — transport: <transport>; home: <JSON-home>";
 const rule = `The two initial external review comments must each start with this exact heading form:
 \`${heading}\`
 Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
@@ -34,7 +34,7 @@ function assertHeadingContract(text: string): void {
     if (ledgerHeadings.includes(literal)) continue;
     // The separate delta-review protocol is outside the initial full-pair contract.
     if (literal === "## Focused review — <reviewer> — head NEW — delta OLD..NEW") continue;
-    expect(literal).toMatch(/^## External review — (?:<reviewer>|<slot>|Claude Code|Codex) \((?:<model>|[\w.-]+|\$CODEX_MODEL)\) — head (?:<SHA>|HEAD) — merged with origin\/main (?:<MAIN>|MAIN) — full$/);
+    expect(literal).toMatch(/^## External review — (?:<reviewer>|<slot>|Claude Code|Codex) \((?:<model>|[\w.-]+|\$CODEX_MODEL)\) — head (?:<SHA>|HEAD) — merged with origin\/main (?:<MAIN>|MAIN) — full — transport: <transport>; home: <JSON-home>$/);
   }
   expect(text).not.toMatch(/heading starts with|whose body\s+names the CURRENT head SHA/);
 }
@@ -271,8 +271,7 @@ it("topic caps arbitration and explicitly dispositions focused classification di
 for (const name of ["ship", "topic", "review"]) {
   it(`${name}: M-A1-A3 canonical heading and non-retry preflight contract`, () => {
     const text = readSkillText(new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url), "utf8");
-    expect(text).toContain("Keep this canonical heading unchanged, with no suffix.");
-    expect(text).toContain("separate body line beneath it");
+    expect(text).toContain("include transport model and JSON-quoted resolved home\nin this heading, never only in the body");
     expect(text).toContain("pre-launch configuration refusals (exit 64), not retry-consuming exit 2");
   });
 }

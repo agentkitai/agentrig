@@ -93,10 +93,11 @@ An `api:<name>` adapter references the existing `providers.<name>` entry, whose 
 the slot's pinned model; it duplicates no endpoints, credentials or routing. See shipping policy §3.
 
 Each declared slot's initial comment must start with:
-`## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+`## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full — transport: <transport>; home: <JSON-home>`
 
-Keep this canonical heading unchanged, with no suffix. Reviewer provenance (transport model
-and resolved home) belongs in a separate body line beneath it. Missing reviewer homes or
+For CLI receipts with a resolved home, include transport model and JSON-quoted resolved home
+in this heading, never only in the body. Historical receipts and transports without a CLI home
+use the same heading without the transport/home suffix. Require the suffix for new CLI receipts. Missing reviewer homes or
 invalid profiles are pre-launch configuration refusals (exit 64), not retry-consuming exit 2.
 Substitute the slot name, transport-proven pinned model, full reviewed PR head SHA and full origin/main SHA. Preserve the honest assertedModel separately.
 The initial heading model must equal the slot's pinned model. A different model makes this a
