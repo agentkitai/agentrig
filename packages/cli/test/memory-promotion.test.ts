@@ -7,6 +7,7 @@ import { FileMemoryStore, LoreBackend, PROMOTION_EFFECTS } from "@agentkitai/age
 import { memoryLs, memoryPromote, memoryShow } from "../src/memory.ts";
 import { buildProgram } from "../src/program.ts";
 import { buildRoleProvider } from "../src/provider.js";
+import { cliEnv } from "./cli-env.js";
 
 vi.mock("../src/provider.js", async original => ({ ...await original<typeof import("../src/provider.js")>(), buildRoleProvider: vi.fn() }));
 function assessor(effect?: typeof PROMOTION_EFFECTS[number], before?: () => Promise<void>): ModelProvider {
@@ -76,7 +77,7 @@ describe("memory promotion publication gate", () => {
 
   it("publishes only after explicit confirmation, including the parsed --confirm flag", async () => {
     backend();
-    await buildProgram().parseAsync(["node", "agentrig", "memory", "promote", path, "--dir", root, "--confirm"]);
+    await buildProgram({ config: { env: cliEnv() } }).parseAsync(["node", "agentrig", "memory", "promote", path, "--dir", root, "--confirm"]);
     expect(LoreBackend.prototype.promote).toHaveBeenCalledTimes(1);
     expect(vi.mocked(console.log).mock.calls.flat().join("\n")).toContain("promoted concepts/retries.md");
   });
@@ -163,7 +164,7 @@ describe("memory promotion publication gate", () => {
 
   it("forwards parsed guardrail limits and refuses before model work when input is over cap", async () => {
     backend();
-    await buildProgram().parseAsync(["node", "agentrig", "memory", "promote", path, "--dir", root, "--confirm", "--guardrail-limits", '{"maxInputChars":10}']);
+    await buildProgram({ config: { env: cliEnv() } }).parseAsync(["node", "agentrig", "memory", "promote", path, "--dir", root, "--confirm", "--guardrail-limits", '{"maxInputChars":10}']);
     expect(LoreBackend.prototype.promote).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
     expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("input limit");
   });

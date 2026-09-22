@@ -4,8 +4,11 @@
 
 In-process CLI fixtures now share the spawned-fixture environment boundary: inherited
 `AGENTRIG_CHILD_PROFILE`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` are removed before
-program construction. Intentional profile tests remain explicit. Regression and named
-mutation proofs accompany the PR; no roadmap completion marker is set.
+program construction. Intentional profile tests remain explicit. Repair round 1 applies
+that boundary to the four missed evidence, promotion, procedure-candidate, and skill-emission
+fixtures and strengthens the regression with a guaranteed-unavailable inherited profile;
+C1/X1 are implemented pending independent delta review. Regression and named mutation
+proofs accompany the PR; no roadmap completion marker is set.
 
 ## Complete — issue #521, declared-check user-only profiles (PR #528)
 

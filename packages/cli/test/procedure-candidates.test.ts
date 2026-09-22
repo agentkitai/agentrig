@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { FileMemoryStore, runDream } from "@agentkitai/agentrig-memory";
 import { buildProgram } from "../src/program.ts";
+import { cliEnv } from "./cli-env.js";
 
 vi.mock("@agentkitai/agentrig-memory", async importOriginal => {
   const actual = await importOriginal<typeof import("@agentkitai/agentrig-memory")>();
@@ -28,7 +29,7 @@ it("real CLI --skill-candidates reaches the actual structural dream with no cred
     const wiki = new FileMemoryStore({ root: join(root, "wiki") }); await wiki.init();
     await wiki.write("concepts/workflow.md", { body: lines.map(claim => `- [observed] ${claim} (session:s1, session:s2)`).join("\n"),
       frontmatter: { type: "concept", slug: "workflow", aliases: [], confidence: "high", sources: ["session:s1", "session:s2"], updated: "2026-09-06" } });
-    await buildProgram().exitOverride().parseAsync(["dream", "--dir", root, "--skill-candidates", "--structural-only"], { from: "user" });
+    await buildProgram({ config: { env: cliEnv() } }).exitOverride().parseAsync(["dream", "--dir", root, "--skill-candidates", "--structural-only"], { from: "user" });
     expect(vi.mocked(runDream).mock.calls[0]?.[0]).toMatchObject({ procedureCandidates: true, structuralOnly: true });
     expect(output.mock.calls.flat().join("\n")).toContain("skill-candidate [structural-unassessed]");
     expect(error.mock.calls.flat().join("\n")).not.toContain("credential");
