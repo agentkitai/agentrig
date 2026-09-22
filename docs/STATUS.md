@@ -1,5 +1,14 @@
 # Status
 
+## Review heading contract follow-up — issue #515 (implementation; review pending)
+
+Arbiter now shares the canonical transport/home heading and narrow heading tests.
+Land, topic, review and shipping policy bind newly posted CLI suffix acceptance to
+that review’s trusted adapter receipt, not local/config/spec guesses; historical
+receipts retain their original heading. Receipt-based posting and instruction
+mutations cover this contract. Repair round: 0/3; conductor review and exact-head
+CI remain pending. No roadmap completion marker is set.
+
 ## Pending review — issue #506, profile-scoped child environment
 
 Repair round 2 repairs dispatched D1/D2/CI2: CLI review receipts put resolved home
