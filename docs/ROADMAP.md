@@ -1,5 +1,10 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+## Profile-scoped child environment — issue #506 / PR #514 (pending review)
+
+Repair round 1 addresses dispatched C1/C2/A1/A3/CI1. Independent delta review
+and exact-head hosted CI remain pending; no completion or merge is claimed.
+
 ## User-directed unattended workflow correction — implemented in PR #305
 
 One delivery PR, no new band: consistent explicit unattended authority from startup

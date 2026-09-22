@@ -1,5 +1,27 @@
 # Status
 
+## Pending review — issue #506, profile-scoped child environment
+
+Repair round 2 repairs dispatched D1/D2/CI2: CLI review receipts put resolved home
+and transport in the posted heading; cookie aliases are refused; argv fixtures
+isolate HOME and USERPROFILE and verify awaited asynchronous dispatch.
+Focused review and hosted exact-head checks remain pending.
+
+Repair round 1 addresses dispatched C1/C2/A1/A3/CI1: credential aliases rejected;
+unknown profiles refused before child launch; doctor skips login probes for invalid
+configuration; review headings remain canonical with separate home provenance;
+preflight exits 64 without consuming the reviewer retry; adapter fixtures own fake
+reviewer homes. Independent delta review and exact-head hosted CI remain pending.
+
+Implementation adds optional validated user-profile childEnv, CLI-wide inheritance,
+per-row train environment and pre-launch reviewer-home guards, safe per-slot doctor
+login-status diagnostics, and adapter/comment home provenance. Project environment
+maps are never applied. Schema, environment precedence/trust, CLI dispatch, train,
+adapter, doctor, and posted-heading regressions have targeted tests. Build/declared
+proof and named mutation receipts travel in the PR. Launch documentation is updated.
+This is **not landed/done**: independent conductor reviews and exact-head CI remain
+the gates; no ROADMAP row has been marked complete early.
+
 ## Reviewer adapter usage and review-policy residuals (#505, #508, #510, #511; implementation, proof pending)
 
 Reviewer CLI argument-count and output-prefix mistakes now fail with EX_USAGE before launch without consuming a reviewer retry. Transport-proven numeric GPT major-family assertions cover suffixed minor pins while retaining exact transport proof. Shipping instructions distinguish dispatched fixer tasks from durable fixer pre-push handoffs and preserve the sole verbatim-human-authorization-quote exception to identifier bans in PR and squash bodies. Repair round: 0/3; review disposition pending; residuals none. No roadmap completion is claimed.

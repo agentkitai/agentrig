@@ -4,6 +4,51 @@ The [topic skill](../.agentrig/skills/topic/SKILL.md) defines authorization,
 reviews, merge gates, and halts. This document describes operator monitoring;
 it does not change those requirements or permission policy.
 
+## Profile-scoped child environment (#506)
+
+Put nonsecret tool homes in the **user** configuration, not the checkout:
+
+```json
+{
+  "profiles": {
+    "personal": {
+      "childEnv": {
+        "CODEX_HOME": "/absolute/path/to/personal-codex",
+        "CLAUDE_CONFIG_DIR": "/absolute/path/to/personal-claude"
+      }
+    }
+  }
+}
+```
+
+`profiles.<name>.childEnv` is optional and zod-validated. Values are plain strings;
+reviewer homes must be absolute paths. Credential-named variables are rejected;
+never put secrets in this map (it is configuration, not a secret store). The selected
+safe user profile overrides the launching environment; undeclared variables retain
+inherited values. Project profiles never supply child environment, even when trusted.
+The existing rule that ignores user state inside the project boundary still applies.
+
+Launch with `agentrig --profile personal train /absolute/train-root`, or set each row's
+`environment.profile`. The CLI applies this environment before action dispatch, so
+headless run, tool/subagent processes and train commands inherit it. Train resolves
+row environment before starting commands and again after fast-forwarding the checkout.
+A private `AGENTRIG_CHILD_PROFILE` marker carries selection into nested CLI/adapters;
+prefer explicit `--profile` at the operator boundary. Normal project trust remains
+required to consume checkout declarations; there are no new unattended questions.
+
+For each trusted project's declared CLI reviewer slot, train checks the resolved
+`CODEX_HOME` (`codex-cli`) or `CLAUDE_CONFIG_DIR` (`claude-cli`) before launching.
+Absent/blank homes fail with `REVIEWER_HOME_MISSING: reviewers:<slot>`; relative or
+control-bearing homes fail with `REVIEWER_HOME_INVALID`. No fallback to a CLI's default
+login is allowed. API reviewers do not require either CLI home.
+
+Before launch, run `agentrig doctor --profile personal`. Each `reviewers:<slot>` check
+executes `codex login status` or `claude auth status` under the resolved environment.
+It prints only recognized visible identity (Claude email, or Codex login method when
+Codex does not expose account identity) and the selected home, never raw status output
+or credential files. A status failure is a failed diagnostic, not an authorization
+prompt. Confirm the home/account is the intended billing account before proceeding.
+
 ## Stay available for child prompts
 
 Follow the conductor's `subagent.spawn` events recursively into child session
@@ -193,3 +238,7 @@ To continue a halted task, retain its evidence and enqueue a **new unique row id
 with explicit resume pointers and unchanged authorization bounds. Existing done or
 halted row ids and stale result receipts are never reused. Directory layout/name/
 lock errors are command errors before execution, not evidence of a landed row.
+
+Reviewer adapter preflight: missing homes and invalid profiles exit 64 before launch and
+do not consume the single exit-2 retry. Fix configuration before re-dispatch. Review
+headings include transport model and JSON-quoted resolved home in the canonical suffix.

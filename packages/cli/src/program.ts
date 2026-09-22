@@ -1,3 +1,4 @@
+import { resolveChildEnvironment } from "./child-env.js";
 import { registerTrainCommand } from "./train.js";
 import { Command, InvalidArgumentError } from "commander";
 import { readFileSync } from "node:fs";
@@ -173,7 +174,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    * flag still parses on its subcommand exactly as before), and the value is recovered where
    * config is resolved via `optsWithGlobals()`, which `program.test.ts` and `config.test.ts` pin
    * in both positions. On subcommands that never consult config (`sessions ls`, `login`, …) a
-   * --profile in ANY position is accepted, and the preAction hook below says it is ignored —
+   * --profile in ANY position is accepted; childEnv applies even when run options are ignored —
    * erroring instead would break the very alias shape this exists for, since a wrapper appends
    * the flag to every subcommand it forwards.
    *
@@ -184,15 +185,13 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    * the pinned bare-launch shape `agentrig --yolo`, so it is not worth that trade.
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand); run commands also accept built-in recommended; other unknown names list available profiles (names only)");
-  /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "web", "mcp-serve"]);
-  program.hook("preAction", (_thisCommand, actionCommand) => {
-    // A profile aimed at a command that never consults config is accepted so aliases keep
-    // working, but never silently: an ignored flag the user typed deserves a note (the same
-    // contract bash's background timeoutMs settled on).
-    const profile = (actionCommand.optsWithGlobals() as { profile?: string }).profile;
-    if (profile !== undefined && !PROFILE_AWARE.has(actionCommand.name()) && !(actionCommand.name() === "login" && actionCommand.parent?.name() === "mcp")) {
-      console.error(`note: --profile is ignored by \`${actionCommand.name()}\` — it does not read config profiles`);
+  /** Apply the user-owned environment before dispatching any CLI action. */
+  program.hook("preAction", async (_thisCommand, actionCommand) => {
+    // Doctor owns diagnostic config validation and never probes reviewer login on invalid config.
+    if (actionCommand.name() === "doctor") return;
+    const { profile, trust } = actionCommand.optsWithGlobals() as { profile?: string; trust?: boolean };
+    if (profile !== undefined || process.env.AGENTRIG_CHILD_PROFILE !== undefined) {
+      Object.assign(process.env, await resolveChildEnvironment({ ...dependencies.config, ...(trust === undefined ? {} : { explicitTrust: trust }), ...(profile === undefined ? {} : { profile }) }));
     }
   });
 

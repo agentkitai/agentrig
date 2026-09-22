@@ -1,5 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { describe, expect, it, vi } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readFile, mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Command } from "commander";
 import { buildProgram, describeStray } from "../src/program.ts";
 import { dreamCommand } from "../src/dream.ts";
@@ -51,6 +53,20 @@ function stub(program: Command): { run: (argv: string[]) => Promise<Captured | n
 }
 
 describe("argv parsing", () => {
+  it("M-CI2-portable-home: isolates both platform home selectors", () => {
+    expect(process.env.HOME).toBe(profileHome);
+    expect(process.env.USERPROFILE).toBe(profileHome);
+  });
+  it("M-CI2-await-dispatch: waits for asynchronous preAction before capture", async () => {
+    const program = buildProgram();
+    let ready = false;
+    program.hook("preAction", async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      ready = true;
+    });
+    expect((await stub(program).run(["--profile", "p", "run", "task"]))?.path).toBe("run");
+    expect(ready).toBe(true);
+  });
   it("carries explicit argv-prefix permissions for run, TUI and resume", async () => {
     for (const argv of [["run", "task"], ["tui"], ["sessions", "resume", "s"]]) {
       expect((await stub(buildProgram()).run([...argv, "--allow-command", '["git","status"]']))?.opts.allowCommand).toEqual([["git", "status"]]);
@@ -228,7 +244,7 @@ describe("argv parsing", () => {
     expect(await capture(["--profile", "leading", "run", "x"])).toBe("leading");
   });
 
-  it("says --profile is ignored on commands that never consult config, instead of silence", async () => {
+  it("does not claim --profile is ignored now that childEnv applies to all commands", async () => {
     // an alias appends --profile to EVERY forwarded subcommand, so these paths are hit
     // constantly; accepted-but-silently-dead is the timeoutMs failure mode all over again
     const notes: string[] = [];
@@ -239,8 +255,8 @@ describe("argv parsing", () => {
     try {
       await parse(["--profile", "p", "memory", "ls"]);
       await parse(["dream", "--profile", "p", "--structural-only"]);
-      expect(notes.filter((n) => n.includes("--profile is ignored by `ls`"))).toHaveLength(1);
-      expect(notes.filter((n) => n.includes("--profile is ignored by `dream`"))).toHaveLength(1);
+      expect(notes.filter((n) => n.includes("--profile is ignored by `ls`"))).toHaveLength(0);
+      expect(notes.filter((n) => n.includes("--profile is ignored by `dream`"))).toHaveLength(0);
       notes.length = 0;
       await parse(["--profile", "p", "run", "x"]);
       await parse(["--profile", "p"]);
@@ -363,3 +379,14 @@ it.each([[[]], [["Continue", "review"]]])("sessions resume forwards optional con
   expect(help).toContain("optional task");
   expect(help).not.toContain("snapshot");
 });
+
+let profileHome: string;
+beforeEach(async () => {
+  profileHome = await mkdtemp(join(tmpdir(), "program-profiles-"));
+  await mkdir(join(profileHome, ".agentrig"));
+  await writeFile(join(profileHome, ".agentrig", "config.json"), JSON.stringify({ profiles: { p: {}, leading: {}, trailing: {} } }));
+  vi.stubEnv("HOME", profileHome);
+  vi.stubEnv("USERPROFILE", profileHome);
+  vi.stubEnv("AGENTRIG_CHILD_PROFILE", undefined);
+});
+afterEach(async () => { vi.unstubAllEnvs(); await rm(profileHome, { recursive: true, force: true }); });

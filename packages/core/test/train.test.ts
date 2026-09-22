@@ -341,3 +341,16 @@ it("rejects unbounded train budgets before starting the suite", async () => {
   expect(await runTrain(f.root, { command: f.command, testTimeout: async () => 120001 })).toBe("halted");
   expect(f.calls).not.toContain("test --testTimeout=120001");
 });
+
+it("M-train-home: resolve environment before any child and carry it on every request", async () => {
+  const f = await fixture();
+  const seen: string[] = [];
+  expect(await runTrain(f.root, { childEnvironment: async () => ({ CODEX_HOME: "/profile/codex" }), command: async request => {
+    expect(request.env?.CODEX_HOME).toBe("/profile/codex"); seen.push(request.executable); return f.command(request);
+  } })).toBe("empty");
+  expect(seen).toContain(process.execPath);
+  const blocked = await fixture();
+  expect(await runTrain(blocked.root, { command: blocked.command, childEnvironment: async () => { throw new Error("REVIEWER_HOME_MISSING: reviewers:Primary requires CODEX_HOME"); } })).toBe("halted");
+  expect(blocked.calls).toEqual([]);
+  expect(await readFile(join(blocked.root, "logs/1.halt.json"), "utf8")).toContain("REVIEWER_HOME_MISSING");
+});

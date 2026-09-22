@@ -81,7 +81,10 @@ it("relative output prefix exits EX_USAGE before vendor launch and writes no std
 });
 it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and stale-artifact refusal", adapter => {
   const dir = mkdtempSync(join(tmpdir(), "review-adapter-"));
+  const home = mkdtempSync(join(tmpdir(), "review-user-"));
   try {
+    mkdirSync(join(home, ".agentrig"));
+    writeFileSync(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: { personal: { childEnv: { CODEX_HOME: "/fixture/codex", CLAUDE_CONFIG_DIR: "/fixture/claude" } } } }));
     const command = adapter === "claude-cli" ? "claude" : "codex";
     const binary = join(dir, command);
     spawnSync("git", ["init", "-q", dir]);
@@ -97,16 +100,16 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ reviewers: { custom: { adapter, model: "pinned" } } }));
     const prompt = join(dir, "prompt"); writeFileSync(prompt, "source bundle; checks green");
-    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", CLAUDE_CODE_CHILD_SESSION: "child", CLAUDE_CODE_MESSAGING_SOCKET: "/parent/socket", CLAUDE_CODE_MESSAGING_TOKEN: "parent-token", CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge", CLAUDE_PID: "12345", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
+    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix, "--profile", "personal"], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, HOME: home, CODEX_HOME: "/wrong-shell", CLAUDE_CONFIG_DIR: "/wrong-shell", CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", CLAUDE_CODE_CHILD_SESSION: "child", CLAUDE_CODE_MESSAGING_SOCKET: "/parent/socket", CLAUDE_CODE_MESSAGING_TOKEN: "parent-token", CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge", CLAUDE_PID: "12345", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
     const prefix = join(dir, "out");
     const run = invoke(prefix);
     expect(run.status, run.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "argv"), "utf8"))).toEqual(cliAdapters[adapter].template.map((value: string) => value.replace("{model}", "pinned").replace("{lastMessage}", `${prefix}.last`)));
     const childEnv = JSON.parse(readFileSync(join(dir, "env"), "utf8"));
     for (const name of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_BRIDGE_SESSION_ID", "CLAUDE_PID"]) expect(childEnv).not.toHaveProperty(name);
-    expect(childEnv).toMatchObject({ PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" });
+    expect(childEnv).toMatchObject({ CODEX_HOME: "/fixture/codex", CLAUDE_CONFIG_DIR: "/fixture/claude", PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" });
     const provenance = JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"));
-    expect(provenance).toMatchObject({ slot: "custom", adapter, model: "pinned", modelSource: cliAdapters[adapter].modelSource, cwd: dir, exit: 0 });
+    expect(provenance).toMatchObject({ resolvedHome: adapter === "codex-cli" ? "/fixture/codex" : "/fixture/claude", slot: "custom", adapter, model: "pinned", modelSource: cliAdapters[adapter].modelSource, cwd: dir, exit: 0 });
     expect(provenance.verdict).toEqual(verdict);
     expect(readFileSync(`${prefix}.md`, "utf8")).toBe(reviewText);
     expect(adapter === "claude-cli" ? JSON.parse(readFileSync(`${prefix}.stdout`, "utf8")).result : readFileSync(`${prefix}.last`, "utf8")).toBe(reviewText);
@@ -118,7 +121,7 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     expect(existsSync(`${failed}.md`)).toBe(false);
     expect(existsSync(`${failed}.provenance.json`)).toBe(false);
     expect(readFileSync(`${failed}.stdout`, "utf8")).toBe("partial");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(home, { recursive: true, force: true }); }
 }, 30_000);
 it("M-cap-bypass: capped API entries fail before provider construction with an actionable diagnostic", async () => {
   let constructed = false;
@@ -155,4 +158,32 @@ it.each([
 it("M-overlong-head: no partial-token normalization", () => {
   const raw = `Reviewed head ${"a".repeat(41)}\nVERDICT: PASS\n`;
   expect(normalizeReviewerHead(raw)).toEqual({ text: raw, tolerances: [] });
+});
+
+it.each(["codex-cli", "claude-cli"])("M-adapter-home: %s refuses missing home before spawning or writing", adapter => {
+  const dir = mkdtempSync(join(tmpdir(), "review-home-"));
+  try {
+    const config = join(dir, "config.json"), prompt = join(dir, "prompt"), prefix = join(dir, "out");
+    writeFileSync(config, JSON.stringify({ reviewers: { Personal: { adapter, model: "pin" } } }));
+    writeFileSync(prompt, "review");
+    const env = { ...process.env, HOME: dir };
+    delete env.CODEX_HOME; delete env.CLAUDE_CONFIG_DIR; delete env.AGENTRIG_CHILD_PROFILE;
+    const run = spawnSync(process.execPath, ["scripts/reviewer-adapters.mjs", config, "Personal", prompt, dir, prefix], { env, encoding: "utf8" });
+    expect(run.status).toBe(64);
+    expect(run.stderr).toContain("REVIEWER_HOME_MISSING: reviewers:Personal");
+    expect(existsSync(`${prefix}.stdout`)).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it("M-A3-invalid-profile: pre-launch profile errors use configuration exit 64", () => {
+  const dir = mkdtempSync(join(tmpdir(), "review-profile-"));
+  try {
+    writeFileSync(join(dir, "config"), JSON.stringify({ reviewers: { Personal: { adapter: "codex-cli", model: "pin" } } }));
+    writeFileSync(join(dir, "prompt"), "review");
+    const env = { ...process.env, HOME: dir, CODEX_HOME: dir, AGENTRIG_CHILD_PROFILE: "typo" };
+    const run = spawnSync(process.execPath, ["scripts/reviewer-adapters.mjs", join(dir, "config"), "Personal", join(dir, "prompt"), dir, join(dir, "out")], { env, encoding: "utf8" });
+    expect(run.status).toBe(64);
+    expect(run.stderr).toContain("unknown config profile");
+    expect(existsSync(join(dir, "out.stdout"))).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

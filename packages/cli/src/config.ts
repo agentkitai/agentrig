@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
 import { CommandPrefixSchema, DiagnosticsConfigSchema, REASONING_EFFORTS } from "@agentkitai/agentrig-core";
@@ -203,9 +203,15 @@ export const ReviewersSchema = z.record(ReviewerSlotSchema).superRefine((slots, 
 export type ReviewerSlot = z.output<typeof ReviewerSlotSchema>;
 
 // Declarations are file metadata, not runtime launch/evaluation settings.
+export const ChildEnvSchema = z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/u), z.string().max(4096).refine(value => !/[\x00-\x1f\x7f]/u.test(value), "child environment values must be plain strings")).superRefine((env, ctx) => {
+  for (const [key, value] of Object.entries(env)) {
+    if (/(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|CREDS|PAT|AUTH|COOKIES|COOKIE)(?:_|$)/iu.test(key)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: "secrets are forbidden in childEnv" });
+    if (["CODEX_HOME", "CLAUDE_CONFIG_DIR"].includes(key) && !isAbsolute(value)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: "reviewer home must be an absolute path" });
+  }
+});
 const ConfigDeclarationSchema = ConfigValuesSchema.extend({ checks: ProjectChecksSchema.optional() });
 const ConfigFileSchema = ConfigDeclarationSchema.extend({
-  profiles: z.record(ConfigDeclarationSchema).optional(),
+  profiles: z.record(ConfigDeclarationSchema.extend({ childEnv: ChildEnvSchema.optional() })).optional(),
   reviewers: ReviewersSchema.optional(),
 }).superRefine((data, ctx) => {
   for (const [slot, binding] of Object.entries(data.reviewers ?? {})) {
@@ -325,6 +331,7 @@ export interface ResolveConfigInput<T extends Record<string, unknown>> {
 function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   if (file === undefined) return {};
   const { profiles: _profiles, checks: _checks, reviewers: _reviewers, ...values } = file;
+  delete (values as Record<string, unknown>).childEnv;
   return values;
 }
 

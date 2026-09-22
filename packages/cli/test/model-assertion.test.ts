@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,8 @@ it("model prompt supplies pin and transport source without overriding conflictin
 it.each(["gpt-5", "gpt-4.1", "claude-opus-5"])("adapter transport and receipt integration: %s", asserted => {
   const dir = mkdtempSync(join(tmpdir(), "model-assertion-"));
   try {
+    mkdirSync(join(dir, "codex-home"));
+    writeFileSync(join(dir, "codex-home", "auth.json"), "{}");
     const git = (...args: string[]) => spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
     expect(git("init", "-q").status).toBe(0);
     expect(git("-c", "user.name=fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-qm", "fixture").status).toBe(0);
@@ -52,7 +54,7 @@ it.each(["gpt-5", "gpt-4.1", "claude-opus-5"])("adapter transport and receipt in
     writeFileSync(join(dir, "prompt"), "source bundle and checks green");
     const prefix = join(dir, "out");
     const runner = fileURLToPath(new URL("../../../scripts/reviewer-adapters.mjs", import.meta.url));
-    const result = spawnSync(process.execPath, [runner, join(dir, "config.json"), "Codex", join(dir, "prompt"), dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } });
+    const result = spawnSync(process.execPath, [runner, join(dir, "config.json"), "Codex", join(dir, "prompt"), dir, prefix], { encoding: "utf8", env: { ...process.env, CODEX_HOME: join(dir, "codex-home"), PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } });
     if (asserted !== "gpt-5") {
       expect(result.status).not.toBe(0);
       expect(existsSync(`${prefix}.provenance.json`)).toBe(false);
@@ -70,7 +72,7 @@ it.each(["gpt-5", "gpt-4.1", "claude-opus-5"])("adapter transport and receipt in
       chmodSync(join(dir, "gh"), 0o755);
       const post = fileURLToPath(new URL("../../../scripts/post-review-comment.mjs", import.meta.url));
       const postArgs = [post, "123", "Codex", `${prefix}.model.txt`, `${prefix}.md`, actualHead, actualHead, `${prefix}.comment.md`, "--config", join(dir, "config.json")];
-      const options = { encoding: "utf8" as const, env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } };
+      const options = { encoding: "utf8" as const, env: { ...process.env, CODEX_HOME: join(dir, "codex-home"), PATH: `${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } };
       expect(spawnSync(process.execPath, postArgs, options).status).not.toBe(0);
       const posted = spawnSync(process.execPath, [...postArgs, "--provenance", `${prefix}.provenance.json`], options);
       expect(posted.status, posted.stderr).toBe(0);
@@ -94,6 +96,8 @@ it("reviewer-authored transport field is not adapter evidence", () => {
 it.each(["gpt-5", "gpt-5.5"])("M-api-echo: real API adapter %s requires exact assertion without wire attestation", asserted => {
   const dir = mkdtempSync(join(tmpdir(), "api-assertion-"));
   try {
+    mkdirSync(join(dir, "codex-home"));
+    writeFileSync(join(dir, "codex-home", "auth.json"), "{}");
     const git = (...args: string[]) => spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
     expect(git("init", "-q").status).toBe(0);
     expect(git("-c", "user.name=fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-qm", "fixture").status).toBe(0);

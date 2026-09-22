@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +17,9 @@ it("C-F1 exact generated prompt echo fails schema", () => {
 it("C-F1 real adapter and posting reject exact prompt echo without gh", () => {
   const dir = mkdtempSync(join(tmpdir(), "echo-review-"));
   try {
-    const env = { ...process.env, PATH: `${dir}:${process.env.PATH}` };
+    mkdirSync(join(dir, "codex-home"));
+    writeFileSync(join(dir, "codex-home", "auth.json"), "{}");
+    const env = { ...process.env, CODEX_HOME: join(dir, "codex-home"), PATH: `${dir}:${process.env.PATH}` };
     const run = (name: string, args: string[]) => spawnSync(process.execPath, [script(name), ...args], { cwd: dir, env, encoding: "utf8" });
     spawnSync("git", ["init", "-q", dir]);
     spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-qm", "fixture"]);

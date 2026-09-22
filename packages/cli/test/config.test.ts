@@ -525,12 +525,13 @@ describe("both agent entry points use config", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const previousExitCode = process.exitCode;
     try {
-      await buildProgram({ config: { cwd, home, env: {} }, run }).parseAsync([
+      // The shared preAction refuses before any command action; index.ts formats
+      // this rejection as the CLI diagnostic and sets exit 1.
+      await expect(buildProgram({ config: { cwd, home, env: {} }, run }).parseAsync([
         "node", "agentrig", ...(leading ? ["--profile", "typo"] : []),
         "run", "test", ...(!leading ? ["--profile", "typo"] : []),
-      ]);
-      expect(error.mock.calls).toEqual([['unknown config profile "typo"; available profiles: "fast"']]);
-      expect(process.exitCode).toBe(1);
+      ])).rejects.toThrow('unknown config profile "typo"; available profiles: "fast"');
+      expect(error).not.toHaveBeenCalled();
       expect(run).not.toHaveBeenCalled();
     } finally {
       process.exitCode = previousExitCode;
