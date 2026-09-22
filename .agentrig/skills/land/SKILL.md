@@ -39,6 +39,8 @@ the slot's pinned model; it duplicates no endpoints, credentials or routing. See
 Each declared slot's initial comment must start with:
 `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full — transport: <transport>; home: <JSON-home>`
 
+For acceptance and rerun detection, validate the canonical prefix (slot, pinned model, reviewed head, recorded main and full marker), then require every newly posted CLI heading's transport/home suffix to match the trusted adapter provenance for that review: transportModel and JSON-quoted resolvedHome. The prefix alone is insufficient. Do not derive the suffix from spec examples, config, SHAs or local home guesses. Historical receipts keep their historical heading; new CLI headings retain #506 home provenance.
+
 For CLI receipts with a resolved home, include transport model and JSON-quoted resolved home
 in this heading, never only in the body. Historical receipts and transports without a CLI home
 use the same heading without the transport/home suffix. Require the suffix for new CLI receipts.

@@ -555,18 +555,35 @@ it("#490 quoted delimiter mentions do not redirect the protected posting range",
   expect(result.posts.some(part => part.includes(mention))).toBe(true);
 });
 
-it("M-D1-heading-home: resolved home is posted beside transport identity", () => {
+it.each(["/accounts/personal", '/accounts/second "quoted" home\\profile', undefined])("#515 receipt-based suffix: resolved home %s, never local guesses", (resolvedHome) => {
   const dir = mkdtempSync(join(tmpdir(), "post-home-"));
   try {
     fixtureConfig(dir);
     const verdict = { version: 1, reviewedHead: head, slot: "Codex", assertedModel: "gpt-5.5", modelSource: "codex-launch", verdict: "PASS", findings: [] };
     writeFileSync(join(dir, "body"), `<!-- agentrig-verdict:v1 -->\n${JSON.stringify(verdict)}\n<!-- /agentrig-verdict -->\n`);
     writeFileSync(join(dir, "model"), "gpt-5.5");
-    writeFileSync(join(dir, "proof.json"), JSON.stringify({ exit: 0, reviewedHead: head, slot: "Codex", adapter: "codex-cli", model: "gpt-5.5", transportModel: "gpt-5.5", assertedModel: "gpt-5.5", resolvedHome: "/accounts/personal", verdict: parseVerdict(verdictBlock(verdict)) }));
+    writeFileSync(join(dir, "proof.json"), JSON.stringify({ exit: 0, reviewedHead: head, slot: "Codex", adapter: "codex-cli", model: "gpt-5.5", transportModel: "gpt-5.5", assertedModel: "gpt-5.5", resolvedHome, verdict: parseVerdict(verdictBlock(verdict)) }));
     writeFileSync(join(dir, "gh"), `#!/bin/sh\nexit 0\n`); chmodSync(join(dir, "gh"), 0o755);
-    const result = spawnSync(process.execPath, [helper, "506", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment"), "--provenance", join(dir, "proof.json")], { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const result = spawnSync(process.execPath, [helper, "506", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment"), "--provenance", join(dir, "proof.json")], { cwd: dir, encoding: "utf8", env: { ...process.env, CODEX_HOME: "/local/not-the-review-home", PATH: `${dir}:${process.env.PATH}` } });
     expect(result.status, result.stderr).toBe(0);
     const posted = readFileSync(join(dir, "comment"), "utf8");
-    expect(posted.split("\n")[0]).toBe(`## External review — Codex (gpt-5.5) — head ${head} — merged with origin/main ${main} — full — transport: gpt-5.5; home: "/accounts/personal"`);
+    // The expected suffix comes from the saved adapter receipt for this review,
+    // independently of the canonical prefix, config pin, SHAs and local home.
+    const receipt = JSON.parse(readFileSync(join(dir, "proof.json"), "utf8"));
+    const suffix = receipt.resolvedHome === undefined ? "" : ` — transport: ${receipt.transportModel}; home: ${JSON.stringify(receipt.resolvedHome)}`;
+    const acceptHeading = (line: string): void => {
+      expect(line.startsWith(heading)).toBe(true);
+      expect(line.slice(heading.length)).toBe(suffix);
+    };
+    acceptHeading(posted.split("\n")[0]!);
+    if (resolvedHome !== undefined) {
+      // Identical canonical prefixes/SHAs do not make missing or guessed suffixes valid.
+      for (const wrong of ["", ` — transport: gpt-5.5; home: "/local/not-the-review-home"`, ` — transport: wrong; home: ${JSON.stringify(receipt.resolvedHome)}`, ` — transport: gpt-5.5; home: ${receipt.resolvedHome}`]) {
+        expect(() => acceptHeading(heading + wrong)).toThrow();
+      }
+    } else {
+      // Historical receipts remain prefix-only; do not backfill today's local home.
+      expect(posted.split("\n")[0]).toBe(heading);
+    }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

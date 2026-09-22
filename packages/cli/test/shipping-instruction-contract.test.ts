@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
-const skills = ["topic", "ship", "dogfood", "review", "land"] as const;
+const skills = ["topic", "ship", "dogfood", "review", "land", "arbiter"] as const;
 const heading = "## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full — transport: <transport>; home: <JSON-home>";
 const rule = `The two initial external review comments must each start with this exact heading form:
 \`${heading}\`
@@ -273,5 +273,19 @@ for (const name of ["ship", "topic", "review"]) {
     const text = readSkillText(new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url), "utf8");
     expect(text).toContain("include transport model and JSON-quoted resolved home\nin this heading, never only in the body");
     expect(text).toContain("pre-launch configuration refusals (exit 64), not retry-consuming exit 2");
+  });
+}
+
+const suffixAcceptance = "For acceptance and rerun detection, validate the canonical prefix (slot, pinned model, reviewed head, recorded main and full marker), then require every newly posted CLI heading's transport/home suffix to match the trusted adapter provenance for that review: transportModel and JSON-quoted resolvedHome. The prefix alone is insufficient. Do not derive the suffix from spec examples, config, SHAs or local home guesses. Historical receipts keep their historical heading; new CLI headings retain #506 home provenance.";
+for (const path of [".agentrig/skills/arbiter/SKILL.md", ".agentrig/skills/land/SKILL.md", ".agentrig/skills/topic/SKILL.md", ".agentrig/skills/review/SKILL.md", "docs/SHIPPING-WORKFLOW.md"]) {
+  it(`${path} binds heading acceptance to that review's trusted receipt`, () => {
+    const text = readSkillText(new URL(`../../../${path}`, import.meta.url), "utf8");
+    const assertAcceptance = (candidate: string): void => { expect(candidate).toContain(suffixAcceptance); };
+    assertAcceptance(text);
+    for (const phrase of ["canonical prefix (slot, pinned model, reviewed head, recorded main and full marker)", "every newly posted CLI heading's transport/home suffix", "trusted adapter provenance for that review", "transportModel and JSON-quoted resolvedHome", "The prefix alone is insufficient.", "Do not derive the suffix from spec examples, config, SHAs or local home guesses.", "Historical receipts keep their historical heading; new CLI headings retain #506 home provenance."]) {
+      const mutant = text.replace(phrase, "");
+      expect(mutant).not.toBe(text);
+      expect(() => assertAcceptance(mutant)).toThrow();
+    }
   });
 }
