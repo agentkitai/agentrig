@@ -1,5 +1,9 @@
 # Status
 
+## Fixer dispatch provenance in the durable record (#503; implementation, proof pending)
+
+Fixers now publish the dispatched round, receipt, exact finding sources, dispatch time and pre-edit comparison before pushing; ship conductors independently persist exact task/session provenance, and land accepts the matched conductor comment plus immutable spawn while retaining every ordering, identity and pre-edit check. Fixer tool invocations omit the optional `label` so immutable `subagent.spawn.task` preserves the full task used for provenance matching. The squash rule's sole identifier exception preserves a verbatim human authorization quote without attributing commit authorship to a model or agent; repair round: 1/3, blocker X-F1 repaired pending focused review, and no roadmap completion is claimed.
+
 ## User-directed Codex reviewer slot update (implementation; proof pending)
 
 The live Codex `codex-cli` slot now uses the updated exact model pin in

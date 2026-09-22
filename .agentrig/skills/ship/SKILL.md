@@ -216,6 +216,11 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    live comments and PR body; compare each assigned verbatim finding heading and comment anchor
    against the ledger, pre-dispatch receipt and task. On any mismatch refuse the assignment and
    return the conflicting texts without changes; do not repair the receipt yourself.
+   Immediately before invoking the fixer subagent, post and read back a durable GitHub PR comment containing the exact complete fixer task text and dispatch time; this dispatch comment must exist independently of fixer survival.
+   If the subagent tool exposes the child session ID synchronously, include it in that comment before invocation.
+   If the ID is available only when the synchronous tool call returns, write `child session id: pending tool result` in the dispatch comment, then immediately edit that comment or reply to it with the actual child session ID when the call returns; never invent an ID or delay the task-text comment until child completion.
+   If the call fails after dispatch or returns without an ID, read the immutable session-store `subagent.spawn` event and update the comment with its actual child session ID before proceeding; absence of both an exposed ID and a matching spawn event halts.
+   Invoke the fixer subagent tool without its optional `label` field; because immutable `subagent.spawn.task` records `input.label ?? input.task`, only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.
    Only then call the fixer described below, carrying that persisted ledger and counter.
 
 - Spawn the fixer on the same branch with exact blocker texts/URLs. After its local proof and
