@@ -301,3 +301,11 @@ it("an unmetered nested SDK agent cannot relabel its metered parent's next call"
   const calls = records.filter(r => r.type === "admit"); expect(calls).toHaveLength(2);
   expect(calls.every(r => r.session === session.id && r.session !== nestedId)).toBe(true);
 });
+
+it("never prices ChatGPT-login calls even when API rates are configured", async () => {
+  const ledger = new SpendLedger(await root());
+  const provider = { ...fixture(complete), id: "openai-chatgpt" };
+  await consume(meterProvider(provider, ledger, { segment: "login", pricing }));
+  expect((await ledger.records()).find(record => record.type === "admit")).toMatchObject({ rates: null, reserve: null });
+  expect(await ledger.report("2000-01-01")).toMatchObject({ unknownCalls: 1, reportedUsage: { input: 10, output: 10 } });
+});

@@ -97,6 +97,7 @@ export function renderEvent(e: HarnessEvent): string {
       return `${p} in=${formatTokens(input)}${cacheRead}${cacheWrite} out=${formatTokens(e.usage.output)} stop=${e.stop}${e.usageComplete === true ? "" : " total-usage=unknown"}`;
     }
     case "message.append": return `${p} role=${e.message.role} blocks=${e.message.content.length}`;
+    case "model.wait": return `${p} waiting for provider entry=${JSON.stringify(e.entry)} maxConcurrent=${e.maxConcurrent}`;
     case "model.retry": return `${p} attempt=${e.attempt}/${e.maxAttempts} delay=${e.delayMs}ms ${JSON.stringify(e.reason)}`;
     case "tool.call": return `${p} ${e.name}#${e.id} hash=${e.inputHash}${e.internal === undefined ? "" : ` internal=${e.internal.kind} parent=${e.internal.parentToolUseId}`} ${JSON.stringify(e.input)}`;
     case "tool.result": {
@@ -455,6 +456,8 @@ function toolSummary(name: string, input: unknown): string {
  */
 export function renderChatEvent(e: HarnessEvent): string | null {
   switch (e.type) {
+    case "model.wait": return `Waiting for provider entry ${oneLine(e.entry)} (maxConcurrent=${e.maxConcurrent})`;
+
     case "provider.switched": return `Provider for turn ${e.turn}: ${JSON.stringify(e.to)}${e.from === undefined ? " (previous selection unknown)" : ""}`;
     case "output.validated": return `Output ${e.valid ? "valid" : "invalid"} (${e.mode}, ${e.attempt}, ${e.category})`;
     case "question.asked": return `Question: ${e.question.prompt}`;

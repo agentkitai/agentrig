@@ -973,6 +973,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
                   sawStop = true;
                   stopRaw = ev.raw;
                   break;
+                case "wait":
+                  await emit({ type: "model.wait", entry: ev.entry, maxConcurrent: ev.maxConcurrent });
+                  break;
                 case "retry":
                   usageRetried = true;
                   // informational: the provider re-requested a transient failure; logged so a slow

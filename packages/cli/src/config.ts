@@ -41,6 +41,7 @@ export const ProviderEntrySchema = z
     baseUrl: z.string().url().optional(),
     contextWindow: contextWindowSetting.optional(),
     reasoningEffort: reasoningEffortSetting.optional(),
+    maxConcurrent: z.number().int().positive().max(1024).optional(),
   })
   .strict();
 export type ProviderEntry = z.output<typeof ProviderEntrySchema>;

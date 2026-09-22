@@ -1,4 +1,7 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import {
+  limitProvider,
   AnthropicProvider,
   OpenAICompatibleProvider,
   OpenAIChatGPTProvider,
@@ -161,7 +164,10 @@ function buildEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, h
   const report = fingerprint === undefined ? undefined : readProviderProbe(hooks.conformanceCachePath ?? providerProbeCachePath(), fingerprint);
   applyProviderConformance(provider, report);
   hooks.prepare?.(provider, name);
-  return hooks.meter?.(provider, entry) ?? provider;
+  const dispatch = entry.maxConcurrent === undefined ? provider : limitProvider(provider, {
+    root: join(homedir(), ".agentrig", "provider-concurrency"), entry: name, maxConcurrent: entry.maxConcurrent,
+  });
+  return hooks.meter?.(dispatch, entry) ?? dispatch;
 }
 
 /** Every role's provider, built once per entry. Roles are constructed eagerly; `get` builds lazily. */

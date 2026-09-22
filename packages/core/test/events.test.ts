@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent, Intervention, InterventionType, SupervisorRecord, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
 
 describe("event schema", () => {
+  it("round-trips bounded provider wait events", () => {
+    const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1, type: "model.wait", entry: "login", maxConcurrent: 1 });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    expect(HarnessEvent.safeParse({ ...event, maxConcurrent: 0 }).success).toBe(false);
+  });
   it("preserves optional running/settled auxiliary call states without changing legacy outcomes", () => {
     for (const state of [undefined, "running", "settled"] as const) {
       const raw = { seq: 1, sessionId: "s", ts: 1, type: "auxiliary.usage", id: "run", final: false,

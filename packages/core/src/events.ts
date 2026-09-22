@@ -346,6 +346,7 @@ export const EventPayload = z.discriminatedUnion("type", [
    * load-bearing for diagnosis: two real sessions died on overload errors and the logs said
    * nothing about the provider struggling until the fatal line.
    */
+  z.object({ type: z.literal("model.wait"), entry: z.string(), maxConcurrent: z.number().int().positive() }),
   z.object({
     type: z.literal("model.retry"),
     attempt: z.number().int().positive(),

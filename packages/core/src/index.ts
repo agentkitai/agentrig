@@ -49,3 +49,7 @@ export { createOutputContract, parseOutputJson, OUTPUT_LIMITS, type OutputContra
 export { InputAttachmentsSchema, INPUT_LIMITS, imageHeader, clipboardBlock, type InputAttachment } from "./input-attachments.js";
 
 export * from "./train.js";
+
+export * from "./provider-concurrency.js";
+
+export * from "./train-usage.js";

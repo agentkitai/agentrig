@@ -127,3 +127,31 @@ describe("memoryRole", () => {
     expect(buildRoleProvider({ ...base, providerOverride: true }, memoryRole({ ...base, providerOverride: true })).model).toBe("default-model");
   });
 });
+
+it("run-path builders honor providers.<name>.maxConcurrent across instances and role/effort aliases", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { ProviderEntrySchema } = await import("../src/config.ts");
+  const home = await mkdtemp(join(tmpdir(), "provider-slots-"));
+  vi.stubEnv("HOME", home); vi.stubEnv("USERPROFILE", home);
+  for (const maxConcurrent of [0, -1, 1.5, 1025]) expect(ProviderEntrySchema.safeParse({ provider: "openai", maxConcurrent }).success).toBe(false);
+  const options = { ...base, providers: { ...base.providers, cloud: { ...base.providers!.cloud!, maxConcurrent: 1 } } };
+  const prepare = (provider: import("@agentkitai/agentrig-core").ModelProvider) => {
+    provider.stream = async function* () { yield { type: "text_delta", text: "held" }; };
+  };
+  const first = buildProviders(options, { prepare });
+  const second = buildProviders(options, { prepare });
+  const request = { system: "", messages: [], tools: [], maxTokens: 1 };
+  const signal = new AbortController().signal;
+  const a = first.main.stream(request, signal)[Symbol.asyncIterator]();
+  const b = second.get("cloud", "low").stream(request, signal)[Symbol.asyncIterator]();
+  const c = second.subagents.stream(request, signal)[Symbol.asyncIterator]();
+  try {
+    expect((await a.next()).value?.type).toBe("text_delta");
+    expect((await b.next()).value).toEqual({ type: "wait", entry: "cloud", maxConcurrent: 1 });
+    expect((await c.next()).value?.type).toBe("text_delta");
+    await a.return?.();
+    expect((await b.next()).value?.type).toBe("text_delta");
+  } finally { await a.return?.(); await b.return?.(); await c.return?.(); await rm(home, { recursive: true, force: true }); }
+});

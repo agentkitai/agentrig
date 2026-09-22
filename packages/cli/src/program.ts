@@ -709,10 +709,12 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
   program.command("usage").description("Read recorded project cost estimates without models/config")
+    .option("--row <id>", "full-ledger train row and nested child usage (ignores --since)")
+    .option("--train-dir <dir>", "train queue directory for --row (default cwd)")
     .option("--since <date>", "UTC date YYYY-MM-DD", new Date().toISOString().slice(0, 10))
     .option("--json", "structured accounting report")
-    .action(async (opts: { since: string; json?: boolean }) => {
-      try { await usageCommand(process.cwd(), opts.since, opts.json === true); }
+    .action(async (opts: { since: string; json?: boolean; row?: string; trainDir?: string }) => {
+      try { await usageCommand(process.cwd(), opts.since, opts.json === true, opts); }
       catch (error) { console.error(`usage: ${String(error)}`); process.exitCode = 1; }
     });
   const sessions = program.command("sessions").description("Inspect session event logs");

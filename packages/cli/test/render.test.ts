@@ -731,3 +731,9 @@ it("AssistantText discards only the aborted attempt, then renders recovered text
 it("full event rendering used by sessions show identifies the discarded turn", () => {
   expect(renderEvent(event({ type: "turn.aborted", n: 2, reason: "terminated" }))).toMatch(/turn\.aborted\s+n=2 reason=terminated/);
 });
+
+it("renders provider slot waits in trace and conversation", () => {
+  const wait = event({ type: "model.wait", entry: "login", maxConcurrent: 1 });
+  expect(renderEvent(wait)).toContain('waiting for provider entry="login" maxConcurrent=1');
+  expect(renderChatEvent(wait)).toBe("Waiting for provider entry login (maxConcurrent=1)");
+});

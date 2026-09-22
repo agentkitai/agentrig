@@ -264,7 +264,7 @@ export function assertSpendMeter(provider: ModelProvider, ledger: SpendLedger, c
 /** Wrap once at construction, before sharing the provider with any call lane. */
 export function meterProvider(provider: ModelProvider, ledger: SpendLedger, options: SpendMeterOptions): ModelProvider {
   if (meters.has(provider)) throw new Error("provider is already metered; reuse its existing wrapper");
-  const pricing = options.pricing === undefined ? null : rates.parse({ ...options.pricing,
+  const pricing = provider.id === "openai-chatgpt" || options.pricing === undefined ? null : rates.parse({ ...options.pricing,
     cacheReadUsdPerMTok: options.pricing.cacheReadUsdPerMTok ?? options.pricing.inputUsdPerMTok * (provider.capabilities.cacheReadDiscount ?? 1),
     cacheWriteUsdPerMTok: options.pricing.cacheWriteUsdPerMTok ?? options.pricing.inputUsdPerMTok * (provider.capabilities.cacheWriteMultiplier ?? 1) });
   if (options.capMicros !== undefined && (!options.boundedProvider || pricing === null)) throw new SpendCapError("unsupported");
