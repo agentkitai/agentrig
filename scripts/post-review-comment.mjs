@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "nod
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
-import { START, END } from "./review-verdict.mjs";
+import { verdictRange } from "./review-verdict.mjs";
 import { reviewerVerdict, assertReviewerVerdict } from "./review-finding-index.mjs";
 
 try {
@@ -46,8 +46,9 @@ try {
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;
   const capacity = 60000 - heading.length - 2 - (2 * digits + 7);
-  const blockStart = verdict ? payload.indexOf(START) : -1;
-  const blockEnd = verdict ? payload.indexOf(END, blockStart) + END.length : -1;
+  const range = verdict ? verdictRange(body) : undefined;
+  const blockStart = range?.start ?? -1;
+  const blockEnd = range?.end ?? -1;
   if (verdict && blockEnd - blockStart > capacity) throw new Error("structured verdict block exceeds comment capacity");
   const pieces = [];
   if (`${heading}\n\n${payload}`.length <= 60000) pieces.push(payload);

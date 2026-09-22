@@ -215,7 +215,7 @@ Every ledger row, including nonblocking deferred and advisory findings, must quo
 
 Initial review preparation creates `git branch "review-base-NN" "$MAIN"` (NN is the PR number), refusing an existing ref, and records ownership; cleanup removes exactly that recorded ref after jobs join. Focused preparation/cleanup uses its recorded unique `BASE` instead. Neither `codex exec` nor dedicated `codex review` mode creates or owns these refs implicitly. The exec adapter uses the assembled prompt/artifact protocol, not dedicated review mode.
 
-The API adapter refuses top-level `config.dailyCap` before provider invocation because it has no spend ledger; choose an explicitly uncapped review config or a CLI slot, never silently strip the cap. Finding indexing supports plain `F<n> — SEVERITY` and `[P<n>]` lines in addition to ATX headings. Recognizable unsupported findings fail closed rather than silently disappearing; fenced and quoted examples remain excluded.
+The API adapter refuses top-level `config.dailyCap` before provider invocation because it has no spend ledger; choose an explicitly uncapped review config or a CLI slot, never silently strip the cap. Finding indexing supports plain `F<n> — SEVERITY` and `[P<n>]` lines in addition to ATX headings. Recognizable unsupported findings follow the [structured review verdicts](#structured-review-verdicts) rule; fenced and quoted examples remain excluded.
 
 ## Structured review verdicts
 
@@ -225,9 +225,9 @@ PASS/FAIL and findings with severity, exact verbatim heading, location file:line
 blocking boolean and scenario. Adapters append this contract to prompts and preserve
 human prose. Posting, finding index and land validate the schema and binding instead
 of a first-line Reviewed head gate, echo denylist or prose SHA-claim validator.
-Malformed/stale blocks fail closed. Only block-free historical prose gets a narrow
+Delimiter lines must stand alone outside code fences, code spans and quoted examples; prose mentions are not blocks. Malformed/stale blocks fail closed. Only block-free historical prose gets a narrow
 logged nonfatal display/index fallback; it cannot authorize landing. Schema heading
-grammar is irrelevant; fallback accepts F<n> [SEV] title and F<n>: [SEV] title.
+grammar is irrelevant. Unsupported recognizable prose findings are logged as nonfatal advisories, never silently dropped; the schema remains authoritative. Fallback accepts F<n> [SEV] title and F<n>: [SEV] title.
 The posting helper keeps the machine block intact in one chunk (rejecting blocks that
 cannot fit). For chunked reviews, validate the receipt-reassembled live body and index
 only the schema-bearing comment; retain other chunk URLs as prose evidence, not duplicate

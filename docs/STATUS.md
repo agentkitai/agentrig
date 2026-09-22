@@ -1,5 +1,15 @@
 # Status
 
+## R18d review-tooling residuals (#490, #491, #492; review pending)
+
+Standalone, non-example verdict delimiter scanning is shared by parsing, indexing
+and posting chunk boundaries. Quoted delimiter mentions cannot invalidate a real
+block; malformed real blocks still reject. Nested space/tab list findings emit
+nonfatal divergence warnings without changing the schema-authoritative index.
+The former fail-closed prose policy now points to one canonical advisory rule.
+Fail-first LF/CRLF regressions and named mutation receipts travel in the PR.
+Repair round: 0/3. No ROADMAP marker change; conductor review follows.
+
 ## R18e — per-row cost and concurrency (implementation; review pending)
 
 Row/session/model usage is available in train status and `usage --row`; nested

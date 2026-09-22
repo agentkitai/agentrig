@@ -4,7 +4,7 @@ import { cliAdapters, normalizeReviewerHead } from "./reviewer-adapters.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { START, END, hasVerdictBlock, parseVerdict } from "./review-verdict.mjs";
+import { verdictRange, hasVerdictBlock, parseVerdict } from "./review-verdict.mjs";
 
 // Current adapters already return verdict-only text (.last for Codex, .result for Claude).
 // Also support old transcript artifacts without cutting a markerless verdict's provenance.
@@ -57,7 +57,8 @@ export function findingHeadings(body, unsupported = () => {}) {
     const verdict = parseVerdict(body);
     const headings = verdict.findings.map(f => f.heading);
     // Inspect only surrounding prose, never JSON string values in the wire block.
-    const prose = body.slice(0, body.indexOf(START)) + body.slice(body.indexOf(END) + END.length);
+    const range = verdictRange(body);
+    const prose = body.slice(0, range.start) + body.slice(range.end);
     for (const heading of proseFindings(prose, unsupported, verdict.verdict)) {
       if (!headings.includes(heading)) unsupported(heading);
     }
@@ -76,8 +77,10 @@ function proseFindings(body, unsupported, verdict) {
       continue;
     }
     if (marker) { fence = marker; continue; }
-    // Blockquotes and indented code are evidence/data, not review assertions.
-    if (/^(?: {4}|\t| {0,3}>)/.test(line)) continue;
+    // Nested list assertions remain diagnostic even at code-like indentation.
+    // Actual fences/quotes and non-list indented code remain evidence/data.
+    const nestedList = /^[ \t]+(?:[-*+]\s+|\d+[.)]\s+)/.test(line);
+    if (/^\s*>/.test(line) || (/^(?: {4}|\t)/.test(line) && !nestedList)) continue;
     const proseVerdict = /^ {0,3}(?:#{1,6} +)?(?:\*\*)?VERDICT:\s*(PASS|FAIL)\b/i.exec(line);
     if (verdict && proseVerdict && proseVerdict[1].toUpperCase() !== verdict) unsupported(line);
     // Review skill requires per-finding headings. Other section headings are not findings.
