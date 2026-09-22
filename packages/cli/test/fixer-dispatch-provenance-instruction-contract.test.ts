@@ -26,7 +26,12 @@ const landSentences = [
   "For every dispatched fixer, require a conductor `gh pr view NN --json body` read-back receipt BEFORE the subagent call.",
   "Reject a missing read-back receipt or advisory-only dispatch as a contract violation; a counter repaired by the fixer afterwards cannot retroactively satisfy it.",
   "Read the PR body and match that line against the round, OLD and assigned blockers in the persisted fixer task; verify its timestamp precedes the dispatch.",
-  "A missing durable fixer pre-push handoff alone is not a halt when the conductor's dispatch-time PR comment is matched to an immutable session-store `subagent.spawn` event carrying the same exact task text and child session ID.",
+  "Before making any landing-gate claim that cites a comment ID, comment URL or SHA, fetch the live PR body and comments, then quote the exact fetched body or comment text containing that identifier.",
+  "Only cite a comment ID present in the session-fetched comment listing; never supply one from memory or inference.",
+  "An ID absent from that listing, or a 404 from an ID that cannot be traced to the fetched data, is a lander error and never a PR defect.",
+  "The fixer's durable pre-push handoff requires the dispatched round, persisted read-back receipt, each exact finding source, dispatch time and pre-edit comparison; it does not require the full dispatched task.",
+  "The full dispatched task belongs in the conductor's durable dispatch-time PR comment, which must match the immutable session-store `subagent.spawn` event by exact task text and child session ID.",
+  "A missing durable fixer pre-push handoff alone is not a halt when that matched conductor-comment-plus-spawn provenance exists.",
   "That matched pair is sufficient dispatch provenance, but it does not waive receipt-before-dispatch ordering, round/OLD/blocker identity, exact heading/source identity, or the fixer's durable pre-edit comparison with comment ID and head.",
   "If neither the durable fixer pre-push handoff nor that matched conductor-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.",
 ] as const;
@@ -85,14 +90,20 @@ it("land requires the conductor comment and immutable spawn together", () => {
   const text = read(landPath);
   const gate = text.slice(text.indexOf("For every dispatched fixer"), text.indexOf("## 2. Merge"));
   expectSentences(gate, landSentences);
-  for (const [original, weakening] of [
-    [landSentences[3], landSentences[3].replace(" is matched to an immutable session-store `subagent.spawn` event", " exists")],
-    [landSentences[4], landSentences[4].replace("but it does not waive", "and it waives")],
-    [landSentences[5], landSentences[5].replace("neither", "either")],
-  ] as const) {
-    expect(weakening).not.toBe(original);
-    expect(() => expectSentences(text.replace(original, weakening), landSentences)).toThrow();
-  }
+});
+
+it.each([
+  ["M-unfetched-gate-claim", landSentences[3], landSentences[3].replace("fetch the live PR body and comments, then quote the exact fetched body or comment text", "inspect available context")],
+  ["M-invented-comment-id", landSentences[4], landSentences[4].replace("present in the session-fetched comment listing", "that looks relevant")],
+  ["M-pr-blamed-for-untraceable-id", landSentences[5], landSentences[5].replace("a lander error and never a PR defect", "a PR defect")],
+  ["M-fixer-handoff-full-task", landSentences[6], landSentences[6].replace("does not require the full dispatched task", "requires the full dispatched task")],
+  ["M-conductor-task-not-spawn-matched", landSentences[7], landSentences[7].replace("must match the immutable session-store `subagent.spawn` event", "may omit the immutable spawn")],
+  ["M-matched-pair-waives-gates", landSentences[9], landSentences[9].replace("but it does not waive", "and it waives")],
+  ["M-single-missing-source-halts", landSentences[10], landSentences[10].replace("neither", "either")],
+] as const)("land rejects named mutant %s", (_mutant, original, weakening) => {
+  const text = read(landPath);
+  expect(weakening).not.toBe(original);
+  expect(() => expectSentences(text.replace(original, weakening), landSentences)).toThrow();
 });
 
 it("squash exception permits only quoted human text, not agent authorship", () => {
