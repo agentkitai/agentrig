@@ -18,7 +18,7 @@ export const ReviewVerdict = z.object({
     location: z.string().regex(/^.+:[1-9][0-9]*(?:-[1-9][0-9]*)?$/, 'expected file:line'),
     blocking: z.boolean(),
     scenario: text,
-  }).strict()),
+  }).strip()),
 }).strict().superRefine((v, ctx) => {
   if (v.verdict === 'PASS' && v.findings.some(f => f.blocking)) {
     ctx.addIssue({code: 'custom', path: ['verdict'], message: 'PASS cannot contain blocking findings'});
@@ -59,9 +59,16 @@ export function verdictRange(body) {
   }
   return { start: markers[0].start, contentStart: markers[0].end, contentEnd: markers[1].start, end: markers[1].end };
 }
-export function parseVerdict(body, expected = {}) {
+const findingKeys = new Set(['severity', 'heading', 'location', 'blocking', 'scenario']);
+export function parseVerdictReceipt(body, expected = {}) {
   const range = verdictRange(body);
-  const verdict = ReviewVerdict.parse(JSON.parse(body.slice(range.contentStart, range.contentEnd).trim()));
+  const wire = JSON.parse(body.slice(range.contentStart, range.contentEnd).trim());
+  const ignoredKeys = Array.isArray(wire?.findings) ? wire.findings.flatMap((finding, findingIndex) => {
+    if (finding === null || typeof finding !== 'object' || Array.isArray(finding)) return [];
+    const keys = Object.keys(finding).filter(key => !findingKeys.has(key)).sort();
+    return keys.length ? [{ findingIndex, keys }] : [];
+  }) : [];
+  const verdict = ReviewVerdict.parse(wire);
   // A family assertion is not proof of a minor pin. Only adapter-owned transport is.
   const familyPin = /^gpt-(\d+)\.\d+(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?$/.exec(expected.assertedModel ?? "");
   const familyMatch = familyPin && verdict.assertedModel === `gpt-${familyPin[1]}`
@@ -70,14 +77,17 @@ export function parseVerdict(body, expected = {}) {
     if (key === 'assertedModel' && familyMatch) continue;
     if (expected[key] !== undefined && verdict[key] !== expected[key]) throw new Error(`verdict ${key} mismatch: expected ${expected[key]}`);
   }
-  return verdict;
+  return { verdict, ignoredKeys };
+}
+export function parseVerdict(body, expected = {}) {
+  return parseVerdictReceipt(body, expected).verdict;
 }
 export function verdictPrompt({ reviewedHead, assertedModel, slot, modelSource }) {
   const familyPin = /^gpt-(\d+)\.\d+(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?$/.exec(assertedModel ?? "");
   const assertionGuidance = familyPin
     ? `Assert the exact pin ${assertedModel} when known. If your identity only establishes the family, you may assert the major family gpt-${familyPin[1]}; it is accepted only with exact adapter transport proof of ${assertedModel}.`
     : `Assert the exact pin ${assertedModel ?? "(not supplied)"}; no family alias is accepted.`;
-  return `Preserve your human review prose. Include exactly one delimited JSON verdict block (not a code fence). Prose is not the verdict protocol; do not infer PASS from silence. The adapter pins model ${assertedModel ?? "(not supplied)"}; its own transport provenance (${modelSource ?? "not supplied"}) must independently prove that exact pin before acceptance. ${assertionGuidance} If your own identity contradicts the configured pin, report that contradiction honestly. Never claim to have observed transport evidence yourself. Report the source of your assertion. Every finding has severity CRITICAL/HIGH/MEDIUM/LOW, exact verbatim heading, location file:line, boolean blocking, concrete failure scenario. PASS cannot include blocking findings. Required bindings: reviewedHead=${JSON.stringify(reviewedHead)}, slot=${JSON.stringify(slot)}. Expected model=${JSON.stringify(assertedModel)}; source guidance=${JSON.stringify(modelSource)}. Replace every placeholder below with your review result; the template is deliberately not a valid verdict:\n${verdictBlock({version:1, reviewedHead:'<full reviewed commit SHA>', assertedModel:'<actual model>', modelSource:'<actual source>', slot:'<review slot>', verdict:'<PASS or FAIL>', findings:'<array of finding objects; [] only if no findings>'})}`;
+  return `Preserve your human review prose. Include exactly one delimited JSON verdict block (not a code fence). Prose is not the verdict protocol; do not infer PASS from silence. The adapter pins model ${assertedModel ?? "(not supplied)"}; its own transport provenance (${modelSource ?? "not supplied"}) must independently prove that exact pin before acceptance. ${assertionGuidance} If your own identity contradicts the configured pin, report that contradiction honestly. Never claim to have observed transport evidence yourself. Report the source of your assertion. Use this exact finding object shape once per finding, with no other keys: {"severity":"<CRITICAL|HIGH|MEDIUM|LOW>","heading":"<exact verbatim heading>","location":"<file:line>","blocking":"<true or false>","scenario":"<concrete failure scenario>"}. PASS cannot include blocking findings. Required bindings: reviewedHead=${JSON.stringify(reviewedHead)}, slot=${JSON.stringify(slot)}. Expected model=${JSON.stringify(assertedModel)}; source guidance=${JSON.stringify(modelSource)}. Replace every placeholder below with your review result; the template is deliberately not a valid verdict:\n${verdictBlock({version:1, reviewedHead:'<full reviewed commit SHA>', assertedModel:'<actual model>', modelSource:'<actual source>', slot:'<review slot>', verdict:'<PASS or FAIL>', findings:'<array using the exact finding object shape above; [] only if no findings>'})}`;
 }
 
 /** Read only a trusted adapter-owned receipt; callers must not use reviewer-authored JSON. */

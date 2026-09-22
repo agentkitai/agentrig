@@ -93,8 +93,10 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     // M-PR-adapter: a tooling-changing PR must not execute its own adapter.
     mkdirSync(join(dir, "scripts"));
     writeFileSync(join(dir, "scripts/reviewer-adapters.mjs"), 'throw new Error("PR adapter executed");');
-    const verdict = {version:1, reviewedHead:head, slot:"custom", assertedModel:"pinned", modelSource:"fixture transport", verdict:"PASS", findings:[]};
-    const reviewText = `I independently reviewed de6915934d1ae98650b04f721b5568c9b4c9cdf1..cb8e779dcee47694d70f98674de870a76bdb630e\n${preservedReviews[1]}\n<!-- agentrig-verdict:v1 -->\n${JSON.stringify(verdict)}\n<!-- /agentrig-verdict -->`;
+    const finding = {severity:"LOW", heading:"Suggested receipt cleanup", location:"scripts/reviewer-adapters.mjs:124", blocking:false, scenario:"A reviewer includes an extra repair hint."};
+    const verdict = {version:1, reviewedHead:head, slot:"custom", assertedModel:"pinned", modelSource:"fixture transport", verdict:"PASS", findings:[finding]};
+    const wireVerdict = {...verdict, findings:[{...finding, fix:"Keep only protocol fields.", rank:1}]};
+    const reviewText = `I independently reviewed de6915934d1ae98650b04f721b5568c9b4c9cdf1..cb8e779dcee47694d70f98674de870a76bdb630e\n${preservedReviews[1]}\n<!-- agentrig-verdict:v1 -->\n${JSON.stringify(wireVerdict)}\n<!-- /agentrig-verdict -->`;
     writeFileSync(binary, `#!${process.execPath}\nconst fs=require('node:fs'); fs.writeFileSync('${dir}/argv',JSON.stringify(process.argv.slice(2))); fs.writeFileSync('${dir}/env',JSON.stringify(process.env)); const prompt=fs.readFileSync(0,'utf8'); if(!prompt.includes('checks green')) process.exit(3); ${command === "claude" ? `console.log(JSON.stringify({subtype:'success',modelUsage:{pinned:{}},result:${JSON.stringify(reviewText)}}));` : `console.error('model: pinned'); fs.writeFileSync(process.argv[process.argv.indexOf('--output-last-message')+1], ${JSON.stringify(reviewText)});`}\n`);
     chmodSync(binary, 0o755);
     const config = join(dir, "config.json");
@@ -111,6 +113,8 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     const provenance = JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"));
     expect(provenance).toMatchObject({ resolvedHome: adapter === "codex-cli" ? "/fixture/codex" : "/fixture/claude", slot: "custom", adapter, model: "pinned", modelSource: cliAdapters[adapter].modelSource, cwd: dir, exit: 0 });
     expect(provenance.verdict).toEqual(verdict);
+    expect(provenance.ignoredKeys).toEqual([{findingIndex:0, keys:["fix", "rank"]}]);
+    expect(JSON.parse(readFileSync(`${prefix}.verdict.json`, "utf8"))).toEqual(verdict);
     expect(readFileSync(`${prefix}.md`, "utf8")).toBe(reviewText);
     expect(adapter === "claude-cli" ? JSON.parse(readFileSync(`${prefix}.stdout`, "utf8")).result : readFileSync(`${prefix}.last`, "utf8")).toBe(reviewText);
     expect(Date.parse(provenance.finished)).toBeGreaterThanOrEqual(Date.parse(provenance.started));

@@ -1,5 +1,15 @@
 # Status
 
+## Pending review — issue #525, verdict finding extension tolerance
+
+Reviewer verdict parsing keeps every required finding field strict while dropping arbitrary
+unknown finding keys from normalized verdicts and recording them in adapter receipt
+`ignoredKeys`. The generated prompt shows the exact finding shape once and forbids other keys;
+shipping policy classifies otherwise-valid schema-shape rejection as a reviewer-protocol retry
+that does not consume the slot retry. Fail-first, receipt, prompt, strictness, instruction-contract,
+and named mutation proofs accompany the PR. Repair round: 0/3; conductor review and exact-head
+CI remain pending. No roadmap completion marker is set.
+
 ## Pending review — issue #524, in-process CLI fixture environment
 
 In-process CLI fixtures now share the spawned-fixture environment boundary: inherited
