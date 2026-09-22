@@ -1,6 +1,6 @@
 # Status
 
-## Pending review — issue #521, declared-check user-only profiles
+## Complete — issue #521, declared-check user-only profiles (PR #528)
 
 The public resolver now loads safe user config for `run --profile`-compatible name
 validation while keeping commands project-owned. Train uses the same default path.
