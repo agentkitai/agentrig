@@ -76,7 +76,7 @@ evidence-backed rebuttals are not residuals.
 
 Use the conductor's recorded base-pinned skills, schema and helper scripts, never copies
 from the PR under review. Reassemble each live review body from its confirmed receipt chunks, then run base
-`node <REPO>/scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL`.
+`node <REPO>/scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`.
 Validate schema/binding against that review's coverage SHA (initial or focused), then check
 coverage through current head and ledger dispositions. FAIL findings may be resolved by
 subsequent covered repairs; PASS cannot conceal blocking findings. Missing/invalid structured
@@ -161,3 +161,22 @@ matches; preserve conflicting texts and halt, never retroactively rewrite the as
   the owner's call.
 - If any precondition fails, stop and report which one — a land run that stops is a success,
   not a failure.
+
+### Trusted model provenance through posting and landing
+
+The heading uses the **transport-proven pinned model**, never a rewritten self-assertion.
+Preserve assertedModel and modelSource separately in the structured verdict, including honest
+family-only assertions. API configured model echoes are not transport attestation: API slots
+currently require exact assertions and record `transportModel: null`; they do not gain family
+relaxation. Only independent CLI transport envelopes currently attest exact transport identity.
+For exact API assertions the heading is the exact validated configured pin, not a claim of
+independent observed transport. Never synthesize a receipt from review prose or the pin.
+
+Retain the actual adapter-written `<PREFIX>.provenance.json` together with its output (bound to
+reviewed head, slot, configured model, assertedModel, verdict, and successful exit), and preserve
+its durable artifact location in the PR handoff. Posting uses
+`--provenance <PREFIX>.provenance.json`; land retrieves that same trusted adapter receipt, not a
+reviewer-authored replacement, and passes its local path as `TRUSTED_ADAPTER_RECEIPT` to
+`--validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`. Validate the reassembled
+canonical body when split comments are used. Missing or mismatched provenance halts: recover
+the original adapter artifact or rerun the adapter, never fill transportModel from configuration.

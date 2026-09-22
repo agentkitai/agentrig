@@ -76,3 +76,42 @@ it("reviewer-authored transport field is not adapter evidence", () => {
   const verdict = parseVerdict(block("gpt-5"));
   expect(() => parseVerdict(`<!-- agentrig-verdict:v1 -->\n${JSON.stringify({ ...verdict, transportModel:"gpt-5.5" })}\n<!-- /agentrig-verdict -->`, { assertedModel:"gpt-5.5" })).toThrow();
 });
+
+it.each(["gpt-5", "gpt-5.5"])("M-api-echo: real API adapter %s requires exact assertion without wire attestation", asserted => {
+  const dir = mkdtempSync(join(tmpdir(), "api-assertion-"));
+  try {
+    const git = (...args: string[]) => spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    expect(git("init", "-q").status).toBe(0);
+    expect(git("-c", "user.name=fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-qm", "fixture").status).toBe(0);
+    const actualHead = git("rev-parse", "HEAD").stdout.trim();
+    const text = block(asserted).replace(head, actualHead);
+    // Real provider and adapter entrypoint, synthetic HTTP response only. A response model
+    // is deliberately different: unified providers do not expose it as transport proof.
+    const sse = `data: ${JSON.stringify({ model: "gpt-5.4", choices: [{ delta: { content: text }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`;
+    writeFileSync(join(dir, "fetch.mjs"), `globalThis.fetch = async () => new Response(${JSON.stringify(sse)}, {headers:{'content-type':'text/event-stream'}});`);
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ providers: { fixture: { provider: "openai", model: "gpt-5.5", baseUrl: "https://fixture.invalid/v1" } }, reviewers: { Codex: { adapter: "api:fixture", model: "gpt-5.5" } } }));
+    writeFileSync(join(dir, "prompt"), "source bundle and checks green");
+    const prefix = join(dir, "out");
+    const runner = fileURLToPath(new URL("../../../scripts/reviewer-adapters.mjs", import.meta.url));
+    const result = spawnSync(process.execPath, ["--import", join(dir, "fetch.mjs"), runner, join(dir, "config.json"), "Codex", join(dir, "prompt"), dir, prefix], { encoding: "utf8", env: { ...process.env, GIT_TRACE2_EVENT: "0" } });
+    if (asserted === "gpt-5") {
+      expect(result.status, result.stderr).toBe(2);
+      expect(result.stderr).toContain("assertedModel mismatch");
+      expect(existsSync(`${prefix}.provenance.json`)).toBe(false);
+    } else {
+      expect(result.status, result.stderr).toBe(0);
+      const receipt = JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"));
+      expect(receipt.transportModel).toBeNull();
+      expect(receiptTransport(receipt, { reviewedHead: actualHead, slot: "Codex", assertedModel: "gpt-5.5" }, receipt.verdict, "api:fixture")).toBeUndefined();
+      const index = fileURLToPath(new URL("../../../scripts/review-finding-index.mjs", import.meta.url));
+      expect(spawnSync(process.execPath, [index, "--validate", `${prefix}.md`, actualHead, "Codex", "gpt-5.5", `${prefix}.provenance.json`]).status).toBe(0);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+it("M-api-receipt-echo: an API receipt's configured echo never attests transport", () => {
+  const verdict = parseVerdict(block("gpt-5"));
+  const expected = { reviewedHead: head, slot: "Codex", assertedModel: "gpt-5.5" };
+  const receipt = { ...expected, exit: 0, model: "gpt-5.5", transportModel: "gpt-5.5", assertedModel: "gpt-5", verdict, adapter: "api:fixture" };
+  const transportModel = receiptTransport(receipt, expected, verdict);
+  expect(() => parseVerdict(block("gpt-5"), { ...expected, transportModel })).toThrow(/assertedModel mismatch/);
+});

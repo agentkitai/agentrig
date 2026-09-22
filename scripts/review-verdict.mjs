@@ -79,8 +79,11 @@ export function verdictPrompt({ reviewedHead, assertedModel, slot, modelSource }
 /** Read only a trusted adapter-owned receipt; callers must not use reviewer-authored JSON. */
 export function receiptTransport(receipt, expected, verdict, adapter) {
   if (receipt.exit !== 0 || receipt.reviewedHead !== expected.reviewedHead || receipt.slot !== expected.slot
-    || receipt.model !== expected.assertedModel || receipt.transportModel !== expected.assertedModel
+    || receipt.model !== expected.assertedModel
+    || (receipt.transportModel !== expected.assertedModel && !(receipt.adapter?.startsWith("api:") && receipt.transportModel === null))
     || receipt.assertedModel !== verdict.assertedModel || JSON.stringify(receipt.verdict) !== JSON.stringify(verdict)
     || (adapter !== undefined && receipt.adapter !== adapter)) throw new Error("adapter provenance binding mismatch");
-  return receipt.transportModel;
+  // Only CLI adapters currently obtain identity from an independent transport envelope.
+  // API provider.model (including legacy receipts) is just the configured pin echoed back.
+  return ["codex-cli", "claude-cli"].includes(receipt.adapter) ? receipt.transportModel : undefined;
 }
