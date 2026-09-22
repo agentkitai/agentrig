@@ -13,6 +13,7 @@ const sha = z.string().regex(/^[a-f0-9]{40,64}$/u);
 /** Operator-owned input, not permission approval. The child still applies normal policy. */
 export const TrainRowSchema = z.object({
   task: text,
+  builderProvider: text.optional(),
   authorization: text,
   scope: z.array(text).min(1).max(100),
   environment: z.object({
@@ -45,7 +46,7 @@ export interface TrainOptions {
   /** Snapshot before CLI profile overlays are applied. */
   launcherEnvironment?: NodeJS.ProcessEnv;
   command?: TrainCommand;
-  childEnvironment?: (checkout: string, profile?: string) => Promise<NodeJS.ProcessEnv>;
+  childEnvironment?: (checkout: string, profile?: string, builderProvider?: string) => Promise<NodeJS.ProcessEnv>;
   status?: (status: TrainStatus) => void;
   sleep?: () => Promise<void>;
   /** Resolve the project-declared Vitest per-test budget after each fast-forward. */
@@ -146,7 +147,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         state.pr = row.resume?.pr ?? null;
         if (row.resume !== undefined) state.sessionIds.push(row.resume.session);
         const env = row.environment;
-        let childEnv = await options.childEnvironment?.(env.checkout, env.profile);
+        let childEnv = await options.childEnvironment?.(env.checkout, env.profile, row.builderProvider);
         const checkEnv = { ...(options.launcherEnvironment ?? process.env) };
         for (const key of ["CODEX_HOME", "CLAUDE_CONFIG_DIR"]) {
           if (childEnv?.[key] !== undefined) checkEnv[key] = childEnv[key];
@@ -188,7 +189,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         await exec("git", ["merge", "--ff-only", `origin/${env.baseBranch}`], true);
         const startingBase = sha.parse(await exec("git", ["rev-parse", "HEAD"]));
         if (startingBase !== await exec("git", ["rev-parse", `origin/${env.baseBranch}`])) throw new Error("checkout is ahead of origin base");
-        childEnv = await options.childEnvironment?.(env.checkout, env.profile);
+        childEnv = await options.childEnvironment?.(env.checkout, env.profile, row.builderProvider);
         const declaredBudget = await options.testTimeout?.(env.checkout, env.profile);
         const testTimeout = z.number().int().min(1).max(120_000).optional().parse(declaredBudget);
         for (const argv of [["install", "--frozen-lockfile"], ["build"], ["typecheck"]]) await exec("pnpm", argv, true);
@@ -202,6 +203,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         const argv = ["run", "--headless", "--json", "--output-schema", schemaPath, "--root", env.sessionRoot ?? join(root, "logs", "sessions")];
         if (env.profile !== undefined) argv.push("--profile", env.profile);
         if (row.resume !== undefined) argv.push("--resume", row.resume.session);
+        if (row.builderProvider !== undefined) argv.push("--builder-provider", row.builderProvider);
         argv.push(prompt);
         let sessionWrites = Promise.resolve();
         const result = await command({ executable: process.execPath, argv: options.cli === undefined ? argv : [options.cli, ...argv], cwd: env.checkout, ...(childEnv === undefined ? {} : { env: childEnv }), log, resultPath,
@@ -310,7 +312,7 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
   const root = resolve(directory);
   const rows: Array<{ row: string; sessions: string[] }> = [];
   const ledgers = new Map<string, Awaited<ReturnType<SpendLedger["records"]>>>();
-  const groups = new Map<string, { rows: typeof rows; spawns: Array<{ parent: string; child: string }> }>();
+  const groups = new Map<string, { rows: typeof rows; providers: Map<string, string>; spawns: Array<{ parent: string; child: string }> }>();
   const warnings = new Map<string, string[]>();
   const identities = new Set<string>();
   for (const folder of folders.slice(0, 4)) {
@@ -326,7 +328,7 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
       const checkout = await realpath(row.environment.checkout);
       if (!ledgers.has(checkout)) ledgers.set(checkout, await new SpendLedger(checkout).records());
       let group = groups.get(checkout);
-      if (group === undefined) { group = { rows: [], spawns: [] }; groups.set(checkout, group); }
+      if (group === undefined) { group = { rows: [], providers: new Map(), spawns: [] }; groups.set(checkout, group); }
       group.rows.push({ row: stem, sessions });
       const rowWarnings: string[] = [];
       warnings.set(stem, rowWarnings);
@@ -341,6 +343,9 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
         try {
           const prefix = await store.readPrefix(session);
           if (prefix.torn) rowWarnings.push(`torn spawn log tail: ${session}; valid prefix used, descendants may be unattributed`);
+          for (const event of prefix.events) if (event.type === "context.manifest" && event.providerSelection !== undefined) {
+            group.providers.set(session, event.providerSelection.entry);
+          }
           for (const event of prefix.events) if (event.type === "subagent.spawn") {
             group.spawns.push({ parent: session, child: event.id }); pending.push(event.id);
           }
@@ -367,7 +372,7 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
     const unattributed = records.filter(record => record.type === "admit" && record.session === undefined).length;
     if (gaps > 0) ledgerWarnings.push(`ledger-wide (${checkout}): ${gaps} coverage gap(s) without session attribution; not assignable to a row`);
     if (unattributed > 0) ledgerWarnings.push(`ledger-wide (${checkout}): ${unattributed} call(s) without session attribution excluded`);
-    for (const row of rollupTrainUsage(records, group.rows, group.spawns)) {
+    for (const row of rollupTrainUsage(records, group.rows, group.spawns, group.providers)) {
       reports.set(row.row, { ...row, coverageWarnings: [...row.coverageWarnings, ...warnings.get(row.row)!, ...ledgerWarnings] });
     }
   }
@@ -376,7 +381,7 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
 
 async function validateQueuedRow(path: string, options: Pick<TrainOptions, "childEnvironment" | "testTimeout">): Promise<void> {
   const row = TrainRowSchema.parse(await json(path));
-  await options.childEnvironment?.(row.environment.checkout, row.environment.profile);
+  await options.childEnvironment?.(row.environment.checkout, row.environment.profile, row.builderProvider);
   z.number().int().min(1).max(120_000).optional().parse(await options.testTimeout?.(row.environment.checkout, row.environment.profile));
 }
 

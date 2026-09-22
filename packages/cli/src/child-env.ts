@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { readConfigFile, resolveConfig, type ConfigFile, type ReviewerSlot } from "./config.js";
+import { resolveProviderEntries } from "./provider.js";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
 /** Capture before program preAction applies the selected profile to process.env. */
@@ -41,11 +42,22 @@ export function reviewerHome(slot: string, adapter: string, env: NodeJS.ProcessE
 export function assertReviewerHomes(reviewers: Record<string, ReviewerSlot> | undefined, env: NodeJS.ProcessEnv): void {
   for (const [slot, binding] of Object.entries(reviewers ?? {})) reviewerHome(slot, binding.adapter, env);
 }
-export async function trainChildEnvironment(cwd: string, profile?: string): Promise<NodeJS.ProcessEnv> {
+export async function trainChildEnvironment(cwd: string, profile?: string, builderProvider?: string): Promise<NodeJS.ProcessEnv> {
   const trust = await resolveProjectTrust(cwd, { home: homedir(), interactive: false });
   const config = trust.trusted ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json")) : undefined;
   const user = await loadChildUserConfig(cwd);
   const env = await resolveChildEnvironment({ cwd, ...(user === undefined ? {} : { user }), validateProfile: true, ...(config === undefined ? {} : { project: config }), ...(profile === undefined ? {} : { profile }) });
+  if (builderProvider !== undefined) {
+    const selectedProfile = profile ?? env.AGENTRIG_CHILD_PROFILE;
+    const activeProfile = selectedProfile === "recommended" && user?.profiles?.recommended === undefined && config?.profiles?.recommended === undefined ? undefined : selectedProfile;
+    const resolved = resolveConfig({ defaults: {}, cli: {}, env,
+      ...(user === undefined ? {} : { user }), ...(config === undefined ? {} : { project: config }),
+      ...(activeProfile === undefined ? {} : { profile: activeProfile }) });
+    const { entries } = resolveProviderEntries({ provider: resolved.provider ?? "anthropic", model: resolved.model ?? "unknown",
+      ...(resolved.providers === undefined ? {} : { providers: resolved.providers }),
+      ...(resolved.roles === undefined ? {} : { roles: resolved.roles }) });
+    if (!Object.hasOwn(entries, builderProvider)) throw new Error(`unknown builder provider entry "${builderProvider}" in active profile`);
+  }
   assertReviewerHomes(config?.reviewers, env);
   return env;
 }

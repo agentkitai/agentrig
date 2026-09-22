@@ -1,5 +1,5 @@
 import { cliEnv } from "./cli-env.js";
-import { mkdtemp, mkdir, writeFile, rm, readdir, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, readdir, realpath } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -56,4 +56,18 @@ it("train --status wires profile validation without claiming the queued row", as
   const output = execFileSync(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "train", queue, "--status"], { cwd: checkout, env: cliEnv(), encoding: "utf8" });
   expect(JSON.parse(output)).toMatchObject({ queue: 1, active: 0, halted: 0, invalidEntries: [expect.stringContaining('unknown config profile "missing"')] });
   expect(await readdir(join(queue, "queue"))).toEqual(["001.json"]);
+});
+
+it("refuses an unknown builder provider before checkout validation and accepts active-profile names", async () => {
+  const { home, queue } = await fixture();
+  const path = join(queue, "queue/001.json");
+  const row = JSON.parse(await readFile(path, "utf8"));
+  await writeFile(path, JSON.stringify({ ...row, builderProvider: "sol" }));
+  const command = vi.fn(async () => ({ code: 1, stdout: "", stderr: "checkout sentinel" }));
+  expect(await runTrain(queue, { ...options, command })).toBe("halted");
+  expect(command).not.toHaveBeenCalled();
+  expect((await trainStatus(queue, options)).invalidEntries.join("\n")).toContain('unknown builder provider entry "sol"');
+  await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: { personal: { providers: { sol: { provider: "openai", model: "sol" } } } } }));
+  expect(await runTrain(queue, { ...options, command })).toBe("halted");
+  expect(command).toHaveBeenCalled();
 });

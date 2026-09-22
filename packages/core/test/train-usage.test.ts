@@ -14,7 +14,9 @@ it("joins calls before grouping two rows, nested children, session/model, unpric
       await ledger.settle(admission, { input: 10, output: 20, cacheRead: 0, cacheWrite: 0 }, true);
     }
     records.push(...await ledger.records());
-    const rows = rollupTrainUsage(records, [{ row: "one", sessions: ["parent"] }, { row: "two", sessions: ["second"] }], [{ parent: "child", child: "nested" }, { parent: "parent", child: "child" }]);
+    const rows = rollupTrainUsage(records, [{ row: "one", sessions: ["parent"] }, { row: "two", sessions: ["second"] }], [{ parent: "child", child: "nested" }, { parent: "parent", child: "child" }], new Map([["child", "sol"]]));
+    expect(rows[0]!.sessions.find(session => session.session === "child")).toHaveProperty("builderProvider", "sol");
+    expect(rows[0]!.sessions.find(session => session.session === "nested")).toHaveProperty("builderProvider", null);
     expect(rows.map(row => [row.row, row.totals.input, row.totals.output, row.totals.estimatedMicros, row.totals.unpricedCalls])).toEqual([["one", 30, 60, 100, 1], ["two", 10, 20, 50, 0]]);
     expect(rows[0]!.sessions.find(session => session.session === "nested")!.totals).toMatchObject({ input: 10, output: 20, estimatedMicros: null });
     expect(rows[0]!.sessions.map(session => session.session)).toEqual(["child", "nested", "parent"]);

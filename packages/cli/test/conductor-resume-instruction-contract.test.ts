@@ -12,3 +12,15 @@ it("records the sanctioned R18b completion marker after reviewed delivery", asyn
   const roadmap = await readFile(new URL("../../../docs/ROADMAP.md", import.meta.url), "utf8");
   expect(roadmap.split("\n").find(line => line.includes("**Conductor resume in place**"))).toMatch(/^\| R18b \*\(done — PR #481\)\* \|/);
 });
+
+it("routes builder/fixer continuations only and inventories effective provider", async () => {
+  const text = (await readSkillText(new URL("../../../.agentrig/skills/ship/SKILL.md", import.meta.url), "utf8")).replace(/\s+/g, " ");
+  for (const phrase of ["`--builder-provider <entry>`", "every builder and fixer, including continuations", "profile default (omit `provider`)", "Never apply this override to reviewers, arbiters or landers", "effective builder provider", "PR child inventory"]) expect(text).toContain(phrase);
+});
+
+it("documents operator routing policy and ten-row review", async () => {
+  const text = (await readSkillText(new URL("../../../docs/TRAIN-OPERATIONS.md", import.meta.url), "utf8")).replace(/\s+/g, " ");
+  expect(text).toContain("doc/test/helper rows default to `sol`");
+  expect(text).toContain("product-row builders/fixers default to the profile default");
+  expect(text).toContain("after ten Sol rows");
+});

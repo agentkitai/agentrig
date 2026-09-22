@@ -464,8 +464,10 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       // current when it starts, so a later refresh cannot move the instructions under a running
       // child, and a child spawned after one is not left on the superseded bodies (issue #267).
       const skills = w.skills.current().skills;
+      const provider = choice?.provider === undefined ? w.providers.subagents : w.providers.get(choice.provider);
       return {
-        provider: choice?.provider === undefined ? w.providers.subagents : w.providers.get(choice.provider),
+        provider,
+        providerSelection: () => ({ provider, entry: choice?.provider ?? w.providers.roleNames.subagents }),
         // skills too: a subagent doing a task the project has instructions for should be able to
         // load them, and the catalogue costs one line each
         tools: [...w.childTools(), ...(skills.length > 0 ? [skillTool(skills)] : [])],

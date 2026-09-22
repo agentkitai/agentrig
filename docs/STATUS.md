@@ -1,5 +1,12 @@
 # Status
 
+## Pending review — issue #517, builderProvider row field
+
+Train validates optional named builder routing before checkout, passes it to headless
+ship, and reports observed per-session provider entries in R18e usage. Ship inventories
+builder/fixer routing; product defaults and reviewer roles are unchanged. Independent
+conductor owns review, exact-head CI and the ROADMAP completion marker.
+
 ## Pending review — issue #522, train declared-check environment
 
 Between-row checks use the pre-profile launcher environment plus tool homes and
