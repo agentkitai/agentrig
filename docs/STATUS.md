@@ -1,5 +1,25 @@
 # Status
 
+## R18e — per-row cost and concurrency (implementation; review pending)
+
+Row/session/model usage is available in train status and `usage --row`; nested
+spawn attribution uses append-only ledger and session records, and ChatGPT-login
+usage remains explicitly unpriced. `providers.<name>.maxConcurrent` queues shared
+entry streams across processes with visible `model.wait` events. Targeted tests
+cover nested rows, pricing coverage, builder wiring, cancellation and independent
+entries; declared-check receipts and named mutants travel in the PR.
+
+Repair round 1 excludes ambiguous sessions and descendants from all claiming
+rows, tolerates live torn log tails, and scopes coverage warnings by row and
+checkout. Slot release tolerates disappearance without masking provider failures.
+The new ledger fixture canonicalizes its temporary root on macOS; production
+realpath safety remains unchanged. Regression/mutation receipts are in PR #494.
+
+#479 stays open: provider limits do not serialize local checks and the existing
+transport-only retry does not cover Vitest timeouts. ROADMAP completion marker is
+reserved for the conductor after independent reviews resolve.
+
+
 ## R18c — train as a command (PR #488)
 
 JSON-encoded authority; host-owned validated final-PR transport without permission

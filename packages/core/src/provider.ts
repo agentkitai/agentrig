@@ -33,6 +33,7 @@ export interface ModelRequest {
 export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "error";
 
 export type ModelEvent =
+  | { type: "wait"; entry: string; maxConcurrent: number }
   | { type: "thinking"; block: ThinkingBlock }
   /** Optional labels are supplied by trusted adapter code, never copied from model prose/JSON. */
   | { type: "text_delta"; text: string; trust?: ContentTrust }

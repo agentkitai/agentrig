@@ -95,3 +95,55 @@ audit evidence and explicitly accept any new accounting epoch's unknown prior
 coverage. Aborting local work does not prove remote billing stopped.
 
 See [R15i contract and validation](plans/R15i.md).
+
+## Train rows and provider-entry concurrency (R18e)
+
+`agentrig train <dir> --status` reads queue counts plus row/session/model usage;
+normal between-row status emits the same usage fields. `agentrig usage --row <id>
+--train-dir <dir>` prints the row total and each child session's provider/model
+breakdown (`--json` gives the structured report). The ID is the queue filename
+without `.json`; the train directory defaults to cwd. Row reporting covers the
+whole ledger, not the date window (`--since` applies only to ordinary project usage).
+No provider/config discovery or model call is needed to report historical usage.
+
+Admissions and settlements are joined by call ID before grouping by session,
+provider and model. Row state supplies conductor session IDs; append-only
+`subagent.spawn` logs are followed recursively to attribute nested children once.
+The project's append-only ledger stores the rates that applied at admission;
+reporting never reprices history. Distinct model groups are preserved. Missing
+or unreadable spawn logs are row-scoped coverage warnings, not failures of
+unrelated reports. Live logs use the valid prefix and warn on a torn append tail;
+terminated malformed lines are unreadable, never silently accepted. Ambiguous
+sessions claimed by multiple rows, including descendants, are excluded from all
+claiming rows with explicit per-row diagnostics; unrelated rows still report.
+Session coverage gaps stay with claiming rows. Only sessionless gaps/calls are
+labelled ledger-wide, and only for rows using that checkout. Checkout ledgers
+are accounted independently even when session IDs coincide. Unavailable or
+malformed ledger data remains an explicit status error, not a zero-cost row. External CLI/reviewer calls outside the harness
+ledger are not invented or included. Keep the checkout ledger and session roots
+accessible after a train: deleted worktrees cannot supply their old ledger.
+
+`estimatedMicros: null` means there are no priced calls. For mixed coverage the
+number is the **priced subset only**, alongside raw input/output/cache tokens,
+unpriced-call and incomplete-call counts. **ChatGPT-login calls remain unpriced**,
+even when API rates are configured; subscription usage is not a per-token API bill.
+No recorded calls is not evidence of free work.
+
+Set `providers.<name>.maxConcurrent` to a positive integer (1–1024) to queue
+provider streams on that named entry. Unset preserves unlimited dispatch.
+Roles, reasoning-effort variants and separate run/train processes for the same
+OS user share entry slots in `~/.agentrig/provider-concurrency/<entry hash>`.
+Different entry names do not block each other; operators sharing a login must
+use the same entry name and limit across their configurations. The limit covers
+the complete stream (including provider retries), not the whole train or local
+build/test processes. `model.wait` is an additive session event and visible chat/
+trace notice emitted once when a call has to wait. Waiting is abortable; slots
+are released on success, throw, abort and iterator return. An already-absent slot
+is a successful release; other cleanup errors surface unless preserving an
+original provider/admission failure. No FIFO guarantee.
+
+Slots use exclusive creation across processes and never expire/steal a live
+call's lock. A killed process can leave a slot: stop the affected writers,
+inspect the slot's PID/entry/start record, confirm the process is gone, preserve
+the record and remove only that orphan slot. A crash before recording the PID
+requires manual reconciliation too; fail closed rather than overloading a login.

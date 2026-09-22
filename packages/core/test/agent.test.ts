@@ -121,6 +121,13 @@ async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promis
 }
 
 describe("agent loop", () => {
+  it("persists provider slot waits while allowing the response to finish", async () => {
+    const provider = new FakeProvider([[{ type: "wait", entry: "login", maxConcurrent: 1 }, { type: "text_delta", text: "ok" }, usage(5, 2), stop("end_turn")]]);
+    const session = createAgent(makeConfig(provider)).run("go", { cwd: root });
+    const events = await collect(session); await session.done;
+    expect(events.find(event => event.type === "model.wait")).toMatchObject({ entry: "login", maxConcurrent: 1 });
+    expect(events.find(event => event.type === "model.delta")).toMatchObject({ text: "ok" });
+  });
   it("records a provider retry as a model.retry session event", async () => {
     const provider = new FakeProvider([
       [

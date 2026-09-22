@@ -1,6 +1,9 @@
+import { SpendLedger } from "./spend-ledger.js";
+import { SessionStore } from "./session-store.js";
+import { rollupTrainUsage, type RowUsage } from "./train-usage.js";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { appendFile, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { appendFile, realpath, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { MessageSchema } from "./messages.js";
@@ -33,7 +36,7 @@ export interface TrainRequest {
   onSession?: (id: string) => void;
 }
 export type TrainCommand = (request: TrainRequest) => Promise<{ code: number; stdout: string; stderr: string }>;
-export interface TrainStatus { queue: number; active: number; done: number; halted: number }
+export interface TrainStatus { queue: number; active: number; done: number; halted: number; usage?: Array<RowUsage & { coverageWarnings: string[] }> | null; usageError?: string; pricingNote?: string }
 export interface TrainOptions {
   /** CLI entrypoint to re-enter the existing headless run path. */
   cli?: string;
@@ -80,8 +83,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
   const command = options.command ?? trainCommand;
   const list = async (folder: string) => (await readdir(join(root, folder))).sort();
   const status = async () => {
-    const counts = await Promise.all(folders.slice(0, 4).map(async folder => [folder, (await list(folder)).length]));
-    options.status?.(Object.fromEntries(counts) as unknown as TrainStatus);
+    options.status?.(await trainStatus(root));
   };
   try {
     // Never replay a possibly still-live child or land operation following a crash.
@@ -246,3 +248,68 @@ export const trainCommand: TrainCommand = async request => {
     }).catch(reject); });
   });
 };
+
+/** Read append-only ledger and recursively follow spawn records, never rewrite either. */
+export async function trainUsage(directory: string): Promise<Array<RowUsage & { coverageWarnings: string[] }>> {
+  const root = resolve(directory);
+  const rows: Array<{ row: string; sessions: string[] }> = [];
+  const ledgers = new Map<string, Awaited<ReturnType<SpendLedger["records"]>>>();
+  const groups = new Map<string, { rows: typeof rows; spawns: Array<{ parent: string; child: string }> }>();
+  const warnings = new Map<string, string[]>();
+  for (const folder of folders.slice(0, 4)) {
+    for (const name of await readdir(join(root, folder)).catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; })) {
+      if (!name.endsWith(".json")) continue;
+      const row = TrainRowSchema.parse(await json(join(root, folder, name)));
+      const stem = name.slice(0, -5);
+      const statePath = join(root, "logs", `${stem}.state.json`);
+      const sessions = await exists(statePath) ? StateSchema.parse(await json(statePath)).sessionIds : [];
+      rows.push({ row: stem, sessions });
+      const checkout = await realpath(row.environment.checkout);
+      if (!ledgers.has(checkout)) ledgers.set(checkout, await new SpendLedger(checkout).records());
+      let group = groups.get(checkout);
+      if (group === undefined) { group = { rows: [], spawns: [] }; groups.set(checkout, group); }
+      group.rows.push({ row: stem, sessions });
+      const rowWarnings: string[] = [];
+      warnings.set(stem, rowWarnings);
+      const store = new SessionStore({ root: row.environment.sessionRoot ?? join(root, "logs", "sessions") });
+      const visited = new Set<string>();
+      const pending = [...sessions];
+      for (let index = 0; index < pending.length; index++) {
+        const session = pending[index]!;
+        if (visited.has(session)) continue;
+        visited.add(session);
+        if (visited.size > 10000) throw new Error("train usage session bound exceeded");
+        try {
+          const prefix = await store.readPrefix(session);
+          if (prefix.torn) rowWarnings.push(`torn spawn log tail: ${session}; valid prefix used, descendants may be unattributed`);
+          for (const event of prefix.events) if (event.type === "subagent.spawn") {
+            group.spawns.push({ parent: session, child: event.id }); pending.push(event.id);
+          }
+        } catch (error) {
+          const kind = (error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "unreadable";
+          rowWarnings.push(`${kind} spawn log: ${session}; descendants may be unattributed`);
+        }
+      }
+    }
+  }
+  const reports = new Map<string, RowUsage>();
+  for (const [checkout, group] of groups) {
+    const records = ledgers.get(checkout)!;
+    const ledgerWarnings: string[] = [];
+    const gaps = records.filter(record => record.type === "gap" && record.session === null).length;
+    const unattributed = records.filter(record => record.type === "admit" && record.session === undefined).length;
+    if (gaps > 0) ledgerWarnings.push(`ledger-wide (${checkout}): ${gaps} coverage gap(s) without session attribution; not assignable to a row`);
+    if (unattributed > 0) ledgerWarnings.push(`ledger-wide (${checkout}): ${unattributed} call(s) without session attribution excluded`);
+    for (const row of rollupTrainUsage(records, group.rows, group.spawns)) {
+      reports.set(row.row, { ...row, coverageWarnings: [...row.coverageWarnings, ...warnings.get(row.row)!, ...ledgerWarnings] });
+    }
+  }
+  return rows.map(row => reports.get(row.row)!);
+}
+
+export async function trainStatus(directory: string): Promise<TrainStatus> {
+  const counts = await Promise.all(folders.slice(0, 4).map(async folder => [folder, (await readdir(join(directory, folder)).catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; })).length]));
+  const status = Object.fromEntries(counts) as unknown as TrainStatus;
+  try { return { ...status, usage: await trainUsage(directory), pricingNote: "Configured-rate estimates only; ChatGPT-login calls remain unpriced. Raw tokens are reported." }; }
+  catch (error) { return { ...status, usage: null, usageError: String(error) }; }
+}
