@@ -119,14 +119,11 @@ One permitted flake re-run: a failure that is green on the base branch, names no
 touches, and passed for this same commit before may be re-run ONCE; a second failure is real and
 blocks.
 
-For every dispatched fixer, require the persisted handoff to quote `Repair round: N/3` and
-ledger blocker IDs, with a conductor `gh pr view NN --json body` read-back receipt BEFORE the
-subagent call. Reject a missing quote, missing read-back receipt, or advisory-only dispatch as a
-contract violation; a counter repaired by the fixer afterwards cannot retroactively satisfy it.
+For every dispatched fixer, require a conductor `gh pr view NN --json body` read-back receipt BEFORE the subagent call.
+Reject a missing read-back receipt or advisory-only dispatch as a contract violation; a counter repaired by the fixer afterwards cannot retroactively satisfy it.
 Require the same receipt in the GitHub PR body BEFORE dispatch:
 `Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>`.
-Read the PR body and match that line against the round, OLD and assigned blockers in the
-persisted handoff; verify its timestamp precedes the dispatch. Private session notes do not
+Read the PR body and match that line against the round, OLD and assigned blockers in the persisted fixer task; verify its timestamp precedes the dispatch. Private session notes do not
 substitute for this GitHub-visible receipt. Missing or mismatched evidence blocks landing;
 a receipt added after dispatch cannot retroactively authorize that dispatch.
 Fetch every ledger source comment live. Compare its exact verbatim finding heading and
@@ -135,6 +132,9 @@ also compare against the pre-dispatch receipt and persisted fixer task, and requ
 recorded precondition comparison before editing. Deferred/advisory rows need no fixer task.
 A missing, edited or mismatched heading/anchor blocks landing even when the local finding ID
 matches; preserve conflicting texts and halt, never retroactively rewrite the assignment.
+A missing fixer handoff alone is not a halt when the conductor's dispatch-time PR comment is matched to an immutable session-store `subagent.spawn` event carrying the same exact task text and child session ID.
+That matched pair is sufficient dispatch provenance, but it does not waive receipt-before-dispatch ordering, round/OLD/blocker identity, exact heading/source identity, or the fixer's durable pre-edit comparison with comment ID and head.
+If neither the fixer handoff nor that matched conductor-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.
 
 ## 2. Merge
 
@@ -142,7 +142,8 @@ matches; preserve conflicting texts and halt, never retroactively rewrite the as
   what shipped, the decisions beyond the spec, how it was verified — not the first draft's story.
   For a topic train or upfront task authorization, include the human's exact authorization quote in this body and ensure the PR
   description contains it before merging.
-- No model identifiers anywhere in the commit.
+- No model or agent authorship identifiers anywhere in the commit.
+  The single sanctioned exception is a verbatim human authorization quote that itself contains such an identifier: preserve the quote unchanged, but never add model or agent authorship attribution.
 - One merge at a time: never start a second land while this one's post-merge check is pending.
 
 ## 3. After the merge — the part that is not optional

@@ -197,6 +197,10 @@ Never skip, disable or quarantine tests to get green.
 
 ## 6. Commit and push
 
+For a fixer, the durable pre-push GitHub PR handoff comment must quote verbatim the dispatched `Repair round: N/3` line, the dispatched `Pre-dispatch read-back` receipt, and every assigned finding's exact heading and source comment URL/anchor.
+It must also record the dispatch time and the fixer's pre-edit live-review-versus-ledger comparison result, including each checked comment ID and the PR head.
+Post and read back this handoff before every fixer push; a later handoff does not satisfy the pre-push gate.
+
 - Before every push, builders and fixers must rerun all touched instruction-contract and skill-text test files against a CRLF copy of the entire `.agentrig/skills` tree (normalize LF before converting to CRLF), point `AGENTRIG_TEST_SKILLS_ROOT` at that copy under the proof `TMPDIR` outside Git ancestry, and record start/end times, exact commands, exits and test counts next to the declared check receipts in the PR.
 
 - Clear message: what changed, why, anything surprising. No model identifiers in commits, PR
