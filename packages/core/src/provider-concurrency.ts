@@ -19,6 +19,7 @@ export function limitProvider(provider: ModelProvider, options: { root: string; 
       await mkdir(directory, { recursive: true, mode: 0o700 });
       let slot: string | undefined;
       let notified = false;
+      let failed = false;
       try {
         while (slot === undefined) {
           signal.throwIfAborted();
@@ -39,7 +40,11 @@ export function limitProvider(provider: ModelProvider, options: { root: string; 
         }
         signal.throwIfAborted();
         yield* provider.stream(request, signal);
-      } finally { if (slot !== undefined) await rm(slot); }
+      } catch (error) { failed = true; throw error; }
+      finally {
+        if (slot !== undefined) try { await rm(slot, { force: true }); }
+        catch (error) { if (!failed) throw error; } // Preserve the original provider/admission failure.
+      }
     },
   };
 }

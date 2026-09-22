@@ -64,3 +64,31 @@ it("coordinates a separate process through shared filesystem slots", async () =>
     expect(output).toBe("wait\nstop\n");
   } finally { child.kill(); await finished; await held.return?.(); await rm(root, { recursive: true, force: true }); }
 }, 10000);
+it.each([false, true])("vanished slot release is idempotent (provider failure: %s)", async (fails) => {
+  const root = await mkdtemp(join(tmpdir(), "concurrency-release-"));
+  const failure = new Error("original provider failure");
+  const fake: ModelProvider = { id: "fake", model: "m", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 10 },
+    async *stream(): AsyncGenerator<ModelEvent> {
+      await rm(root, { recursive: true, force: true });
+      if (fails) throw failure;
+      yield { type: "stop", reason: "end_turn" };
+    } };
+  const run = async () => { for await (const _ of limitProvider(fake, { root, entry: "shared", maxConcurrent: 1 }).stream(request, new AbortController().signal)) { /* drain */ } };
+  try { if (fails) await expect(run()).rejects.toBe(failure); else await expect(run()).resolves.toBeUndefined(); }
+  finally { await rm(root, { recursive: true, force: true }); }
+});
+it.each([false, true])("release errors do not mask a provider failure but surface on success (%s)", async (fails) => {
+  const { readdir, mkdir } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "concurrency-release-error-"));
+  const failure = new Error("original provider failure");
+  const fake: ModelProvider = { id: "fake", model: "m", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 10 },
+    async *stream(): AsyncGenerator<ModelEvent> {
+      const slot = join(root, (await readdir(root))[0]!, "0.lock");
+      await rm(slot); await mkdir(slot);
+      if (fails) throw failure;
+      yield { type: "stop", reason: "end_turn" };
+    } };
+  const run = async () => { for await (const _ of limitProvider(fake, { root, entry: "shared", maxConcurrent: 1 }).stream(request, new AbortController().signal)) { /* drain */ } };
+  try { if (fails) await expect(run()).rejects.toBe(failure); else await expect(run()).rejects.not.toBe(failure); }
+  finally { await rm(root, { recursive: true, force: true }); }
+});

@@ -254,8 +254,8 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
   const root = resolve(directory);
   const rows: Array<{ row: string; sessions: string[] }> = [];
   const ledgers = new Map<string, Awaited<ReturnType<SpendLedger["records"]>>>();
-  const spawns: Array<{ parent: string; child: string }> = [];
-  const warnings: string[] = [];
+  const groups = new Map<string, { rows: typeof rows; spawns: Array<{ parent: string; child: string }> }>();
+  const warnings = new Map<string, string[]>();
   for (const folder of folders.slice(0, 4)) {
     for (const name of await readdir(join(root, folder)).catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; })) {
       if (!name.endsWith(".json")) continue;
@@ -266,6 +266,11 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
       rows.push({ row: stem, sessions });
       const checkout = await realpath(row.environment.checkout);
       if (!ledgers.has(checkout)) ledgers.set(checkout, await new SpendLedger(checkout).records());
+      let group = groups.get(checkout);
+      if (group === undefined) { group = { rows: [], spawns: [] }; groups.set(checkout, group); }
+      group.rows.push({ row: stem, sessions });
+      const rowWarnings: string[] = [];
+      warnings.set(stem, rowWarnings);
       const store = new SessionStore({ root: row.environment.sessionRoot ?? join(root, "logs", "sessions") });
       const visited = new Set<string>();
       const pending = [...sessions];
@@ -275,22 +280,31 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
         visited.add(session);
         if (visited.size > 10000) throw new Error("train usage session bound exceeded");
         try {
-          for (const event of await store.readAll(session)) if (event.type === "subagent.spawn") {
-            spawns.push({ parent: session, child: event.id }); pending.push(event.id);
+          const prefix = await store.readPrefix(session);
+          if (prefix.torn) rowWarnings.push(`torn spawn log tail: ${session}; valid prefix used, descendants may be unattributed`);
+          for (const event of prefix.events) if (event.type === "subagent.spawn") {
+            group.spawns.push({ parent: session, child: event.id }); pending.push(event.id);
           }
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-          warnings.push(`missing spawn log: ${session}; descendants may be unattributed`);
+          const kind = (error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "unreadable";
+          rowWarnings.push(`${kind} spawn log: ${session}; descendants may be unattributed`);
         }
       }
     }
   }
-  const records = [...ledgers.values()].flat();
-  const gaps = records.filter(record => record.type === "gap").length;
-  const unattributed = records.filter(record => record.type === "admit" && record.session === undefined).length;
-  if (gaps > 0) warnings.push(`${gaps} ledger coverage gap(s); row totals exclude unmetered calls`);
-  if (unattributed > 0) warnings.push(`${unattributed} call(s) without session attribution excluded`);
-  return rollupTrainUsage(records, rows, spawns).map(row => ({ ...row, coverageWarnings: warnings }));
+  const reports = new Map<string, RowUsage>();
+  for (const [checkout, group] of groups) {
+    const records = ledgers.get(checkout)!;
+    const ledgerWarnings: string[] = [];
+    const gaps = records.filter(record => record.type === "gap" && record.session === null).length;
+    const unattributed = records.filter(record => record.type === "admit" && record.session === undefined).length;
+    if (gaps > 0) ledgerWarnings.push(`ledger-wide (${checkout}): ${gaps} coverage gap(s) without session attribution; not assignable to a row`);
+    if (unattributed > 0) ledgerWarnings.push(`ledger-wide (${checkout}): ${unattributed} call(s) without session attribution excluded`);
+    for (const row of rollupTrainUsage(records, group.rows, group.spawns)) {
+      reports.set(row.row, { ...row, coverageWarnings: [...row.coverageWarnings, ...warnings.get(row.row)!, ...ledgerWarnings] });
+    }
+  }
+  return rows.map(row => reports.get(row.row)!);
 }
 
 export async function trainStatus(directory: string): Promise<TrainStatus> {

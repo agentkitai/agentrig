@@ -1,10 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { SpendLedger, rollupTrainUsage, type SpendRecord } from "@agentkitai/agentrig-core";
 it("joins calls before grouping two rows, nested children, session/model, unpriced tokens and incomplete calls", async () => {
-  const root = await mkdtemp(join(tmpdir(), "row-usage-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "row-usage-")));
   try {
     const ledger = new SpendLedger(root);
     const records: SpendRecord[] = [];
@@ -21,6 +21,14 @@ it("joins calls before grouping two rows, nested children, session/model, unpric
     expect(rows[0]!.sessions.find(session => session.session === "nested")!.models[0]).toMatchObject({ provider: "openai-chatgpt", model: "chat", input: 10, output: 20, estimatedMicros: null, unpricedCalls: 1 });
     // Replaying identical settlements must not double count; conflicts must fail closed.
     expect(rollupTrainUsage([...records, records[1]!], [{ row: "one", sessions: ["parent"] }], [])[0]!.totals.input).toBe(10);
-    expect(() => rollupTrainUsage(records, [{ row: "one", sessions: ["parent"] }, { row: "two", sessions: ["child"] }], [{ parent: "parent", child: "child" }])).toThrow(/multiple rows/);
+    const ambiguous = rollupTrainUsage(records, [{ row: "one", sessions: ["parent"] }, { row: "two", sessions: ["parent"] }, { row: "three", sessions: ["second"] }], [{ parent: "child", child: "nested" }, { parent: "parent", child: "child" }]);
+    expect(ambiguous.map(row => row.totals.input)).toEqual([0, 0, 10]);
+    for (const row of ambiguous.slice(0, 2)) {
+      expect(row.sessions).toEqual([]);
+      for (const session of ["parent", "child", "nested"]) expect(row.coverageWarnings).toContain(`ambiguous session ${session} claimed by multiple rows (one, two); excluded`);
+    }
+    expect(ambiguous[2]!.coverageWarnings).toEqual([]);
+    const overlap = rollupTrainUsage(records, [{ row: "one", sessions: ["parent"] }, { row: "two", sessions: ["child"] }], [{ parent: "child", child: "nested" }, { parent: "parent", child: "child" }]);
+    expect(overlap.map(row => row.totals.input)).toEqual([10, 0]);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

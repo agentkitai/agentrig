@@ -6,7 +6,7 @@ export interface UsageTotals {
   estimatedMicros: number | null; unpricedCalls: number; incompleteCalls: number;
 }
 export interface RowUsage {
-  row: string; totals: UsageTotals;
+  row: string; totals: UsageTotals; coverageWarnings: string[];
   sessions: Array<{ session: string; totals: UsageTotals; models: Array<UsageTotals & { provider: string; model: string }> }>;
 }
 const empty = (): UsageTotals => ({ calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, estimatedMicros: null, unpricedCalls: 0, incompleteCalls: 0 });
@@ -16,15 +16,20 @@ function add(target: UsageTotals, source: UsageTotals): void {
 }
 /** Join by call, then session/model; traverse spawn ancestry rather than counting child costs twice. */
 export function rollupTrainUsage(records: SpendRecord[], rows: Array<{ row: string; sessions: string[] }>, spawns: Array<{ parent: string; child: string }>): RowUsage[] {
-  const owners = new Map<string, string>();
+  // Propagate every claim to a fixed point before accounting. A conflicting parent
+  // contaminates its descendants too, regardless of edge order or cycles.
+  const owners = new Map<string, Set<string>>();
   const assign = (session: string, row: string): boolean => {
-    const prior = owners.get(session);
-    if (prior !== undefined && prior !== row) throw new Error(`session ${session} belongs to multiple rows`);
-    owners.set(session, row); return prior === undefined;
+    let claims = owners.get(session);
+    if (claims === undefined) { claims = new Set(); owners.set(session, claims); }
+    const added = !claims.has(row); claims.add(row); return added;
   };
   for (const row of rows) for (const session of row.sessions) assign(session, row.row);
   let changed = true;
-  while (changed) { changed = false; for (const spawn of spawns) { const row = owners.get(spawn.parent); if (row !== undefined) changed = assign(spawn.child, row) || changed; } }
+  while (changed) {
+    changed = false;
+    for (const spawn of spawns) for (const row of owners.get(spawn.parent) ?? []) changed = assign(spawn.child, row) || changed;
+  }
   const admissions = new Map<string, Extract<SpendRecord, { type: "admit" }>>();
   const settlements = new Map<string, Extract<SpendRecord, { type: "settle" }>>();
   for (const raw of records) {
@@ -35,9 +40,16 @@ export function rollupTrainUsage(records: SpendRecord[], rows: Array<{ row: stri
     if (record.type === "admit") admissions.set(record.call, record); else settlements.set(record.call, record);
   }
   return rows.map(row => {
+    const coverageWarnings: string[] = [];
+    for (const [session, claims] of owners) if (claims.size > 1 && claims.has(row.row)) {
+      coverageWarnings.push(`ambiguous session ${session} claimed by multiple rows (${[...claims].sort().join(", ")}); excluded`);
+    }
+    for (const record of records) if (record.type === "gap" && record.session !== null && owners.get(record.session)?.has(row.row)) {
+      coverageWarnings.push(`session ${record.session}: ledger coverage gap; row totals exclude unmetered calls`);
+    }
     const sessions = new Map<string, Map<string, UsageTotals & { provider: string; model: string }>>();
     for (const admission of admissions.values()) {
-      if (admission.session === undefined || owners.get(admission.session) !== row.row) continue;
+      if (admission.session === undefined || (owners.get(admission.session)?.size !== 1 || !owners.get(admission.session)?.has(row.row))) continue;
       let models = sessions.get(admission.session);
       if (models === undefined) { models = new Map(); sessions.set(admission.session, models); }
       const key = JSON.stringify([admission.provider, admission.model]);
@@ -52,6 +64,6 @@ export function rollupTrainUsage(records: SpendRecord[], rows: Array<{ row: stri
     const totals = empty();
     const grouped = [...sessions].sort(([a], [b]) => a.localeCompare(b)).map(([session, models]) => ({ session, totals: empty(), models: [...models.values()].sort((a, b) => `${a.provider}/${a.model}`.localeCompare(`${b.provider}/${b.model}`)) }));
     for (const session of grouped) for (const model of session.models) { add(totals, model); add(session.totals, model); }
-    return { row: row.row, totals, sessions: grouped };
+    return { row: row.row, totals, sessions: grouped, coverageWarnings };
   });
 }

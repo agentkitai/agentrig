@@ -111,8 +111,15 @@ provider and model. Row state supplies conductor session IDs; append-only
 `subagent.spawn` logs are followed recursively to attribute nested children once.
 The project's append-only ledger stores the rates that applied at admission;
 reporting never reprices history. Distinct model groups are preserved. Missing
-spawn logs are coverage warnings; malformed/unavailable data is an explicit
-status error, not a zero-cost row. External CLI/reviewer calls outside the harness
+or unreadable spawn logs are row-scoped coverage warnings, not failures of
+unrelated reports. Live logs use the valid prefix and warn on a torn append tail;
+terminated malformed lines are unreadable, never silently accepted. Ambiguous
+sessions claimed by multiple rows, including descendants, are excluded from all
+claiming rows with explicit per-row diagnostics; unrelated rows still report.
+Session coverage gaps stay with claiming rows. Only sessionless gaps/calls are
+labelled ledger-wide, and only for rows using that checkout. Checkout ledgers
+are accounted independently even when session IDs coincide. Unavailable or
+malformed ledger data remains an explicit status error, not a zero-cost row. External CLI/reviewer calls outside the harness
 ledger are not invented or included. Keep the checkout ledger and session roots
 accessible after a train: deleted worktrees cannot supply their old ledger.
 
@@ -131,7 +138,9 @@ use the same entry name and limit across their configurations. The limit covers
 the complete stream (including provider retries), not the whole train or local
 build/test processes. `model.wait` is an additive session event and visible chat/
 trace notice emitted once when a call has to wait. Waiting is abortable; slots
-are released on success, throw, abort and iterator return. No FIFO guarantee.
+are released on success, throw, abort and iterator return. An already-absent slot
+is a successful release; other cleanup errors surface unless preserving an
+original provider/admission failure. No FIFO guarantee.
 
 Slots use exclusive creation across processes and never expire/steal a live
 call's lock. A killed process can leave a slot: stop the affected writers,
