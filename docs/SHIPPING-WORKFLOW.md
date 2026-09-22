@@ -252,7 +252,7 @@ the done marker must be present on the head being landed; land never adds it its
 ### Transport-proven family assertions (R18d / #500)
 
 The configured minor pin remains exact: CLI adapters require their independently observed
-transport provenance to equal it; API configured echoes only support exact assertions. Only a numeric GPT major-family assertion (`gpt-5` for `gpt-5.5` or a suffixed minor pin such as `gpt-5.6-sol`) may differ,
+transport provenance to equal it; API configured echoes only support exact assertions. Only a numeric GPT major-family assertion (`gpt-5` for `gpt-5.5` or a suffixed minor pin such as `gpt-6.7-variant`) may differ,
 and only with that independent exact-pin proof. Different families, different minors, and
 family assertions without transport proof fail closed. Verdict JSON cannot supply transport proof.
 Adapter receipts retain `assertedModel` and `transportModel` separately; `model` and the canonical
