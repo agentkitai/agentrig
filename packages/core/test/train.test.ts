@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promis
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { runTrain, trainCommand, TrainRowSchema, type TrainCommand } from "@agentkitai/agentrig-core";
+import { runTrain, trainStatus, trainCommand, TrainRowSchema, type TrainCommand } from "@agentkitai/agentrig-core";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.map(root => rm(root, { recursive: true, force: true }))); roots.length = 0; });
@@ -89,6 +89,43 @@ describe("train", () => {
       expect(await runTrain(f.root, { command })).toBe(infra ? "empty" : "halted");
       expect(attempts).toBe(infra ? 2 : 1);
     }
+  });
+  for (const mode of ["pass", "timeout-again", "mixed", "unsafe", "suite", "unhandled", "other-budget", "incomplete", "multiple"] as const) it(`isolates Vitest timeout files once: ${mode}`, async () => {
+    const f = await fixture(); const retries: string[][] = []; let suites = 0;
+    const eligible = ["pass", "timeout-again", "multiple"].includes(mode);
+    const file = mode === "unsafe" ? "../outside.test.ts" : "packages/core/test/slow.test.ts";
+    const command: TrainCommand = async request => {
+      if (request.argv[0] === "test") {
+        suites++;
+        const report = ` FAIL  ${file} > slow fixture\nError: Test timed out in ${mode === "other-budget" ? 10000 : 5000}ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".\n` + (mode === "mixed" ? " FAIL  packages/core/test/bad.test.ts > assertion\nAssertionError: expected true to be false\n" : "") + (mode === "suite" ? " FAIL  packages/core/test/import.test.ts\nError: module not found\n" : "")
+          + (mode === "unhandled" ? "Unhandled Errors\nError: background failure\n" : "")
+          + (mode === "multiple" ? " FAIL  packages/cli/test/slow.test.ts > second timeout\nError: Test timed out in 5000ms.\n" : "")
+          + (mode === "incomplete" ? "" : ` Tests  ${mode === "mixed" || mode === "multiple" ? 2 : 1} failed | 8 passed (9)\n`);
+        return { code: 1, stdout: report, stderr: "" };
+      }
+      if (request.argv[0] === "exec") {
+        retries.push(request.argv);
+        return { code: mode === "timeout-again" ? 1 : 0, stdout: "", stderr: "" };
+      }
+      return f.command(request);
+    };
+    expect(await runTrain(f.root, { command })).toBe(mode === "pass" || mode === "multiple" ? "empty" : "halted");
+    expect(suites).toBe(1);
+    expect(retries).toEqual(!eligible ? [] : (mode === "multiple" ? [file, "packages/cli/test/slow.test.ts"] : [file]).map(file => ["exec", "vitest", "run", "--no-file-parallelism", file]));
+    expect(f.calls.some(call => call.startsWith("run --headless"))).toBe(mode === "pass" || mode === "multiple");
+  });
+  it("skips stray active names without mangled halt records and recovers the valid row", async () => {
+    const f = await fixture(0); await mkdir(join(f.root, "active"));
+    await writeFile(join(f.root, "active/.DS_Store"), "stray");
+    await writeFile(join(f.root, "active/bad name.json"), "stray");
+    await writeFile(join(f.root, "active/valid.json"), JSON.stringify(row));
+    const status = await trainStatus(f.root);
+    expect(status.invalidEntries).toEqual(["active/.DS_Store", "active/bad name.json"]);
+    expect(await runTrain(f.root, { command: f.command })).toBe("halted");
+    expect(await readdir(join(f.root, "active"))).toEqual([".DS_Store", "bad name.json"]);
+    expect(await readdir(join(f.root, "halted"))).toEqual(["valid.json"]);
+    expect((await readdir(join(f.root, "logs"))).filter(name => name.endsWith(".halt.json"))).toEqual(["valid.halt.json"]);
+    expect(f.calls).toEqual([]);
   });
   it("STOP wins over PAUSE, leaves pending rows untouched", async () => {
     const f = await fixture(); await writeFile(join(f.root, "STOP"), ""); await writeFile(join(f.root, "PAUSE"), "");

@@ -55,6 +55,8 @@ headless run configuration beforehand; unavailable consent causes a row halt.
 mkdir -p /absolute/train/queue
 # Save the operator-authored JSON below as queue/001-task.json, then:
 agentrig train /absolute/train
+# Read-only counts, usage and coverage diagnostics (no drain or child):
+agentrig train /absolute/train --status
 # After the active row, stop without consuming another row:
 touch /absolute/train/STOP
 # Or wait between rows until PAUSE is removed (STOP takes precedence):
@@ -121,7 +123,13 @@ fetch failures and ancestry errors halt. Pinned resumes still require the config
 repository/base, reachable merge commit and exact-merge green CI.
 
 All queue entries must have valid `.json` row names; an unexpected extension is an
-error, never silently skipped as an empty queue. Atomic metadata writes use fresh
+error, never silently skipped as an empty queue. Active recovery uses the same
+basename validation: invalid entries (including `.DS_Store` and editor files)
+are left untouched and skipped, never renamed or converted to halt evidence.
+`train.status.invalidEntries` lists invalid names with their folder, including
+malformed `.json` names. Counts include these entries; they are not valid rows.
+Usage refuses duplicate row stems across queue/active/done/halted, even across
+different checkouts, rather than combining or overwriting their totals. Atomic metadata writes use fresh
 exclusive-create temporary names, so an interrupted stale `.tmp` cannot prevent a
 recovery halt record. Stale evidence is left intact.
 
@@ -130,13 +138,39 @@ base branch and exact GitHub origin; fetch, fast-forward only, and refuse a loca
 advanced base. Then run `pnpm install --frozen-lockfile`, `pnpm build`,
 `pnpm typecheck`, `pnpm test`. Each step gets at most one retry for narrowly
 classified network infrastructure errors (ECONNRESET/EAI_AGAIN/ETIMEDOUT, DNS or
-remote disconnect), not assertions/compiler failures. Never retry the row itself.
+remote disconnect), not assertions/compiler failures. A failed `pnpm test` with a
+complete Vitest default report containing **only** `Test timed out in 5000ms.`
+failures qualifies separately: rerun each reported test file, sequentially and once,
+using `pnpm exec vitest run --no-file-parallelism <file>`. Never rerun the whole
+suite for these timeouts or rerun passed files. A failed isolated retry halts in
+checkout; mixed assertions, malformed/incomplete reports, unsafe file names,
+unhandled errors and other timeout budgets fail closed. Original output and each
+isolated argv remain in the row log. Never retry the row itself.
 Git and pnpm must be available; landing verification uses authenticated `gh`.
 Children inherit the operator's environment, without git-ai PATH injection and with
 `GIT_TRACE2_EVENT=0`. The command uses argv spawning, not shell interpolation.
 
-A JSON `train.status` queue/active/done/halted count is printed after every completed
-or halted row; `train.end` reports empty, halted or stopped. STOP/PAUSE are checked
+A JSON `train.status` is printed after every completed or halted row and by the
+read-only `agentrig train <dir> --status`. It includes `queue`, `active`, `done`,
+`halted`, `invalidEntries`, `usage` and `pricingNote`; accounting failures yield
+`usage: null` plus `usageError`, never misleading zero totals. Each `usage` row has
+`row`, `totals`, `sessions` (with per-session `totals` and provider/model `models`),
+and `coverageWarnings`. Totals expose `calls`, `input`, `output`, `cacheRead`,
+`cacheWrite`, `estimatedMicros`, `unpricedCalls` and `incompleteCalls`. Raw token
+counts include unpriced calls; `estimatedMicros` covers only the priced subset at
+historical configured rates, is not provider billing, and is null (not zero cost)
+when nothing is priced. ChatGPT-login calls remain unpriced.
+
+Coverage warnings distinguish session-scoped ledger gaps and ambiguous claims
+(excluded from every claiming row), missing/unreadable spawn logs, valid-prefix
+use for torn tails, and checkout-local `ledger-wide` diagnostics. Separate warning
+entries identify gaps without a session, gaps with an **unclaimed** session, and
+calls without session attribution. They do not assign unknown spend to a row and
+do not leak warnings across checkouts. Retain ledger and session roots to preserve
+ancestry/coverage; warning-free known totals are not proof of provider billing.
+`agentrig usage --row <id> --train-dir <dir>` exposes the same row accounting.
+
+`train.end` reports empty, halted or stopped. STOP/PAUSE are checked
 **between rows**, never kill an active child or interrupt a merge. Empty and STOP
 exit successfully. Removing STOP permits another invocation. PAUSE polls once per
 second and is interruptible at process level; it does not consume pending rows.

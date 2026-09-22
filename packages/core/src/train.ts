@@ -36,7 +36,7 @@ export interface TrainRequest {
   onSession?: (id: string) => void;
 }
 export type TrainCommand = (request: TrainRequest) => Promise<{ code: number; stdout: string; stderr: string }>;
-export interface TrainStatus { queue: number; active: number; done: number; halted: number; usage?: Array<RowUsage & { coverageWarnings: string[] }> | null; usageError?: string; pricingNote?: string }
+export interface TrainStatus { invalidEntries: string[]; queue: number; active: number; done: number; halted: number; usage?: Array<RowUsage & { coverageWarnings: string[] }> | null; usageError?: string; pricingNote?: string }
 export interface TrainOptions {
   /** CLI entrypoint to re-enter the existing headless run path. */
   cli?: string;
@@ -69,6 +69,27 @@ function infrastructure(result: { stdout: string; stderr: string }): boolean {
     && !/AssertionError|FAIL |error TS\d|Tests\s+\d+ failed/u.test(output);
 }
 
+/** Shared by consumption, crash recovery and read-only accounting. */
+function rowName(name: string): boolean { return /^[A-Za-z0-9][A-Za-z0-9_-]*\.json$/u.test(name); }
+
+/** Fail closed on incomplete/mixed reports. Only default-budget test timeouts qualify. */
+function vitestTimeoutFiles(result: { stdout: string; stderr: string }): string[] {
+  const output = (result.stdout + "\n" + result.stderr).replace(/\x1b\[[0-9;]*m/gu, "");
+  if (/AssertionError|error TS\d|Unhandled|Uncaught|(?:^|\n)\s*Errors\s+\d/iu.test(output)) return [];
+  const failures = [...output.matchAll(/^\s*FAIL\s+([^\s]+)\s+>[^\n]*\n([\s\S]*?)(?=^\s*FAIL\s|$(?![\s\S]))/gmu)];
+  const count = output.match(/(?:^|\n)\s*Tests\s+(\d+) failed\b/u);
+  if (failures.length === 0 || Number(count?.[1]) !== failures.length || [...output.matchAll(/^\s*FAIL\s+/gmu)].length !== failures.length) return [];
+  const files = new Set<string>();
+  for (const failure of failures) {
+    const file = failure[1]!; const detail = failure[2]!;
+    if (!/^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file)
+      || !/^Error: Test timed out in 5000ms\./mu.test(detail)
+      || [...detail.matchAll(/^(?:\w*Error|Error):/gmu)].length !== 1) return [];
+    files.add(file);
+  }
+  return [...files];
+}
+
 /** A queue transport and evidence gate, not a review/merge decision engine. */
 export async function runTrain(directory: string, options: TrainOptions = {}): Promise<"empty" | "halted" | "stopped"> {
   if (options.command === undefined && options.cli === undefined) throw new Error("train requires a CLI entrypoint");
@@ -88,6 +109,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
   try {
     // Never replay a possibly still-live child or land operation following a crash.
     for (const name of await list("active")) {
+      if (!rowName(name)) continue;
       const stem = name.slice(0, -5);
       let prior: RecordState = { row: name, phase: "recovery", reason: null, pr: null, head: null, mergeCommit: null, sessionIds: [] };
       try { prior = StateSchema.parse(await json(join(root, "logs", `${stem}.state.json`))); } catch { /* interrupted before state persisted */ }
@@ -99,7 +121,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
       if (await exists(join(root, "STOP"))) return "stopped";
       if (await exists(join(root, "PAUSE"))) { await (options.sleep?.() ?? new Promise(r => setTimeout(r, 1000))); continue; }
       const name = (await list("queue"))[0]; if (name === undefined) return "empty";
-      if (!/^[A-Za-z0-9][A-Za-z0-9_-]*\.json$/u.test(name)) throw new Error("row names must be unique simple .json basenames");
+      if (!rowName(name)) throw new Error("row names must be unique simple .json basenames");
       const stem = name.slice(0, -5);
       for (const folder of ["done", "halted"] as const) if (await exists(join(root, folder, name))) throw new Error(`row identity already used: ${name}`);
       const log = join(root, "logs", `${stem}.log`);
@@ -117,6 +139,19 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         const exec = async (executable: string, argv: string[], retry = false): Promise<string> => {
           await appendFile(log, JSON.stringify({ ts: new Date().toISOString(), phase: state.phase, executable, argv }) + "\n");
           let result = await command({ executable, argv, cwd: env.checkout, log });
+          if (result.code !== 0 && retry && executable === "pnpm" && argv.length === 1 && argv[0] === "test") {
+            const files = vitestTimeoutFiles(result);
+            if (files.length > 0) {
+              await appendFile(log, "Vitest timeout infrastructure retry 1/1; isolated files only\n");
+              for (const file of files) {
+                const isolated = ["exec", "vitest", "run", "--no-file-parallelism", file];
+                await appendFile(log, JSON.stringify({ ts: new Date().toISOString(), phase: state.phase, executable, argv: isolated }) + "\n");
+                const rerun = await command({ executable, argv: isolated, cwd: env.checkout, log });
+                if (rerun.code !== 0) throw new Error(`isolated Vitest retry failed: ${file}; see row log`);
+              }
+              return "";
+            }
+          }
           if (result.code !== 0 && retry && infrastructure(result)) {
             await appendFile(log, "infrastructure retry 1/1\n");
             result = await command({ executable, argv, cwd: env.checkout, log });
@@ -256,9 +291,12 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
   const ledgers = new Map<string, Awaited<ReturnType<SpendLedger["records"]>>>();
   const groups = new Map<string, { rows: typeof rows; spawns: Array<{ parent: string; child: string }> }>();
   const warnings = new Map<string, string[]>();
+  const identities = new Set<string>();
   for (const folder of folders.slice(0, 4)) {
     for (const name of await readdir(join(root, folder)).catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; })) {
-      if (!name.endsWith(".json")) continue;
+      if (!rowName(name)) continue;
+      if (identities.has(name)) throw new Error(`duplicate row identity: ${name.slice(0, -5)}`);
+      identities.add(name);
       const row = TrainRowSchema.parse(await json(join(root, folder, name)));
       const stem = name.slice(0, -5);
       const statePath = join(root, "logs", `${stem}.state.json`);
@@ -297,6 +335,14 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
     const records = ledgers.get(checkout)!;
     const ledgerWarnings: string[] = [];
     const gaps = records.filter(record => record.type === "gap" && record.session === null).length;
+    const claimed = new Set(group.rows.flatMap(row => row.sessions));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const spawn of group.spawns) if (claimed.has(spawn.parent) && !claimed.has(spawn.child)) { claimed.add(spawn.child); changed = true; }
+    }
+    const unclaimedGaps = records.filter(record => record.type === "gap" && record.session !== null && !claimed.has(record.session)).length;
+    if (unclaimedGaps > 0) ledgerWarnings.push(`ledger-wide (${checkout}): ${unclaimedGaps} coverage gap(s) for unclaimed sessions; not assignable to a row`);
     const unattributed = records.filter(record => record.type === "admit" && record.session === undefined).length;
     if (gaps > 0) ledgerWarnings.push(`ledger-wide (${checkout}): ${gaps} coverage gap(s) without session attribution; not assignable to a row`);
     if (unattributed > 0) ledgerWarnings.push(`ledger-wide (${checkout}): ${unattributed} call(s) without session attribution excluded`);
@@ -308,8 +354,12 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
 }
 
 export async function trainStatus(directory: string): Promise<TrainStatus> {
-  const counts = await Promise.all(folders.slice(0, 4).map(async folder => [folder, (await readdir(join(directory, folder)).catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; })).length]));
-  const status = Object.fromEntries(counts) as unknown as TrainStatus;
+  const invalidEntries: string[] = [];
+  const counts = await Promise.all(folders.slice(0, 4).map(async folder => { const entries = await readdir(join(directory, folder)).catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; });
+    invalidEntries.push(...entries.filter(name => !rowName(name)).map(name => `${folder}/${name}`));
+    return [folder, entries.length];
+  }));
+  const status = { ...Object.fromEntries(counts), invalidEntries: invalidEntries.sort() } as unknown as TrainStatus;
   try { return { ...status, usage: await trainUsage(directory), pricingNote: "Configured-rate estimates only; ChatGPT-login calls remain unpriced. Raw tokens are reported." }; }
   catch (error) { return { ...status, usage: null, usageError: String(error) }; }
 }

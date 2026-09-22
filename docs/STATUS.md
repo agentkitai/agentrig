@@ -7610,3 +7610,16 @@ results remain authoritative. Unknown completion does not assert that a side
 effect never ran. Regressions cover three real resumes, partial parallel results,
 success/failure and hook patches; named tail-only/discard-result/drop-patch mutants
 are rejected. D3 and other deferred review items remain outside this repair.
+
+### R18c train residuals (#479, #493, #495, #497, #498)
+
+Builder follow-up: between-row checks recognize complete Vitest-only 5000ms timeout
+reports and retry only affected files, sequentially once; mixed failures and failed
+isolated retries halt. Recovery skips invalid active basenames and status lists
+invalid entries. Usage rejects duplicate row identities across folders/checkouts
+and labels unclaimed-session ledger gaps separately. TRAIN-OPERATIONS now documents
+read-only status, R18e raw-token/priced-subset fields and coverage diagnostics.
+Deterministic fake-command fail-first proofs cover timeout and stray active recovery;
+usage regressions cover cross-checkout duplicates and coverage boundaries. These are
+not live-band acceptance. Independent review/exact-head hosted CI pending; roadmap
+completion remains conductor-owned.
