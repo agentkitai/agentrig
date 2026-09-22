@@ -56,6 +56,18 @@ R18b complete — PR #481: prior code reviews resolved; operator-sanctioned fina
 
 Current roadmap row: R18b — done (PR #481), pending landing. R18a landed; next: (R18c ∥ R18d) → R18e under ROADMAP §5.
 
+## R18b resume residuals — implemented, independent review pending
+
+Closes #482–#486 in one scoped follow-up: PLAN §2.6 documents unpriced `maxUsd`
+crash-accounting limits; `sessions resume` uses recorded-history help and the same
+optional continuation semantics as `run --resume`. Interrupted results precede text
+in the unified conversation; snapshot-only resumes recover durable results before
+uncertainty placeholders. Stored post-tool bounded displays are replayed as complete
+bodies, retaining truncation markers instead of duplicating raw output. Recorded-session
+fixtures cover modern and legacy histories and all three provider projections.
+Fail-first, named mutation, and full declared-check receipts accompany the PR.
+ROADMAP's existing R18b completion marker is retained; no workflow/skill changes.
+
 ## R18b — conductor resume in place (implementation complete)
 
 Headless `run --resume` no longer requires a replacement task. Same-session replay
