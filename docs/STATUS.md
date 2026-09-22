@@ -7613,6 +7613,8 @@ are rejected. D3 and other deferred review items remain outside this repair.
 
 ### R18c train residuals (#479, #493, #495, #497, #498)
 
+PR #501 completes #479(b), the current R18c train-residual task’s isolated default-5000ms timeout retry. Closing #479 consolidates its remaining requested work into #502: #479(a), serialization of local declared-check work or bounded higher budgets declared in checks, and #479(c), explicit budgets for affected spawn-heavy tests. Those asks are neither implemented here nor withdrawn or reclassified as optional. This supersedes the R18e-era leave-#479-open tracking disposition, not its remaining acceptance. No general timeout-budget, conductor-scheduling, or verification-gate change is claimed.
+
 Builder follow-up: between-row checks recognize complete Vitest-only 5000ms timeout
 reports and retry only affected files, sequentially once; mixed failures and failed
 isolated retries halt. Recovery skips invalid active basenames and status lists
