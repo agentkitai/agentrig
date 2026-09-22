@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { buildProgram } from "../src/program.js";
+import { cliEnv } from "./cli-env.js";
 import { defaultSystemPrompt } from "../src/run.js";
 import * as providers from "../src/provider.js";
 
@@ -29,7 +30,7 @@ async function fixture(declared = true) {
 it.each(["default", "constructor", "toString"])("run refuses undeclared builder %s before provider construction", async entry => {
   const { cwd, home } = await fixture(false);
   const construct = vi.spyOn(providers, "buildProviders").mockImplementation(() => { throw Error("PROVIDER_CANARY"); });
-  await buildProgram({ config: { cwd, home } }).parseAsync(["run", "task", "--trust", "--builder-provider", entry], { from: "user" });
+  await buildProgram({ config: { cwd, home, env: cliEnv() } }).parseAsync(["run", "task", "--trust", "--builder-provider", entry], { from: "user" });
   expect(process.exitCode).toBe(1);
   expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain(`unknown builder provider entry "${entry}"`);
   expect(construct).not.toHaveBeenCalled();
@@ -48,7 +49,7 @@ it.each([undefined, "CUSTOM SYSTEM: keep exactly this base"])("real request appe
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   try {
     const address = server.address(); if (!address || typeof address === "string") throw Error("fixture address");
-    await buildProgram({ config: { cwd, home } }).parseAsync(["run", "task", "--trust", "--headless", "--json",
+    await buildProgram({ config: { cwd, home, env: cliEnv() } }).parseAsync(["run", "task", "--trust", "--headless", "--json",
       "--provider", "openai", "--model", "conductor-model", "--base-url", `http://127.0.0.1:${address.port}/v1`,
       "--max-turns", "1", "--builder-provider", "sol", ...(system === undefined ? [] : ["--system", system])], { from: "user" });
     expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(0);

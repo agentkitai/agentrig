@@ -43,6 +43,11 @@ git-ai, which can write `refs/notes/ai` in fixture repositories and race teardow
 It does not disable `trace2.normalTarget` or `trace2.perfTarget`.
 This is separate from fixture ancestry and does not change the preflight check.
 
+CLI fixtures must not inherit operator profile or tool-home selection. Both spawned CLI
+processes and in-process fixtures that call `buildProgram().parseAsync()` pass `cliEnv()`
+through their environment/config boundary; intentional profile-resolution tests continue to
+provide explicit profile environments instead.
+
 ## Suite-wide project-store guard
 
 `test/setup-no-ci.ts` takes read-only recursive inventories before and after every test

@@ -8,6 +8,7 @@ import { SessionStore } from "@agentkitai/agentrig-core";
 import { extensionFixture } from "../../core/test/fixtures/extensions.js";
 import { ScheduleStore } from "../src/schedule.js";
 import { buildProgram } from "../src/program.js";
+import { cliEnv } from "./cli-env.js";
 import { buildAgent } from "../src/agent-builder.js";
 import { renderEvent } from "../src/render.js";
 
@@ -59,7 +60,7 @@ it("bounds literal checklist bytes and turns, rejects aliases and keeps failed c
 
 it("preview ignores invalid project config; execute validates configured turns before claiming", async () => {
   const f = await fixture(); const run = vi.fn(async () => {});
-  const deps = { config: { cwd: f.project, home: f.home }, run, scheduleNow: () => now };
+  const deps = { config: { cwd: f.project, home: f.home, env: cliEnv() }, run, scheduleNow: () => now };
   vi.spyOn(console, "log").mockImplementation(() => {});
   await writeFile(join(f.project, ".agentrig/config.json"), "NOT CONFIG");
   await buildProgram(deps).parseAsync(["schedule", "tick"], { from: "user" });
@@ -95,7 +96,7 @@ it.each([false, true])("actual empty CLI heartbeat has one request, no tools or 
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   try {
     const address = server.address(); if (!address || typeof address === "string") throw new Error("fixture address");
-    await buildProgram({ config: { cwd: f.project, home: f.home }, scheduleNow: () => now }).parseAsync([
+    await buildProgram({ config: { cwd: f.project, home: f.home, env: cliEnv() }, scheduleNow: () => now }).parseAsync([
       "schedule", "tick", "--execute", "--trust", "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
     ], { from: "user" });
     expect(bodies).toHaveLength(1); expect(bodies[0]?.tools ?? []).toEqual([]);
@@ -121,7 +122,7 @@ it("actual builder empties the registry and suppresses injected host hooks, not 
   const f = await fixture(); const hook = vi.fn(async () => ({ action: "continue" as const }));
   vi.stubEnv("OPENAI_API_KEY", "fixture-not-a-credential");
   let built: Awaited<ReturnType<typeof buildAgent>> | undefined;
-  await buildProgram({ config: { cwd: f.project, home: f.home }, scheduleNow: () => now,
+  await buildProgram({ config: { cwd: f.project, home: f.home, env: cliEnv() }, scheduleNow: () => now,
     run: async (task, opts) => {
       built = await buildAgent(opts, { extraHooks: [{ id: "canary", point: "pre_model", handler: hook }] });
       built.provider.stream = async function* () { yield { type: "text_delta", text: "done" }; yield { type: "stop", reason: "end_turn" }; };
@@ -137,7 +138,7 @@ it("nonempty heartbeat uses the configured budget without treating checklist pro
   vi.stubEnv("OPENAI_API_KEY", "fixture-not-a-credential");
   vi.spyOn(console, "error").mockImplementation(() => {});
   let requests = 0;
-  await buildProgram({ config: { cwd: f.project, home: f.home }, scheduleNow: () => now,
+  await buildProgram({ config: { cwd: f.project, home: f.home, env: cliEnv() }, scheduleNow: () => now,
     run: async (task, opts) => {
       expect(opts.maxTurns).toBe("2"); expect(opts.heartbeat).toBe("checklist");
       const built = await buildAgent(opts);

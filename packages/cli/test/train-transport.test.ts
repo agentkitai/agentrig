@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it, vi } from "vitest";
 import { trainCommand, RulePolicy } from "@agentkitai/agentrig-core";
+import { cliEnv } from "./cli-env.js";
 
 it("actual headless run reports validated final PR to host outside checkout with all child writes denied", async () => {
   const root = await mkdtemp(join(tmpdir(), "train-transport-"));
@@ -27,7 +28,7 @@ it("actual headless run reports validated final PR to host outside checkout with
   try {
     for (const key of ["HOME", "USERPROFILE", "XDG_CONFIG_HOME"]) vi.stubEnv(key, home);
     vi.stubEnv("OPENAI_API_KEY", "fixture-key");
-    const result = await trainCommand({ executable: process.execPath, argv: [
+    const result = await trainCommand({ env: cliEnv(), executable: process.execPath, argv: [
       fileURLToPath(new URL("../dist/index.js", import.meta.url)), "run", "--headless", "--json", "--output-schema", schema,
       "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
       "--root", join(root, "sessions"), "--memory", join(root, "memory"), "--deny", "write",

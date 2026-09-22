@@ -7,6 +7,7 @@ import { reportEvidence } from "@agentkitai/agentrig-supervisor";
 import { showSessionEvidence } from "../src/sessions.js";
 import { buildProgram } from "../src/program.js";
 import * as config from "../src/config.js";
+import { cliEnv } from "./cli-env.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -28,7 +29,7 @@ it("actual sessions show --evidence shares the fold, is read-only, and needs no 
   const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network forbidden"));
   const configuration = vi.spyOn(config, "loadRunConfig").mockImplementation(() => { throw new Error("config access forbidden"); });
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
-  await buildProgram().parseAsync(["sessions", "show", "--evidence", "s", "--root", root], { from: "user" });
+  await buildProgram({ config: { env: cliEnv() } }).parseAsync(["sessions", "show", "--evidence", "s", "--root", root], { from: "user" });
   expect(output).toHaveBeenCalledWith(reportEvidence(await store.readAll("s")).text);
   const text = String(output.mock.calls[0]![0]);
   expect(text).toContain("latest exit mismatch"); expect(text).toContain("call#2 → result#3");
@@ -40,7 +41,7 @@ it("actual sessions show --evidence shares the fold, is read-only, and needs no 
 it("unfinished, corrupt and conflicting views refuse instead of reporting completion", async () => {
   const { store, root } = await fixture(false);
   await expect(showSessionEvidence(store, "s")).rejects.toThrow(/finished/);
-  await expect(buildProgram().parseAsync(["sessions", "show", "s", "--evidence", "--json", "--root", root], { from: "user" })).rejects.toThrow(/mutually exclusive/);
+  await expect(buildProgram({ config: { env: cliEnv() } }).parseAsync(["sessions", "show", "s", "--evidence", "--json", "--root", root], { from: "user" })).rejects.toThrow(/mutually exclusive/);
   await writeFile(store.pathFor("s"), "{broken}");
   await expect(showSessionEvidence(store, "s")).rejects.toThrow();
 });

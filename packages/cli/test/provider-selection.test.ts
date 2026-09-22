@@ -12,6 +12,7 @@ import { ProviderEntrySchema } from "../src/config.js";
 import { renderChatEvent, renderEvent } from "../src/render.js";
 import { mountNotifications } from "../src/tui/notifications.js";
 import { statusLine } from "../src/tui/status.js";
+import { cliEnv } from "./cli-env.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); process.exitCode = 0;
@@ -28,7 +29,7 @@ async function fixture(extra: string[] = []) {
   vi.spyOn(process, "cwd").mockReturnValue(cwd); vi.stubEnv("OPENAI_API_KEY", "private-test-key"); vi.stubEnv("ANTHROPIC_API_KEY", "private-other-key");
   vi.stubEnv("LORE_API_URL", ""); vi.stubEnv("LORE_API_KEY", "");
   let built!: BuiltAgent;
-  await buildProgram({ config: { cwd, home }, run: async (_task, opts) => { built = await buildAgent(opts,
+  await buildProgram({ config: { cwd, home, env: cliEnv() }, run: async (_task, opts) => { built = await buildAgent(opts,
     opts.outputSchema === undefined ? {} : { outputContract: await readOutputContract(join(cwd, opts.outputSchema), opts.outputMode ?? "prompted") }); } }).parseAsync([
     "run", "unused", "--trust", "--provider", "openai", "--model", "first-model", "--max-tokens-per-turn", "10", ...extra,
   ], { from: "user" });
@@ -36,6 +37,19 @@ async function fixture(extra: string[] = []) {
   return { cwd, logs, built, controller };
 }
 function response(content = "done") { return new Response(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 10 } })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } }); }
+
+it("in-process CLI fixture ignores unavailable inherited child profile and isolated tool homes", async () => {
+  vi.stubEnv("AGENTRIG_CHILD_PROFILE", "__agentrig_unavailable_in_process_fixture__");
+  vi.stubEnv("CODEX_HOME", "/operator/codex");
+  vi.stubEnv("CLAUDE_CONFIG_DIR", "/operator/claude");
+  const isolated = cliEnv();
+  expect(isolated).not.toHaveProperty("AGENTRIG_CHILD_PROFILE");
+  expect(isolated).not.toHaveProperty("CODEX_HOME");
+  expect(isolated).not.toHaveProperty("CLAUDE_CONFIG_DIR");
+  const f = await fixture();
+  expect(f.built.provider.model).toBe("first-model");
+  await f.controller.shutdown();
+});
 
 it("configured CLI switches reach actual next requests, preserve history and leave role providers unchanged", async () => {
   const requests: any[] = []; vi.stubGlobal("fetch", vi.fn(async (_url, init) => { requests.push(JSON.parse(init.body)); return response(); }));

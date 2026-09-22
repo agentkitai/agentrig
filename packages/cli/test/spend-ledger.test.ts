@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionStore, SpendLedger, createAgent, meterProvider, RulePolicy, readFileTool, sessionSpendSource } from "@agentkitai/agentrig-core";
 import { buildProgram } from "../src/program.js";
+import { cliEnv } from "./cli-env.js";
 import { renderChatEvent, renderEvent } from "../src/render.js";
 import { costLines } from "../src/usage.js";
 import { buildAgent } from "../src/agent-builder.js";
@@ -37,9 +38,9 @@ it("actual canonical-provider CLI caps the second session before fetch; offline 
   vi.stubGlobal("fetch", fetch);
   const args = ["run", "PRIVATE TASK", "--trust", "--provider", "openai", "--model", "fixture", "--daily-cap", "0.000020",
     "--price-in", "1", "--price-out", "1", "--max-tokens-per-turn", "10"];
-  await buildProgram({ config: { cwd: f.cwd, home: f.home } }).parseAsync(args, { from: "user" });
+  await buildProgram({ config: { cwd: f.cwd, home: f.home, env: cliEnv() } }).parseAsync(args, { from: "user" });
   expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(0);
-  await buildProgram({ config: { cwd: f.cwd, home: f.home } }).parseAsync(args, { from: "user" });
+  await buildProgram({ config: { cwd: f.cwd, home: f.home, env: cliEnv() } }).parseAsync(args, { from: "user" });
   expect(process.exitCode).toBe(1); expect(fetch).toHaveBeenCalledTimes(1);
   expect(requests[0].max_completion_tokens).toBe(10);
   const store = new SessionStore({ root: f.logs }); const events = (await Promise.all((await store.list()).map(s => store.readAll(s.id)))).flat();
@@ -48,7 +49,7 @@ it("actual canonical-provider CLI caps the second session before fetch; offline 
   const raw = await readFile(join(f.cwd, ".agentrig/usage.jsonl"), "utf8"); expect(raw).not.toContain("PRIVATE TASK"); expect(raw).not.toContain("private-fixture-key");
   const cost = await costLines(new SpendLedger(f.cwd)); expect(cost.join("\n")).toContain("$0.000020");
   process.exitCode = 0;
-  await buildProgram().parseAsync(["usage", "--since", "2000-01-01", "--json"], { from: "user" });
+  await buildProgram({ config: { env: cliEnv() } }).parseAsync(["usage", "--since", "2000-01-01", "--json"], { from: "user" });
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(JSON.parse(String(vi.mocked(console.log).mock.calls.at(-1)?.[0]))).toMatchObject({ estimatedMicros: 20, calls: 1 });
 });
@@ -57,7 +58,7 @@ it.each(["openai-chatgpt", "custom-endpoint"])("capped %s refuses before network
   const f = await fixture(); const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
   const args = ["run", "test", "--trust", "--provider", mode === "openai-chatgpt" ? mode : "openai", "--model", "fixture",
     "--daily-cap", "1", "--price-in", "1", "--price-out", "1", ...(mode === "custom-endpoint" ? ["--base-url", "http://127.0.0.1:9999/v1"] : [])];
-  await buildProgram({ config: { cwd: f.cwd, home: f.home } }).parseAsync(args, { from: "user" });
+  await buildProgram({ config: { cwd: f.cwd, home: f.home, env: cliEnv() } }).parseAsync(args, { from: "user" });
   expect(process.exitCode).toBe(1); expect(fetch).not.toHaveBeenCalled();
   expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("configured output envelope");
 });
@@ -68,7 +69,7 @@ it("CLI injected-provider uncapped behavior survives with unknown coverage; a ca
     async *stream() { calls++; yield { type: "stop" as const, reason: "end_turn" as const }; } };
   vi.spyOn(providers, "buildProviders").mockImplementation(() => ({ main: provider, subagents: provider, memory: provider, supervisor: provider,
     names: ["fixture"], roleNames: { main: "fixture", subagents: "fixture", memory: "fixture", supervisor: "fixture" }, get: () => provider }));
-  const build = async (flags: string[]) => buildProgram({ config: { cwd: f.cwd, home: f.home }, run: async (task, opts) => {
+  const build = async (flags: string[]) => buildProgram({ config: { cwd: f.cwd, home: f.home, env: cliEnv() }, run: async (task, opts) => {
     const built = await buildAgent(opts); await built.agent.run(task, { cwd: f.cwd }).done;
   } }).parseAsync(["run", "fixture", "--trust", ...flags], { from: "user" });
   await build([]); expect(calls).toBe(1);
@@ -87,7 +88,7 @@ it.each(["config", "flag"])("actual scheduler consumes one allowance then refuse
   vi.stubGlobal("fetch", fetch);
   const schedules = new ScheduleStore(f.cwd);
   for (const id of ["first", "second"]) await schedules.add({ id, cron: "* * * * *", task: "advisory test", flags: { maxTurns: 1 } });
-  await buildProgram({ config: { cwd: f.cwd, home: f.home } }).parseAsync(["schedule", "tick", "--execute", "--trust",
+  await buildProgram({ config: { cwd: f.cwd, home: f.home, env: cliEnv() } }).parseAsync(["schedule", "tick", "--execute", "--trust",
     ...(source === "flag" ? ["--daily-cap", "0.000020"] : [])], { from: "user" });
   expect(fetch).toHaveBeenCalledTimes(1); expect(process.exitCode).toBe(1);
   const receipts = (await readFile(join(f.cwd, ".agentrig/schedule.log"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
@@ -124,7 +125,7 @@ it("actual Web ACP uses the shared capped adapter: first prompt settles, second 
   vi.stubGlobal("fetch", fetch);
   let ready!: (server: Awaited<ReturnType<typeof serveWeb>>) => void;
   const started = new Promise<Awaited<ReturnType<typeof serveWeb>>>(resolve => { ready = resolve; });
-  const running = buildProgram({ config: { cwd: f.cwd, home: f.home }, web: { ready } }).parseAsync([
+  const running = buildProgram({ config: { cwd: f.cwd, home: f.home, env: cliEnv() }, web: { ready } }).parseAsync([
     "web", "--trust", "--provider", "openai", "--model", "fixture", "--daily-cap", "0.000020",
     "--price-in", "1", "--price-out", "1", "--max-tokens-per-turn", "10",
   ], { from: "user" });
@@ -166,7 +167,7 @@ it.each([100, 2000])("actual ACP reviewer retains session accounting and cap eve
   }));
   let ready!: (s: Awaited<ReturnType<typeof serveWeb>>) => void;
   const started = new Promise<Awaited<ReturnType<typeof serveWeb>>>(resolve => { ready = resolve; });
-  const running = buildProgram({ config: { cwd: f.cwd, home: f.home }, web: { ready } }).parseAsync([
+  const running = buildProgram({ config: { cwd: f.cwd, home: f.home, env: cliEnv() }, web: { ready } }).parseAsync([
     "web", "--trust", "--provider", "openai", "--model", "fixture", "--daily-cap", String(cap / 1_000_000),
     "--price-in", "1", "--price-out", "1", "--max-tokens-per-turn", "10", "--supervisor-review",
   ], { from: "user" });
@@ -196,7 +197,7 @@ it.each([20, 40])("native output validates the real adapter before metering and 
     const content = requests.length === 1 ? "invalid" : '{"ok":true}';
     return new Response(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 10 } })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } });
   }); vi.stubGlobal("fetch", fetch);
-  await buildProgram({ config: { cwd: f.cwd, home: f.home } }).parseAsync(["run", "produce object", "--trust", "--provider", "openai", "--model", "fixture",
+  await buildProgram({ config: { cwd: f.cwd, home: f.home, env: cliEnv() } }).parseAsync(["run", "produce object", "--trust", "--provider", "openai", "--model", "fixture",
     "--daily-cap", String(cap / 1_000_000), "--price-in", "1", "--price-out", "1", "--max-tokens-per-turn", "10", "--max-turns", "2",
     "--output-schema", join(f.cwd, "schema.json"), "--output-mode", "native"], { from: "user" });
   expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(cap === 40 ? 0 : 1);

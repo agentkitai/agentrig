@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { errorBurstDetector, initialState, reduce } from "@agentkitai/agentrig-supervisor";
 import { buildProgram } from "../src/program.js";
+import { cliEnv } from "./cli-env.js";
 import { renderChatEvent, renderEvent } from "../src/render.js";
 import { redactExportMessages } from "../src/session-export.js";
 import { heartbeatBuildOptions } from "../src/agent-builder.js";
@@ -39,7 +40,7 @@ it("actual configured CLI/adapter edit returns tsc diagnostics, logs/render/expo
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   try {
     const address = server.address(); if (!address || typeof address === "string") throw new Error("fixture address");
-    await buildProgram({ config: { cwd, home } }).parseAsync(["run", "edit the file", "--trust", "--provider", "openai", "--model", "fixture",
+    await buildProgram({ config: { cwd, home, env: cliEnv() } }).parseAsync(["run", "edit the file", "--trust", "--provider", "openai", "--model", "fixture",
       "--base-url", `http://127.0.0.1:${address.port}/v1`, "--allow", "write", "--allow", "exec:anywhere", "--max-turns", "3"], { from: "user" });
     expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(0);
     expect(requests).toHaveLength(2);

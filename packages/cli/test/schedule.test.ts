@@ -8,6 +8,7 @@ import { z } from "zod";
 import { createAgent, RulePolicy, SessionStore, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 import { cronDue, ScheduleStore } from "../src/schedule.js";
 import { buildProgram } from "../src/program.js";
+import { cliEnv } from "./cli-env.js";
 import { renderEvent } from "../src/render.js";
 
 const roots: string[] = [];
@@ -119,7 +120,7 @@ it("bounds malformed/oversized table reads", async () => {
 
 it("actual CLI stays offline by default and requires trusted explicit execution with literal bounded flags", async () => {
   const f = await fixture(); const run = vi.fn(async () => {});
-  const deps = { run, config: { cwd: f.project, home: f.home }, scheduleNow: () => now };
+  const deps = { run, config: { cwd: f.project, home: f.home, env: cliEnv() }, scheduleNow: () => now };
   vi.spyOn(console, "log").mockImplementation(() => {}); vi.spyOn(console, "error").mockImplementation(() => {});
   await buildProgram(deps).parseAsync(["schedule", "add", "one", "30 12 * * *", entry("one").task], { from: "user" });
   await writeFile(join(f.project, ".agentrig", "config.json"), "INVALID CONFIG MUST NOT BE READ BY PREVIEW");
@@ -190,7 +191,7 @@ it.each([false, true])("real CLI runCommand/local adapter starts due tasks and c
     if (budgetFirst) await f.store.add(entry("second"));
     await writeFile(join(f.project, ".agentrig", "config.json"), JSON.stringify({ repoMap: false, skillDiscovery: false, extensionDiscovery: false, packages: false, maxTokensPerTurn: "1234" }));
     vi.spyOn(console, "log").mockImplementation(() => {}); vi.spyOn(console, "error").mockImplementation(() => {});
-    await buildProgram({ config: { cwd: f.project, home: f.home }, scheduleNow: () => now }).parseAsync([
+    await buildProgram({ config: { cwd: f.project, home: f.home, env: cliEnv() }, scheduleNow: () => now }).parseAsync([
       "schedule", "tick", "--execute", "--trust", "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
     ], { from: "user" });
     expect(bodies).toHaveLength(budgetFirst ? 2 : 1);
@@ -209,7 +210,7 @@ it("reports and retains an ordinary launch failure but still attempts later due 
   vi.spyOn(console, "log").mockImplementation(() => {});
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   const run = vi.fn().mockRejectedValueOnce(new Error("fixture failure")).mockResolvedValueOnce(undefined);
-  await buildProgram({ run, config: { cwd: f.project, home: f.home }, scheduleNow: () => now }).parseAsync(["schedule", "tick", "--execute", "--trust"], { from: "user" });
+  await buildProgram({ run, config: { cwd: f.project, home: f.home, env: cliEnv() }, scheduleNow: () => now }).parseAsync(["schedule", "tick", "--execute", "--trust"], { from: "user" });
   expect(run).toHaveBeenCalledTimes(2); expect(process.exitCode).toBe(1);
   expect((await f.store.read()).entries.every(item => item.lastClaimedMinute !== undefined)).toBe(true);
   const reports = errors.mock.calls.map(call => String(call[0]));
