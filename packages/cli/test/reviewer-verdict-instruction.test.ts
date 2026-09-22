@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { readSkillText } from "../../../test/skill-text.js";
 import { preservedReviews } from "./preserved-review-455.js";
 // @ts-expect-error standalone helper
-import { verdictBlock } from "../../../scripts/review-verdict.mjs";
+import { verdictBlock, parseVerdict } from "../../../scripts/review-verdict.mjs";
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const head = "a".repeat(40);
 const topic = readSkillText(join(root, ".agentrig/skills/topic/SKILL.md"));
@@ -18,6 +18,7 @@ it.each(preservedReviews.map((prose, i) => [i, prose] as const))("PR455 output %
     const prefix = join(dir, "review");
     for (const stale of [false, true]) {
       writeFileSync(`${prefix}.verdict.md`, prose + "\n" + verdictBlock({version:1, reviewedHead:stale ? "c".repeat(40) : head, slot:"Codex", assertedModel:"gpt-5.5", modelSource:"codex-launch", verdict:"PASS", findings:[]}));
+      writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ exit:0, reviewedHead:head, slot:"Codex", model:"gpt-5.5", transportModel:"gpt-5.5", assertedModel:"gpt-5.5", verdict:parseVerdict(prose + "\n" + verdictBlock({version:1, reviewedHead:stale ? "c".repeat(40) : head, slot:"Codex", assertedModel:"gpt-5.5", modelSource:"codex-launch", verdict:"PASS", findings:[]})) }));
       const script = line.replaceAll("<REPO>", root).replaceAll("<PREFIX>", prefix).replace("'HEAD'", `'${head}'`).replace("<SLOT>", "Codex").replace("<MODEL>", "gpt-5.5");
       const result = spawnSync("/bin/sh", ["-ec", script], {encoding:"utf8"});
       expect(result.status, result.stderr).toBe(stale ? 2 : 0);

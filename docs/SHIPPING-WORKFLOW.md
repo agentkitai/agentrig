@@ -241,3 +241,17 @@ An early missing marker is advisory, not a blocker while the ledger is unresolve
 must not request a repair round for that scheduled finalization. Cover the final docs-only
 delta under the normal delta policy and re-verify exact-head CI. The land gate is unchanged:
 the done marker must be present on the head being landed; land never adds it itself.
+
+### Transport-proven family assertions (R18d / #500)
+
+The configured minor pin remains exact: adapters first require their own transport provenance
+to equal it. Only a numeric GPT major-family assertion (`gpt-5` for `gpt-5.5`) may differ,
+and only with that independent exact-pin proof. Different families, different minors, and
+family assertions without transport proof fail closed. Verdict JSON cannot supply transport proof.
+Adapter receipts retain `assertedModel` and `transportModel` separately; `model` and the canonical
+heading retain the transport-proven pin. Prompts state the pin and transport source, asking reviewers
+to assert the pin unless their own identity contradicts its family, without pretending to observe
+the transport. Pass the trusted adapter receipt as the optional final `--validate` argument and as
+`post-review-comment.mjs --provenance PATH` (after `--config PATH`); both bind receipt to head, slot,
+pin and verdict, and posting also binds the configured adapter. Never substitute reviewer-authored
+JSON for the adapter receipt. Exact assertions retain the legacy no-receipt validation path.

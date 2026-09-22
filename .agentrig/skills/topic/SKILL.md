@@ -285,7 +285,8 @@ For each recorded row, in order:
    - **Validate and post.** Re-fetch PR HEAD with `gh pr view NN --json headRefOid`. If it changed, do not call the new head reviewed; stale output is not a current-head
      review: retain its historical provenance and cover the delta or restart as required by §3.
      Validate the delimited JSON against the base zod schema and expected full reviewedHead,
-     assertedModel and slot. Reject malformed, duplicate, missing or stale structured verdicts;
+     assertedModel and slot. A GPT major-family assertion is accepted only with the adapter-owned
+     exact-pin transportModel receipt (never reviewer-authored evidence); retain both strings. Reject malformed, duplicate, missing or stale structured verdicts;
      never fall back when a machine block is present but invalid. No first-line head gate,
      echo denylist or prose SHA-claim validator remains. Prose quotations and range expressions
      are evidence, not authority. Only legacy artifacts with no block use the narrow logged
@@ -304,11 +305,11 @@ For each recorded row, in order:
      # Extract with the slot's configured adapter id (including api:<name>).
      node <REPO>/scripts/review-finding-index.mjs --extract '<ADAPTER>' '<PREFIX>.md' '<PREFIX>.verdict.md' || exit 2
      # Slot posting gate
-     node <REPO>/scripts/review-finding-index.mjs --validate '<PREFIX>.verdict.md' 'HEAD' '<SLOT>' '<MODEL>' > '<PREFIX>.validated.json' || exit 2
+     node <REPO>/scripts/review-finding-index.mjs --validate '<PREFIX>.verdict.md' 'HEAD' '<SLOT>' '<MODEL>' '<PREFIX>.provenance.json' > '<PREFIX>.validated.json' || exit 2
      [ -s "<OUT>/checks.md" ] || exit 2
      [ -s "<PREFIX>.provenance.json" ] || exit 2
      cat "<OUT>/checks.md" "<PREFIX>.provenance.json" > "<PREFIX>.proof.md" || exit 2
-     node <REPO>/scripts/post-review-comment.mjs NN '<SLOT>' '<PREFIX>.model.txt' '<PREFIX>.verdict.md' "HEAD" "MAIN" '<PREFIX>.comment.md' '<PREFIX>.proof.md' --config '<WT>/.agentrig/config.json' || exit 2
+     node <REPO>/scripts/post-review-comment.mjs NN '<SLOT>' '<PREFIX>.model.txt' '<PREFIX>.verdict.md' "HEAD" "MAIN" '<PREFIX>.comment.md' '<PREFIX>.proof.md' --config '<WT>/.agentrig/config.json' --provenance '<PREFIX>.provenance.json' || exit 2
      ```
      Persist the complete verdict, adapter provenance and check receipts in linked PR comments.
      Large payloads use the helper's canonical bounded chunks and durable posting receipt; never

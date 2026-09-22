@@ -56,11 +56,11 @@ the slot's pinned model; it duplicates no endpoints, credentials or routing. See
 
 Each declared slot's initial comment must start with:
 `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the slot name, asserted model, full reviewed PR head SHA and full origin/main SHA.
+Substitute the slot name, transport-proven pinned model, full reviewed PR head SHA and full origin/main SHA.
 The initial heading model must equal the slot's pinned model. A different model makes this a
 missing required initial review, not a receipt. Require the complete heading, not just a prefix
 or SHA in the body. Post with `scripts/post-review-comment.mjs` using the slot name and the
-reviewed config path; never compose an alternate heading inline. Persist per-adapter provenance
+reviewed config path and `--provenance <PREFIX>.provenance.json`; never compose an alternate heading inline. Persist per-adapter provenance
 (launch/provider entry, model assertion source, start/end, exit, head/main and worktree) with the verdict.
 Never infer the asserted model from reviewer prose. Truncation, failed runs, ambiguous assertion,
 empty output or pin mismatch are not completed reviews. Retry once with fresh artifacts, then halt.
@@ -75,7 +75,10 @@ builder → declared checks → exact-head CI → land, subject to authorization
 With zero slots use the author’s named check receipts; no conductor-review preparation is required.
 With one slot launch only it; that same slot is the focused-delta reviewer. With two slots launch
 both independently and use one independent focused-delta reviewer for material repairs.
-Land requires only declared headings, and compares each asserted model against that slot's pin.
+Land requires only declared headings and exact adapter transport pins. A supported numeric major-family
+assertion for a configured minor pin is accepted only with adapter-owned exact-pin
+transport provenance; a different family or minor remains fatal. Preserve assertedModel
+and transportModel separately in the receipt; never relabel the reviewer's assertion.
 Reviewers share no context with the builder and should differ by vendor or at least model.
 The independent conductor's same-head declared checks must be GREEN BEFORE launching any reviewer;
 pass named receipts as inputs, never builder reasoning. For empty steps pass the explicit none receipt.

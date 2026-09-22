@@ -1,5 +1,10 @@
 # Status
 
+R18d #500 builder follow-up: model-family assertions now require independent exact-pin adapter
+transport provenance; receipts preserve both assertion and transport strings. Targeted fail-first
+and negative-family/absent-transport coverage added. Review/landing pending; ROADMAP completion
+remains conductor-owned.
+
 ## R18d review-tooling residuals (#490, #491, #492; PR #499)
 
 Standalone, non-example verdict delimiter scanning is shared by parsing, indexing
