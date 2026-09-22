@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { z } from "zod";
-import { createAgent, RulePolicy, SessionStore, toAnthropicRequest, toOpenAIRequest, toResponsesInput, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
+import { createAgent, RulePolicy, SessionStore, toAnthropicRequest, toOpenAIRequest, toResponsesInput, type Message, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 
 let root: string;
 afterEach(async () => { if (root) await rm(root, { recursive: true, force: true }); });
@@ -236,4 +236,51 @@ it("bounds historical unprojected crash output without losing error status", asy
   expect(result).toMatchObject({ isError: true });
   expect(String(result?.content)).toHaveLength(30_000);
   expect(String(result?.content)).toMatch(/\n… \[truncated \d+ UTF-16 code units\]$/);
+});
+
+it.each([1, 2])("recovers legacy results across %s intervening steering messages before continuation", async count => {
+  root = await mkdtemp(join(tmpdir(), "resume-legacy-steer-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  const assistant: Message = { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "write", input: {} }] };
+  const continuation: Message = { role: "user", content: [{ type: "text", text: "continue review" }] };
+  await store.append(id, { type: "session.start", task: "review", cwd: root, provider: "fake", model: "fake" });
+  await store.append(id, { type: "tool.call", id: "t1", name: "write", input: {}, inputHash: "hash" });
+  for (let i = 0; i < count; i++) await store.append(id, { type: "steer", source: "user", message: `steer ${i}` });
+  await store.append(id, { type: "tool.result", id: "t1", ok: true, display: "durable result", durationMs: 1 });
+  await store.writeSnapshot({ sessionId: id, task: "review", cwd: root, turns: 0, ts: 0, messages: [assistant, continuation], usage: { input: 0, output: 0 } });
+  const before = await store.readAll(id);
+  const recovered = await store.resumeSnapshot(id);
+  expect(recovered!.messages[0]).toEqual(assistant);
+  expect(recovered!.messages[1]!.content).toEqual([
+    { type: "tool_result", toolUseId: "t1", content: "durable result" },
+    ...continuation.content,
+  ]);
+  expect(await store.readAll(id)).toEqual(before);
+});
+
+it("does not recover a legacy result across the next assistant occurrence with the same tool ID", async () => {
+  root = await mkdtemp(join(tmpdir(), "resume-legacy-boundary-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  const assistant: Message = { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "write", input: {} }] };
+  const continuation: Message = { role: "user", content: [{ type: "text", text: "continue review" }] };
+  await store.append(id, { type: "session.start", task: "review", cwd: root, provider: "fake", model: "fake" });
+  await store.append(id, { type: "tool.call", id: "t1", name: "write", input: {}, inputHash: "hash" });
+  await store.append(id, { type: "steer", source: "user", message: "first call interrupted" });
+  await store.append(id, { type: "tool.call", id: "t1", name: "write", input: {}, inputHash: "hash" });
+  await store.append(id, { type: "steer", source: "user", message: "second call ongoing" });
+  await store.append(id, { type: "tool.result", id: "t1", ok: true, display: "second occurrence only", durationMs: 1 });
+  await store.writeSnapshot({ sessionId: id, task: "review", cwd: root, turns: 0, ts: 0, messages: [assistant, continuation, assistant, continuation], usage: { input: 0, output: 0 } });
+  const before = await store.readAll(id);
+  const recovered = await store.resumeSnapshot(id);
+  expect(recovered!.messages[1]!.content).toEqual([
+    expect.objectContaining({ type: "tool_result", toolUseId: "t1", isError: true, content: expect.stringContaining("interrupted") }),
+    ...continuation.content,
+  ]);
+  expect(recovered!.messages[3]!.content).toEqual([
+    { type: "tool_result", toolUseId: "t1", content: "second occurrence only" },
+    ...continuation.content,
+  ]);
+  expect(await store.readAll(id)).toEqual(before);
 });

@@ -787,10 +787,15 @@ function legacyToolResults(messages: Message[], events: readonly HarnessEvent[])
   for (let i = 0; i < logged.length; i++) {
     const message = logged[i]!;
     if (message.role !== "assistant") continue;
-    const next = logged[i + 1];
+    // Steering/advisory messages can separate a durable result from its call.
+    // Never borrow a later assistant occurrence's result, even if IDs are reused.
+    const results: RecoveredResult[] = [];
+    for (let j = i + 1; j < logged.length && logged[j]!.role !== "assistant"; j++) {
+      if (logged[j]!.role === "user") results.push(...logged[j]!.content.filter((b): b is RecoveredResult => b.type === "tool_result"));
+    }
     for (const call of message.content) {
       if (call.type !== "tool_use") continue;
-      const result = next?.role === "user" ? next.content.find((b): b is RecoveredResult => b.type === "tool_result" && b.toolUseId === call.id) : undefined;
+      const result = results.find(b => b.toolUseId === call.id);
       const entries = occurrences.get(call.id) ?? [];
       entries.push({ call, ...(result === undefined ? {} : { result }) });
       occurrences.set(call.id, entries);
