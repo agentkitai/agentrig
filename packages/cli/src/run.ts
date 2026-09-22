@@ -75,6 +75,7 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   /** Show the raw event trace instead of the conversation. `--json` is unaffected. */
   verbose?: boolean;
   headless?: boolean;
+  builderProvider?: string;
   resume?: string;
   /** Named config profile to overlay; may arrive from the subcommand flag or the root-level one. */
   profile?: string;
@@ -453,6 +454,9 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
     if (opts.outputMode === "native") {
       const resolved = resolveProviderEntries(opts);
       if (resolved.entries[resolved.roleNames.main]?.provider !== "openai") throw new Error("Native output currently requires the OpenAI-compatible adapter; use prompted mode for other adapters");
+    }
+    if (opts.builderProvider !== undefined) {
+      if (!Object.hasOwn(opts.providers ?? {}, opts.builderProvider)) throw new Error(`unknown builder provider entry "${opts.builderProvider}"`);
     }
     const outputContract = opts.outputSchema === undefined ? undefined : await readOutputContract(opts.outputSchema, opts.outputMode ?? "prompted");
     const onQuestion = await questionPolicy(opts.answerPolicy);

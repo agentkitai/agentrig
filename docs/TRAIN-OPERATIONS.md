@@ -259,3 +259,24 @@ lock errors are command errors before execution, not evidence of a landed row.
 Reviewer adapter preflight: missing homes and invalid profiles exit 64 before launch and
 do not consume the single exit-2 retry. Fix configuration before re-dispatch. Review
 headings include transport model and JSON-quoted resolved home in the canonical suffix.
+
+### Builder provider routing (#517)
+
+A row may set top-level `"builderProvider": "sol"`, a nonempty named provider
+entry in the active profile. Unknown entries are rejected during queued-row
+validation, before checkout validation or child launch. Omit it to retain the
+profile default. The host passes `agentrig run --headless --builder-provider <entry>`;
+this is conductor routing context, not a change to the conductor's own provider.
+Ship owns the builder/fixer routing rule; reviewers, arbiters and landers are unaffected.
+
+Operator policy: doc/test/helper rows default to `sol` (set the row field explicitly);
+product-row builders/fixers default to the profile default (omit the field).
+Re-check quality and cost after ten Sol rows before continuing that routing policy.
+Include the effective builder provider in the PR child inventory and continuation handoffs.
+
+R18e `train --status` usage sessions include `builderProvider`: the effective named
+entry from the latest available session `context.manifest.providerSelection.entry`.
+This reports observed session selection, not a guess from the row override, and also
+covers nested children and non-builder sessions. It is `null` for legacy/missing
+selection evidence. Per-model usage remains authoritative for a session that switched
+models; this field is not a claim that every call used one entry. Retain session logs.

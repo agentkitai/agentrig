@@ -216,6 +216,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     return withProviderOptions(cmd)
       .option("--profile <name>", "named config profile to overlay; run commands also accept built-in recommended; other unknown names list available profiles (names only)")
       .option("--trust", "load project instructions and config for this run only")
+      .option("--builder-provider <entry>", "Named active-profile provider for ship builders/fixers only")
       .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
       .option("--json", "emit raw event JSONL to stdout")
       .option("--notification-idle-seconds <n>", "TUI input idle seconds before notifications (1–3600; default 30)", Number)

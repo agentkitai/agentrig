@@ -41,11 +41,22 @@ export function reviewerHome(slot: string, adapter: string, env: NodeJS.ProcessE
 export function assertReviewerHomes(reviewers: Record<string, ReviewerSlot> | undefined, env: NodeJS.ProcessEnv): void {
   for (const [slot, binding] of Object.entries(reviewers ?? {})) reviewerHome(slot, binding.adapter, env);
 }
-export async function trainChildEnvironment(cwd: string, profile?: string): Promise<NodeJS.ProcessEnv> {
+export async function trainChildEnvironment(cwd: string, profile?: string, builderProvider?: string): Promise<NodeJS.ProcessEnv> {
   const trust = await resolveProjectTrust(cwd, { home: homedir(), interactive: false });
   const config = trust.trusted ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json")) : undefined;
   const user = await loadChildUserConfig(cwd);
   const env = await resolveChildEnvironment({ cwd, ...(user === undefined ? {} : { user }), validateProfile: true, ...(config === undefined ? {} : { project: config }), ...(profile === undefined ? {} : { profile }) });
+  if (builderProvider !== undefined) {
+    const selectedProfile = profile ?? env.AGENTRIG_CHILD_PROFILE;
+    const activeProfile = selectedProfile === "recommended" && user?.profiles?.recommended === undefined && config?.profiles?.recommended === undefined ? undefined : selectedProfile;
+    // Match loadRunConfig: map supported environment values only, after the
+    // same user-profile childEnv overlay that the launched process receives.
+    const resolved = resolveConfig({ defaults: {}, cli: {},
+      ...(env.AGENTRIG_MODEL === undefined ? {} : { env: { model: env.AGENTRIG_MODEL } }),
+      ...(user === undefined ? {} : { user }), ...(config === undefined ? {} : { project: config }),
+      ...(activeProfile === undefined ? {} : { profile: activeProfile }) });
+    if (!Object.hasOwn(resolved.providers ?? {}, builderProvider)) throw new Error(`unknown builder provider entry "${builderProvider}" in active profile`);
+  }
   assertReviewerHomes(config?.reviewers, env);
   return env;
 }

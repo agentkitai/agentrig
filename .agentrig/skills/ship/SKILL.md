@@ -18,6 +18,15 @@ human-message quote, together with the task scope. Carry it through builder/fixe
 once a PR exists, bind it to that PR number. Follow land's authorization checks, including later
 revocation or narrowing. Do not infer authorization from YOLO or a tool allowance.
 
+## Builder routing
+
+When the run supplies a train builder provider entry (`--builder-provider <entry>`), pass that
+named entry as `subagent.provider` to every builder and fixer, including continuations, unless
+that row explicitly says otherwise. With no override, product-row builders/fixers use the
+profile default (omit `provider`). Never apply this override to reviewers, arbiters or landers.
+Record each child's effective builder provider (named entry or profile default, with session
+manifest provenance when available) in the PR child inventory; preserve it across resume.
+
 ## Resuming
 
 Use `agentrig run --resume <session>` to continue in the **same session** after a halt

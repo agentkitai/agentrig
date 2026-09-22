@@ -119,6 +119,10 @@ describe("what a child may spend", () => {
 });
 
 describe("what a child inherits", () => {
+  it("records effective provider entry for explicit and profile-default children", () => {
+    expect(wiring().childConfig({ provider: "cloud" }).providerSelection?.()).toMatchObject({ entry: "cloud", provider });
+    expect(wiring().childConfig().providerSelection?.()).toMatchObject({ entry: "local", provider: second });
+  });
   it("never a subagent tool: the depth limit is the core tool's to enforce", () => {
     const config = wiring({ childTools: () => [] }).childConfig();
     expect(config.tools.map((t) => t.name)).not.toContain("subagent");

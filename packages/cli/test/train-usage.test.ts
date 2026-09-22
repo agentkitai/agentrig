@@ -16,6 +16,7 @@ it("queue status and usage --row read two rows and nested spawn logs without mut
     }
     await store.append("parent", { type: "subagent.spawn", id: "child", task: "child" });
     await store.append("child", { type: "subagent.spawn", id: "nested", task: "nested" });
+    await store.append("child", { type: "context.manifest", turn: 1, requestHash: "fixture", blocks: [], providerSelection: { entry: "sol", provider: "openai", model: "sol" } });
     await store.append("nested", { type: "session.end", reason: "done" });
     await store.append("second", { type: "session.end", reason: "done" });
     const ledger = new SpendLedger(root);
@@ -23,6 +24,7 @@ it("queue status and usage --row read two rows and nested spawn logs without mut
       const admission = await ledger.admit({ session, segment: session, provider: "openai-chatgpt", model: "chat", reserve: null, rates: null });
       await ledger.settle(admission, { input: 2, output: 3 }, true);
     }
+    expect((await trainStatus(root)).usage?.[0]?.sessions.find(session => session.session === "child")).toHaveProperty("builderProvider", "sol");
     const before = await readFile(join(root, ".agentrig", "usage.jsonl"), "utf8");
     expect((await trainUsage(root)).map(row => row.totals.input)).toEqual([6, 2]);
     expect((await trainStatus(root)).usage?.[0]?.totals).toMatchObject({ input: 6, output: 9, estimatedMicros: null, unpricedCalls: 3 });

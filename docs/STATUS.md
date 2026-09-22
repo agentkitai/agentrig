@@ -1,5 +1,16 @@
 # Status
 
+## Complete — issue #517, builderProvider row field (PR #526)
+
+Train validates optional named builder routing before checkout, passes it to headless
+ship, and reports observed per-session provider entries in R18e usage. Ship inventories
+builder/fixer routing; product defaults and reviewer roles are unchanged. The conductor
+owns final independent review and exact-head CI gates before this completion lands.
+Repair round 1 addresses R1–R3: only declared provider entries pass row/run
+validation, routing augments the resolved default/custom system prompt, and row
+validation maps the launched profile environment rather than spreading raw keys.
+Real-request and before-checkout regressions cover these fixes.
+
 ## Pending review — issue #522, train declared-check environment
 
 Between-row checks use the pre-profile launcher environment plus tool homes and

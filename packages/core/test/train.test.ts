@@ -34,6 +34,16 @@ async function fixture(count = 1) {
   return { root, command, calls };
 }
 describe("train", () => {
+  it("builderProvider accepts named entries, refuses malformed values and reaches child argv", async () => {
+    expect(TrainRowSchema.parse({ ...row, builderProvider: "sol" })).toHaveProperty("builderProvider", "sol");
+    for (const builderProvider of ["", "  ", 7, null]) expect(TrainRowSchema.safeParse({ ...row, builderProvider }).success).toBe(false);
+    const f = await fixture();
+    await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "sol" }));
+    const childEnvironment = vi.fn(async () => ({}));
+    expect(await runTrain(f.root, { command: f.command, childEnvironment })).toBe("empty");
+    expect(childEnvironment).toHaveBeenCalledWith(row.environment.checkout, undefined, "sol");
+    expect(f.calls.find(call => call.startsWith("run --headless"))).toContain("--builder-provider sol");
+  });
   it("refuses invalid schema before running any command", async () => {
     const f = await fixture(); await writeFile(join(f.root, "queue/1.json"), "{}");
     expect(TrainRowSchema.safeParse({ ...row, environment: { ...row.environment, yolo: "yes" } }).success).toBe(false);

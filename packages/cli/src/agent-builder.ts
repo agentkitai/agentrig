@@ -145,6 +145,8 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  /** Train-internal builder-only route; additive to the resolved base system prompt. */
+  builderProvider?: string;
   /** Internal notice for mounted UIs; not a user configuration key. */
   defaultHookNotice?: string;
   tui?: TuiSettings;
@@ -464,8 +466,10 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       // current when it starts, so a later refresh cannot move the instructions under a running
       // child, and a child spawned after one is not left on the superseded bodies (issue #267).
       const skills = w.skills.current().skills;
+      const provider = choice?.provider === undefined ? w.providers.subagents : w.providers.get(choice.provider);
       return {
-        provider: choice?.provider === undefined ? w.providers.subagents : w.providers.get(choice.provider),
+        provider,
+        providerSelection: () => ({ provider, entry: choice?.provider ?? w.providers.roleNames.subagents }),
         // skills too: a subagent doing a task the project has instructions for should be able to
         // load them, and the catalogue costs one line each
         tools: [...w.childTools(), ...(skills.length > 0 ? [skillTool(skills)] : [])],
@@ -828,7 +832,8 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     sandbox,
     // a function so a resumed session gets its snapshot's cwd, not this process's
     systemPrompt: (ctx) => promptBlocks({
-      system: opts.system ?? defaultSystemPrompt(ctx.cwd),
+      system: [opts.system ?? defaultSystemPrompt(ctx.cwd),
+        ...(opts.builderProvider === undefined ? [] : [`Train builder provider entry: ${JSON.stringify(opts.builderProvider)}. See ship's builder routing rule.`])].join("\n\n"),
       systemOrigin: opts.system === undefined ? "cli:default-system" : "cli:--system",
       // the generation in force when the session starts, so the listing and the `skill` tool
       // above cannot disagree about what this conversation may load
