@@ -53,6 +53,32 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 const runner = fileURLToPath(new URL("../../../scripts/reviewer-adapters.mjs", import.meta.url));
+const usage = "usage: reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix>";
+it("wrong argument count exits EX_USAGE before launch", () => {
+  const run = spawnSync(process.execPath, [runner, "only-a-config"], { encoding: "utf8" });
+  expect(run.status).toBe(64);
+  expect(run.stderr.trim()).toBe(usage);
+});
+it("relative output prefix exits EX_USAGE before vendor launch and writes no stdout artifact", () => {
+  const dir = mkdtempSync(join(tmpdir(), "review-adapter-usage-"));
+  try {
+    spawnSync("git", ["init", "-q", dir]);
+    spawnSync("git", ["-C", dir, "-c", "user.name=fixture", "-c", "user.email=fixture@example.com", "commit", "--allow-empty", "-qm", "fixture"]);
+    const binary = join(dir, "codex");
+    const launched = join(dir, "vendor-launched");
+    writeFileSync(binary, `#!${process.execPath}\nrequire("node:fs").writeFileSync(${JSON.stringify(launched)}, "yes")`);
+    chmodSync(binary, 0o755);
+    const config = join(dir, "config.json");
+    const prompt = join(dir, "prompt");
+    writeFileSync(config, JSON.stringify({ reviewers: { Codex: { adapter: "codex-cli", model: "gpt-5.6-sol" } } }));
+    writeFileSync(prompt, "review");
+    const run = spawnSync(process.execPath, [runner, config, "Codex", prompt, dir, "relative-prefix"], { encoding: "utf8", cwd: dir, env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    expect(run.status).toBe(64);
+    expect(run.stderr.trim()).toBe(usage);
+    expect(existsSync(launched)).toBe(false);
+    expect(existsSync(join(dir, "relative-prefix.stdout"))).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and stale-artifact refusal", adapter => {
   const dir = mkdtempSync(join(tmpdir(), "review-adapter-"));
   try {

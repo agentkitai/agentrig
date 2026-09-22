@@ -176,6 +176,7 @@ is advisory, not a blocker while the ledger is unresolved.
 - A pass verdict lists what you probed and which mutants you ran — "looks good" with no evidence
   is not a review.
 - Report which of the PR body's claims you verified, and any you could not.
+- When checking the identifier ban, its single PR-body and squash-body exception is a verbatim human authorization quote that itself contains such an identifier: preserve the quote unchanged and never add model or agent authorship attribution.
 
 ## 7. Boundaries
 

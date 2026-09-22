@@ -19,7 +19,7 @@ shell call. For nonempty steps the builder/conductor runs declared bootstrap, op
 steps, each judged by its exit code. Stop on nonzero; do not infer success from output counts.
 Record name, command, exit code, UTC start/end, counts (N/A if unavailable), exact head,
 runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional countsParser
-metadata never overrides the exit code. Receipts, conductor reports and fixer handoffs list
+metadata never overrides the exit code. Receipts, conductor reports and durable fixer pre-push handoffs list
 steps by name, not a hard-coded trio. A changed head invalidates prior same-head receipts.
 
 Zero, one or many named steps are supported; receipts follow the resolved declaration.
@@ -204,7 +204,7 @@ Post and read back this handoff before every fixer push; a later handoff does no
 - Before every push, builders and fixers must rerun all touched instruction-contract and skill-text test files against a CRLF copy of the entire `.agentrig/skills` tree (normalize LF before converting to CRLF), point `AGENTRIG_TEST_SKILLS_ROOT` at that copy under the proof `TMPDIR` outside Git ancestry, and record start/end times, exact commands, exits and test counts next to the declared check receipts in the PR.
 
 - Clear message: what changed, why, anything surprising. No model identifiers in commits, PR
-  titles/bodies, or code comments.
+  titles/bodies, or code comments. The single sanctioned PR-body exception is a verbatim human authorization quote that itself contains such an identifier: preserve the quote unchanged, but never add model or agent authorship attribution.
 - `git push -u origin <branch>`; on network failure retry with backoff.
 
 ## 7. Open the PR — after green, not before

@@ -26,9 +26,9 @@ const landSentences = [
   "For every dispatched fixer, require a conductor `gh pr view NN --json body` read-back receipt BEFORE the subagent call.",
   "Reject a missing read-back receipt or advisory-only dispatch as a contract violation; a counter repaired by the fixer afterwards cannot retroactively satisfy it.",
   "Read the PR body and match that line against the round, OLD and assigned blockers in the persisted fixer task; verify its timestamp precedes the dispatch.",
-  "A missing fixer handoff alone is not a halt when the conductor's dispatch-time PR comment is matched to an immutable session-store `subagent.spawn` event carrying the same exact task text and child session ID.",
+  "A missing durable fixer pre-push handoff alone is not a halt when the conductor's dispatch-time PR comment is matched to an immutable session-store `subagent.spawn` event carrying the same exact task text and child session ID.",
   "That matched pair is sufficient dispatch provenance, but it does not waive receipt-before-dispatch ordering, round/OLD/blocker identity, exact heading/source identity, or the fixer's durable pre-edit comparison with comment ID and head.",
-  "If neither the fixer handoff nor that matched conductor-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.",
+  "If neither the durable fixer pre-push handoff nor that matched conductor-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.",
 ] as const;
 
 const policySentences = [
@@ -39,7 +39,7 @@ const policySentences = [
   "Include the child session ID before invocation when exposed synchronously; otherwise record `child session id: pending tool result` and immediately edit or reply with the actual ID when the synchronous call returns, without delaying the task-text comment or inventing an ID.",
   "If the call fails after dispatch or returns without an ID, the conductor must read the immutable session-store `subagent.spawn` event and update the comment with its actual child session ID before proceeding; absence of both an exposed ID and a matching spawn event halts.",
   "The conductor must invoke the fixer subagent tool without its optional `label` field: immutable `subagent.spawn.task` records `input.label ?? input.task`, so only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.",
-  "Land may accept that conductor comment matched to the immutable session-store `subagent.spawn` event's exact task text and child session ID as sufficient dispatch provenance, so a missing fixer handoff alone is not a halt; when neither source exists land halts, and all receipt ordering, round/OLD/blocker identity, exact heading/source identity, and durable pre-edit comparison checks still apply.",
+  "Land may accept that conductor comment matched to the immutable session-store `subagent.spawn` event's exact task text and child session ID as sufficient dispatch provenance, so a missing durable fixer pre-push handoff alone is not a halt; when neither source exists land halts, and all receipt ordering, round/OLD/blocker identity, exact heading/source identity, and durable pre-edit comparison checks still apply.",
 ] as const;
 
 const squashSentences = [

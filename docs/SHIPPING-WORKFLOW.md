@@ -3,7 +3,7 @@
 This is the shared review/repair policy for `dogfood`, `ship`, `topic`, `review`, and
 `land`. Read it with the selected skill. It replaces their historical per-fix dual
 review loops, not their authorization, isolation, testing, or merge gates. These
-are model-facing instructions, not a runtime enforcement mechanism.
+are model-facing instructions, not a runtime enforcement mechanism. No model or agent authorship identifiers belong in commits, PR titles/bodies, or code comments. The single PR-body and squash-body exception is a verbatim human authorization quote that itself contains such an identifier: preserve the quote unchanged, but never add model or agent authorship attribution.
 
 ## 1. CI and review are independent tracks
 
@@ -103,7 +103,7 @@ Immediately before fixer invocation, the conductor must post and read back a dur
 Include the child session ID before invocation when exposed synchronously; otherwise record `child session id: pending tool result` and immediately edit or reply with the actual ID when the synchronous call returns, without delaying the task-text comment or inventing an ID.
 If the call fails after dispatch or returns without an ID, the conductor must read the immutable session-store `subagent.spawn` event and update the comment with its actual child session ID before proceeding; absence of both an exposed ID and a matching spawn event halts.
 The conductor must invoke the fixer subagent tool without its optional `label` field: immutable `subagent.spawn.task` records `input.label ?? input.task`, so only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.
-Land may accept that conductor comment matched to the immutable session-store `subagent.spawn` event's exact task text and child session ID as sufficient dispatch provenance, so a missing fixer handoff alone is not a halt; when neither source exists land halts, and all receipt ordering, round/OLD/blocker identity, exact heading/source identity, and durable pre-edit comparison checks still apply.
+Land may accept that conductor comment matched to the immutable session-store `subagent.spawn` event's exact task text and child session ID as sufficient dispatch provenance, so a missing durable fixer pre-push handoff alone is not a halt; when neither source exists land halts, and all receipt ordering, round/OLD/blocker identity, exact heading/source identity, and durable pre-edit comparison checks still apply.
 
 Collect all declared initial verdicts before one repair batch. Give the fixer all blocking
 finding texts/URLs, not the advisory list as new requirements. Keep the same PR.
@@ -164,7 +164,7 @@ builder → declared checks → exact-head CI → land, using author check recei
 preparation. One slot is also the focused-delta reviewer.
 Two slots run independently, sharing no builder context, preferably a different vendor or model.
 Land requires only declared headings; never halt for an undeclared second slot. An incomplete
-required slot gets one retry then halts. A missing/pin-mismatched required review is not a pass.
+required slot gets one retry then halts. Wrong argument count or an invalid output prefix exits the adapter with usage error exit 64 before vendor launch and produces no prefix `.stdout`; this is a conductor error and does not consume the slot's single retry. A missing/pin-mismatched required review is not a pass.
 
 Canonical initial heading:
 `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
@@ -252,13 +252,11 @@ the done marker must be present on the head being landed; land never adds it its
 ### Transport-proven family assertions (R18d / #500)
 
 The configured minor pin remains exact: CLI adapters require their independently observed
-transport provenance to equal it; API configured echoes only support exact assertions. Only a numeric GPT major-family assertion (`gpt-5` for `gpt-5.5`) may differ,
+transport provenance to equal it; API configured echoes only support exact assertions. Only a numeric GPT major-family assertion (`gpt-5` for `gpt-5.5` or a suffixed minor pin such as `gpt-6.7-variant`) may differ,
 and only with that independent exact-pin proof. Different families, different minors, and
 family assertions without transport proof fail closed. Verdict JSON cannot supply transport proof.
 Adapter receipts retain `assertedModel` and `transportModel` separately; `model` and the canonical
-heading retain the transport-proven pin. Prompts state the pin and transport source, asking reviewers
-to assert the pin unless their own identity contradicts its family, without pretending to observe
-the transport. Pass the trusted adapter receipt as the final `--validate` argument in shipping workflows and as
+heading retain the transport-proven pin. Prompts state the pin and transport source, offering the major-family assertion only for supported numeric GPT minor pins (including suffixed pins), without pretending the reviewer observed transport. Pass the trusted adapter receipt as the final `--validate` argument in shipping workflows and as
 `post-review-comment.mjs --provenance PATH` (after `--config PATH`); both bind receipt to head, slot,
 pin and verdict, and posting also binds the configured adapter. Never substitute reviewer-authored
 JSON for the adapter receipt. Exact assertions retain the legacy no-receipt script path; shipping workflows still carry the actual adapter receipt through landing.
