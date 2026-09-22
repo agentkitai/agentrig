@@ -4,13 +4,15 @@ import { loadChildUserConfig } from "./child-env.js";
 import type { ConfigFile, ProjectChecks } from "./config.js";
 
 /** Read-only inspection, not trust or permission to execute project-controlled commands.
- * Callers supply the explicit project root; no home fallback or toolchain guessing.
+ * Callers supply the explicit project root; no home command fallback or toolchain guessing.
  * An absent declaration differs from an explicit empty steps list.
  */
 export async function resolveProjectChecks(projectRoot: string, profile?: string, user?: ConfigFile): Promise<ProjectChecks | undefined> {
   const project = await readConfigFile(join(resolve(projectRoot), ".agentrig", "config.json"));
   if (project === undefined) return undefined;
-  // Reuse profile-name validation, but keep declarations out of runtime values.
+  // Match run --profile name validation using the same safe-home boundary.
+  // User config supplies names only; commands remain project-owned.
+  user ??= await loadChildUserConfig(projectRoot);
   resolveConfig({ defaults: {}, project, ...(user === undefined ? {} : { user }), ...(profile === undefined ? {} : { profile }) });
   const checks = (profile === undefined ? undefined : project.profiles?.[profile]?.checks) ?? project.checks;
   if (checks === undefined) return undefined;
@@ -23,7 +25,7 @@ export async function resolveProjectChecks(projectRoot: string, profile?: string
  * Resolve after each fast-forward, from the same profile as the conductor.
  */
 export async function resolveTrainTestTimeout(projectRoot: string, profile?: string): Promise<number | undefined> {
-  const checks = await resolveProjectChecks(projectRoot, profile, await loadChildUserConfig(projectRoot));
+  const checks = await resolveProjectChecks(projectRoot, profile);
   const matches = checks?.steps.filter(step => step.testTimeout !== undefined
     && step.command === `pnpm test --testTimeout=${step.testTimeout}`) ?? [];
   if (matches.length > 1) throw new Error("ambiguous train pnpm test budget");

@@ -179,9 +179,9 @@ Read-only module boundary for skills/supervisor integrations: import `resolvePro
 from `packages/cli/dist/project-checks.js` after building AgentRig (source:
 `packages/cli/src/project-checks.ts`), then call `await resolveProjectChecks(projectRoot, profile?)`.
 The explicit root may be any repository, including outside this monorepo. This only reads and
-validates that project's config; it does not search home config, infer commands, spawn a shell,
-or implement a workflow. A missing declaration returns undefined (stop/request declaration),
-not an empty success. A missing file returns undefined even with a selected profile; an existing file with an unknown profile rejects. Invalid config rejects. The returned object is declaration data,
+validates project config and safely loads user config for profile-name validation only;
+it does not take commands from home config, infer commands, spawn a shell, or implement a workflow. A missing declaration returns undefined (stop/request declaration),
+not an empty success. A missing file returns undefined even with a selected profile; an existing file with an unknown profile rejects. User-only profiles are valid names under the same safe-home boundary as `run --profile`, but never supply check commands; without project checks the resolver returns `undefined`. Invalid config rejects. The returned object is declaration data,
 not permission to execute it: display source/root, selected profile and commands and retain
 normal project trust, permission prompts and sandbox checks.
 
