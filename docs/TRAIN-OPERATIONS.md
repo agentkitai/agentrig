@@ -206,6 +206,17 @@ Git and pnpm must be available; landing verification uses authenticated `gh`.
 Children inherit the operator's environment, without git-ai PATH injection and with
 `GIT_TRACE2_EVENT=0`. The command uses argv spawning, not shell interpolation.
 
+Train resolves named profiles against safely loaded user config and trusted project
+config, like `run --profile`; profiles need not be duplicated in project config.
+Train test-budget resolution recognizes user-only profile names too, while keeping
+check declarations project-owned.
+
+`train --status` validates queued row schemas, profile/reviewer environments and test
+budgets read-only, reporting failures in `invalidEntries`. Dispatch refuses invalid
+entries before claiming a row: the JSON remains in `queue/`, no child runs and no
+consumed halt record is created. Fix the config or queued row and retry. Failures
+after checkout starts still move the claimed row to `halted/`.
+
 A JSON `train.status` is printed after every completed or halted row and by the
 read-only `agentrig train <dir> --status`. It includes `queue`, `active`, `done`,
 `halted`, `invalidEntries`, `usage` and `pricingNote`; accounting failures yield

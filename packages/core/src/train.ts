@@ -108,7 +108,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
   const command = options.command ?? trainCommand;
   const list = async (folder: string) => (await readdir(join(root, folder))).sort();
   const status = async () => {
-    options.status?.(await trainStatus(root));
+    options.status?.(await trainStatus(root, options));
   };
   try {
     // Never replay a possibly still-live child or land operation following a crash.
@@ -126,6 +126,8 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
       if (await exists(join(root, "PAUSE"))) { await (options.sleep?.() ?? new Promise(r => setTimeout(r, 1000))); continue; }
       const name = (await list("queue"))[0]; if (name === undefined) return "empty";
       if (!rowName(name)) throw new Error("row names must be unique simple .json basenames");
+      const inspection = await trainStatus(root, options);
+      if (inspection.invalidEntries.length > 0) { options.status?.(inspection); return "halted"; }
       const stem = name.slice(0, -5);
       for (const folder of ["done", "halted"] as const) if (await exists(join(root, folder, name))) throw new Error(`row identity already used: ${name}`);
       const log = join(root, "logs", `${stem}.log`);
@@ -363,10 +365,17 @@ export async function trainUsage(directory: string): Promise<Array<RowUsage & { 
   return rows.map(row => reports.get(row.row)!);
 }
 
-export async function trainStatus(directory: string): Promise<TrainStatus> {
+export async function trainStatus(directory: string, options: Pick<TrainOptions, "childEnvironment" | "testTimeout"> = {}): Promise<TrainStatus> {
   const invalidEntries: string[] = [];
   const counts = await Promise.all(folders.slice(0, 4).map(async folder => { const entries = await readdir(join(directory, folder)).catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; });
     invalidEntries.push(...entries.filter(name => !rowName(name)).map(name => `${folder}/${name}`));
+    if (folder === "queue") for (const name of entries.filter(rowName)) {
+      try {
+        const row = TrainRowSchema.parse(await json(join(directory, folder, name)));
+        await options.childEnvironment?.(row.environment.checkout, row.environment.profile);
+        z.number().int().min(1).max(120_000).optional().parse(await options.testTimeout?.(row.environment.checkout, row.environment.profile));
+      } catch (error) { invalidEntries.push(`${folder}/${name}: ${String(error)}`); }
+    }
     return [folder, entries.length];
   }));
   const status = { ...Object.fromEntries(counts), invalidEntries: invalidEntries.sort() } as unknown as TrainStatus;

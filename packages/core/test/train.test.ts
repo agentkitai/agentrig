@@ -39,7 +39,9 @@ describe("train", () => {
     expect(TrainRowSchema.safeParse({ ...row, environment: { ...row.environment, yolo: "yes" } }).success).toBe(false);
     expect(await runTrain(f.root, { command: f.command })).toBe("halted");
     expect(f.calls).toEqual([]);
-    expect(JSON.parse(await readFile(join(f.root, "logs/1.halt.json"), "utf8"))).toMatchObject({ phase: "schema", pr: null, sessionIds: [] });
+    expect(await readdir(join(f.root, "queue"))).toEqual(["1.json"]);
+    expect(await readdir(join(f.root, "halted"))).toEqual([]);
+    expect((await trainStatus(f.root)).invalidEntries[0]).toContain("queue/1.json:");
   });
   it("validates checkout between every row and prints each status", async () => {
     const f = await fixture(2); const statuses: unknown[] = [];
@@ -326,7 +328,8 @@ it.each([undefined, 15000])("logs and forwards the declared train test budget %s
   expect(await runTrain(f.root, { command: f.command, testTimeout: async (checkout, profile) => {
     resolved.push(checkout); expect(profile).toBeUndefined(); return testTimeout;
   } })).toBe("empty");
-  expect(resolved).toEqual([row.environment.checkout, row.environment.checkout]);
+  // Queue inspection validates both pending rows, then the remaining row; checkout reloads each budget after fast-forward.
+  expect(resolved).toEqual(Array(5).fill(row.environment.checkout));
   const argv = testTimeout === undefined ? ["test"] : ["test", "--testTimeout=15000"];
   expect(f.calls.filter(c => c === argv.join(" "))).toHaveLength(2);
   for (const id of [1, 2]) {
@@ -352,5 +355,7 @@ it("M-train-home: resolve environment before any child and carry it on every req
   const blocked = await fixture();
   expect(await runTrain(blocked.root, { command: blocked.command, childEnvironment: async () => { throw new Error("REVIEWER_HOME_MISSING: reviewers:Primary requires CODEX_HOME"); } })).toBe("halted");
   expect(blocked.calls).toEqual([]);
-  expect(await readFile(join(blocked.root, "logs/1.halt.json"), "utf8")).toContain("REVIEWER_HOME_MISSING");
+  expect(await readdir(join(blocked.root, "queue"))).toEqual(["1.json"]);
+  expect(await readdir(join(blocked.root, "halted"))).toEqual([]);
+  expect((await trainStatus(blocked.root, { childEnvironment: async () => { throw new Error("REVIEWER_HOME_MISSING"); } })).invalidEntries[0]).toContain("REVIEWER_HOME_MISSING");
 });
