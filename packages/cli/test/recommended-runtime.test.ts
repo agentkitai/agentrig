@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { fileURLToPath } from "node:url";
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -34,7 +35,7 @@ it('default CLI permits edits and approved background tests without checkpoint g
     const { stdout, stderr } = await exec(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)), 'run', 'Write a.ts then reply with Markdown',
       // Explicit write/exec approval, no YOLO, feature toggles, profile or config.
       '--provider', 'openai', '--model', 'gpt-4o', '--base-url', `http://127.0.0.1:${address.port}`, '--allow', 'write_file', '--allow', 'bash'],
-    { cwd, env: { ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: home, OPENAI_API_KEY: 'local-fixture-only', NO_COLOR: '1' }, timeout: 30_000 });
+    { cwd, env: { ...cliEnv(), HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: home, OPENAI_API_KEY: 'local-fixture-only', NO_COLOR: '1' }, timeout: 30_000 });
     const store = new SessionStore({ root: join(cwd, '.agentrig/raw/sessions') });
     const [session] = await store.list(); expect(session).toBeDefined();
     const events = await store.readAll(session!.id);

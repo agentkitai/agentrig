@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createServer } from "node:http";
@@ -33,7 +34,7 @@ async function actual(root: string, args: string[], delta: Record<string, unknow
   try {
     const command = [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "run", "--ci", "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
       "--root", join(root, "logs"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery", ...args];
-    try { const output = await exec(process.execPath, command, { cwd: root, timeout: 15_000, env: { ...process.env, HOME: `${root}-home`, USERPROFILE: `${root}-home`, OPENAI_API_KEY: "fixture-key" } }); return { code: 0, bodies, ...output }; }
+    try { const output = await exec(process.execPath, command, { cwd: root, timeout: 15_000, env: { ...cliEnv(), HOME: `${root}-home`, USERPROFILE: `${root}-home`, OPENAI_API_KEY: "fixture-key" } }); return { code: 0, bodies, ...output }; }
     catch (error) { const e = error as Error & { code?: number; stdout?: string; stderr?: string }; if (typeof e.code !== "number") throw error; return { code: e.code, bodies, stdout: e.stdout ?? "", stderr: e.stderr ?? "" }; }
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 }

@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { execFile as exec } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -41,7 +42,7 @@ it("wires opt-in builder checkpoints to the real sessions undo CLI",async()=>{
   const b=await built(); const session=b.agent.run("write",{cwd:root}); await session.done;
   const store=new SessionStore({root:join(root,"sessions")});
   expect((await store.readAll(session.id)).some(e=>e.type==="checkpoint.sealed")).toBe(true);
-  const result=await execFile(process.execPath,[cli,"sessions","undo",session.id,"--root",store.root,"--to-turn","1"],{cwd:root});
+  const result=await execFile(process.execPath,[cli,"sessions","undo",session.id,"--root",store.root,"--to-turn","1"],{cwd:root,env:cliEnv()});
   expect(result.stdout).toContain("restored"); expect(await readFile(join(root,"file.txt"),"utf8")).toBe("before\r\n");
 });
 

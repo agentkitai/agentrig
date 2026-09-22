@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { EventEmitter } from "node:events";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -178,7 +179,7 @@ it("real headless CLI with trusted notification config emits no BEL", async () =
   const cli = fileURLToPath(new URL("../dist/index.js", import.meta.url));
   const output = await ownedProcess(process.execPath, [cli, "run", "task", "--headless", "--trust", "--provider", "openai", "--model", "fixture",
     "--base-url", `http://127.0.0.1:${address.port}/v1`, "--root", join(root, "sessions"), "--no-generated-skills"], {
-    cwd: root, env: { ...process.env, HOME: root, USERPROFILE: root, OPENAI_API_KEY: "fixture-not-real" }, signal: new AbortController().signal,
+    cwd: root, env: { ...cliEnv(), HOME: root, USERPROFILE: root, OPENAI_API_KEY: "fixture-not-real" }, signal: new AbortController().signal,
     timeoutMs: 10000, maxBytes: 65536, errorMessage: "headless notification fixture failed",
   });
   expect(requests).toHaveLength(1); expect(output).toContain("complete"); expect(output).not.toContain("\u0007");

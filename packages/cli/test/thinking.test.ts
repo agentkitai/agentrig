@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { afterEach, expect, it } from "vitest";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -100,7 +101,7 @@ it("actual CI CLI replays signed thinking across a read tool but excludes it fro
     "run", "--ci", "--provider", "anthropic", "--model", "fixture", "--base-url", endpoint,
     "--task-file", "task.txt", "--report", "report.md", "--root", join(cwd, "logs"), "--otel-endpoint", `${endpoint}/traces`,
     "--max-turns", "2", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
-  { cwd, timeout: 15_000, env: { ...process.env, HOME: `${cwd}-home`, USERPROFILE: `${cwd}-home`, ANTHROPIC_API_KEY: "fixture-only" } });
+  { cwd, timeout: 15_000, env: { ...cliEnv(), HOME: `${cwd}-home`, USERPROFILE: `${cwd}-home`, ANTHROPIC_API_KEY: "fixture-only" } });
   expect(requests).toHaveLength(2);
   expect(requests[1]!.messages.flatMap(m => m.content).filter(b => b.type === "thinking"))
     .toEqual([{ type: "thinking", thinking: thinking.text, signature: thinking.signature }]);

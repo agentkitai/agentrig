@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { mkdtemp, mkdir, writeFile, rm, readdir, realpath } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -52,7 +53,7 @@ it("reports unknown user profiles as invalidEntries without consuming a row", as
 
 it("train --status wires profile validation without claiming the queued row", async () => {
   const { checkout, queue } = await fixture("missing");
-  const output = execFileSync(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "train", queue, "--status"], { cwd: checkout, encoding: "utf8" });
+  const output = execFileSync(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "train", queue, "--status"], { cwd: checkout, env: cliEnv(), encoding: "utf8" });
   expect(JSON.parse(output)).toMatchObject({ queue: 1, active: 0, halted: 0, invalidEntries: [expect.stringContaining('unknown config profile "missing"')] });
   expect(await readdir(join(queue, "queue"))).toEqual(["001.json"]);
 });

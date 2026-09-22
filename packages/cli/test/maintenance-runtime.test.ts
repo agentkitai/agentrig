@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { execFile, fork } from "node:child_process";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ function runCli(...args: string[]): Promise<{ stdout: string; stderr: string }> 
   const result = new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = execFile(process.execPath,
       [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "memory", ...args],
-      { timeout: 5000, killSignal: "SIGKILL", encoding: "utf8" }, (error, stdout, stderr) => {
+      { env: cliEnv(), timeout: 5000, killSignal: "SIGKILL", encoding: "utf8" }, (error, stdout, stderr) => {
         if (error !== null) {
           error.message = `CLI subprocess (5000ms bound; code=${error.code ?? "null"}; killed=${error.killed === true}; signal=${error.signal ?? "none"}): ${error.message}`;
           reject(Object.assign(error, { stdout, stderr }));

@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -25,6 +26,6 @@ it("actual CLI inspection is offline and recovery requires both explicit legacy 
   expect(await realpath(result.preservedAt)).toBe(result.preservedAt);
   expect(await readFile(join(root, ".agentrig", "config.json"), "utf8")).toBe("MUST NOT LOAD INVALID PROVIDER CONFIG");
   expect(run).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
-  const binary = await exec(process.execPath, [resolve("packages/cli/dist/index.js"), "checkpoints", "lock", "inspect", "--cwd", root]);
+  const binary = await exec(process.execPath, [resolve("packages/cli/dist/index.js"), "checkpoints", "lock", "inspect", "--cwd", root], { env: cliEnv() });
   expect(JSON.parse(binary.stdout)).toEqual({ path: join(root, ".git", "agentrig-worktree-checkpoint.lock"), state: "missing", scope: "worktree" });
 });

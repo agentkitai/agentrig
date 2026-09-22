@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -183,10 +184,10 @@ it("real CLI process wires explicit redaction and opaque omission, with safe std
   const cli = fileURLToPath(new URL("../dist/index.js", import.meta.url));
   const args = [cli, "sessions", "export", "s", "--root", root, "--redact-file", path];
   const invoke = promisify(execFile);
-  const refused = await invoke(process.execPath, args, { cwd: root }).catch(e => e);
+  const refused = await invoke(process.execPath, args, { cwd: root, env: cliEnv() }).catch(e => e);
   expect(refused.code).toBe(1); expect(refused.stdout).toBe(""); expect(refused.stderr).toContain("--omit-opaque");
   expect(refused.stderr).not.toContain("secret-canary");
-  const result = await invoke(process.execPath, [...args, "--omit-opaque", "--format", "md"], { cwd: root });
+  const result = await invoke(process.execPath, [...args, "--omit-opaque", "--format", "md"], { cwd: root, env: cliEnv() });
   expect(result.stderr).toBe(""); expect(result.stdout).not.toContain("secret-canary");
   expect(decode(result.stdout, "md")).toEqual(redactExportMessages(await store.materializeMessages("s"), ["opaque-secret-canary"], true).messages);
 }, 15_000);
