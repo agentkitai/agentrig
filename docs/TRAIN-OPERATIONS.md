@@ -30,8 +30,13 @@ The existing rule that ignores user state inside the project boundary still appl
 
 Launch with `agentrig --profile personal train /absolute/train-root`, or set each row's
 `environment.profile`. The CLI applies this environment before action dispatch, so
-headless run, tool/subagent processes and train commands inherit it. Train resolves
-row environment before starting commands and again after fast-forwarding the checkout.
+headless run and its tool/subagent processes inherit it. Between-row train commands
+(including install/build/typecheck/test) instead use a snapshot of the launcher
+environment plus resolved `CODEX_HOME` and `CLAUDE_CONFIG_DIR` only. They never
+receive `AGENTRIG_CHILD_PROFILE`, even when inherited by the launcher, or other
+profile-only overrides. The headless run child retains the full profile-scoped
+environment and selection marker. Train resolves row environment before starting
+commands and again after fast-forwarding the checkout.
 A private `AGENTRIG_CHILD_PROFILE` marker carries selection into nested CLI/adapters;
 prefer explicit `--profile` at the operator boundary. Normal project trust remains
 required to consume checkout declarations; there are no new unattended questions.

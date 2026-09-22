@@ -1,3 +1,4 @@
+import { trainLauncherEnvironment } from "../src/child-env.js";
 import { expect, it } from "vitest";
 import { parseConfigText } from "../src/config.js";
 const parse = (childEnv: unknown) => parseConfigText("fixture", JSON.stringify({ profiles: { personal: { childEnv } } }));
@@ -57,9 +58,11 @@ it("M-dispatch-env: the CLI preAction makes the selected home visible to spawned
     expect(launched).toBe(false);
     const program = buildProgram();
     let observed = "";
+    const launcherHome = trainLauncherEnvironment.CODEX_HOME;
     program.command("env-proof").action(() => { observed = spawnSync(process.execPath, ["-p", "process.env.CODEX_HOME"], { encoding: "utf8" }).stdout.trim(); });
     await program.parseAsync(["--profile", "personal", "env-proof"], { from: "user" });
     expect(observed).toBe("/dispatch/personal");
+    expect(trainLauncherEnvironment.CODEX_HOME).toBe(launcherHome);
   } finally {
     for (const key of Object.keys(process.env)) if (!(key in original)) delete process.env[key];
     Object.assign(process.env, original);

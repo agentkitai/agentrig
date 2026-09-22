@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -215,7 +216,7 @@ it.each([undefined, true])("shows headless recall with memoryIndexInjection=%s a
       "--max-turns", "4", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
     ], {
       cwd: root,
-      env: { ...process.env, HOME: join(root, "home"), USERPROFILE: join(root, "home"), OPENAI_API_KEY: "fixture-not-a-secret" },
+      env: { ...cliEnv(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), OPENAI_API_KEY: "fixture-not-a-secret" },
       signal: new AbortController().signal, timeoutMs: 20_000, maxBytes: 262_144,
       errorMessage: "headless visibility fixture failed",
     });

@@ -3,6 +3,9 @@ import { isAbsolute, join } from "node:path";
 import { readConfigFile, resolveConfig, type ConfigFile, type ReviewerSlot } from "./config.js";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
+/** Capture before program preAction applies the selected profile to process.env. */
+export const trainLauncherEnvironment: NodeJS.ProcessEnv = { ...process.env };
+
 /** Use the same boundary guard and file loader as CLI preAction. */
 export async function loadChildUserConfig(cwd: string, home = homedir()): Promise<ConfigFile | undefined> {
   const boundary = await resolveProjectBoundary(cwd, home);

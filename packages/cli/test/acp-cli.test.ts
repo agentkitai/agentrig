@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { spawn } from "node:child_process";
@@ -37,7 +38,7 @@ it("real acp CLI over OS pipes completes deny then allow with a local provider a
     "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
     "--root", join(root, "logs"), "--memory", join(root, "memory"), "--max-turns", "6",
     "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
-  { cwd: root, env: { ...process.env, HOME: join(root, "home"), USERPROFILE: join(root, "home"), OPENAI_API_KEY: "fixture-not-a-secret" }, stdio: ["pipe", "pipe", "pipe"] });
+  { cwd: root, env: { ...cliEnv(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), OPENAI_API_KEY: "fixture-not-a-secret" }, stdio: ["pipe", "pipe", "pipe"] });
   let stderr = ""; child.stderr.on("data", chunk => { stderr += String(chunk); });
   const closed = once(child, "close");
   const peer = client().onRequest("session/request_permission", ({ params }) => {

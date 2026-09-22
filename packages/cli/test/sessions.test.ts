@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -259,7 +260,7 @@ describe("children rendering (R3d)", () => {
      run: JSON.stringify({ url: receipt.runUrl }) };
    await writeFile(path, JSON.stringify({ childSessionId: "child-session", evidence }));
    const run = (parent: string) => spawnSync(process.execPath, ["packages/cli/dist/index.js", "sessions", "provenance", parent,
-     "--root", root, "--receipt", path], { encoding: "utf8" });
+     "--root", root, "--receipt", path], { env: cliEnv(), encoding: "utf8" });
    const good = run("parent-session");
    expect(good.status, good.stderr).toBe(0);
    expect(JSON.parse(good.stdout)).toEqual({ matches: true, discrepancies: [] });

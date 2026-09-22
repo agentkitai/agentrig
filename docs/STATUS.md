@@ -1,5 +1,12 @@
 # Status
 
+## Pending review — issue #522, train declared-check environment
+
+Between-row checks use the pre-profile launcher environment plus tool homes and
+never inherit `AGENTRIG_CHILD_PROFILE`; the headless child retains the full profile.
+Real CLI spawn fixtures strip profile selection and operator tool homes. Regression
+and mutation proofs accompany the PR. Independent review remains pending.
+
 ## Complete — issue #518, train user-config profiles (PR #520)
 
 Train explicitly loads safe user config alongside trusted project config; user-only

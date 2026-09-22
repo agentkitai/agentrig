@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createServer } from "node:http";
@@ -37,7 +38,7 @@ async function actual(root: string, deltas: Record<string, unknown>[], args: str
       "--base-url", `http://127.0.0.1:${address.port}/v1`, "--root", join(root, "logs"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
       "--output-schema", "schema.json", ...(args.includes("--ci") ? [] : ["--headless", "Produce an answer."]), ...args];
     try { return { code: 0, bodies, ...await exec(process.execPath, argv, { cwd: root, timeout: 15_000,
-      env: { ...process.env, HOME: `${root}-home`, USERPROFILE: `${root}-home`, OPENAI_API_KEY: "fixture-key" } }) }; }
+      env: { ...cliEnv(), HOME: `${root}-home`, USERPROFILE: `${root}-home`, OPENAI_API_KEY: "fixture-key" } }) }; }
     catch (error) { const e = error as { code?: number; stdout?: string; stderr?: string }; if (typeof e.code !== "number") throw error;
       return { code: e.code, bodies, stdout: e.stdout ?? "", stderr: e.stderr ?? "" }; }
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }

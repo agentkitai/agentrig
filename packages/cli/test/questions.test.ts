@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { execFile, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { client, ndJsonStream } from "@agentclientprotocol/sdk";
@@ -115,7 +116,7 @@ it.each(["fail", "first-option", "file", "acp"])("actual CLI %s policy uses a lo
     const child = spawn(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "acp",
       "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
       "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
-    { cwd, env: { ...process.env, HOME: `${cwd}-home`, USERPROFILE: `${cwd}-home`, OPENAI_API_KEY: "local-fixture" }, stdio: ["pipe", "pipe", "pipe"] });
+    { cwd, env: { ...cliEnv(), HOME: `${cwd}-home`, USERPROFILE: `${cwd}-home`, OPENAI_API_KEY: "local-fixture" }, stdio: ["pipe", "pipe", "pipe"] });
     let stderr = ""; child.stderr.on("data", chunk => { stderr += String(chunk); });
     const closed = once(child, "close"); let questions = 0;
     const peer = client().onRequest("_agentrig/question", z.object({ question: z.object({ id: z.string().uuid() }).passthrough() }).passthrough(), ({ params }) => {
@@ -133,7 +134,7 @@ it.each(["fail", "first-option", "file", "acp"])("actual CLI %s policy uses a lo
       "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
       "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
       ...(mode === "fail" ? [] : ["--answer-policy", mode === "file" ? `file:${answerFile}` : mode])],
-    { cwd, env: { ...process.env, HOME: `${cwd}-home`, USERPROFILE: `${cwd}-home`, OPENAI_API_KEY: "local-fixture" }, timeout: 20_000, maxBuffer: 1_048_576 },
+    { cwd, env: { ...cliEnv(), HOME: `${cwd}-home`, USERPROFILE: `${cwd}-home`, OPENAI_API_KEY: "local-fixture" }, timeout: 20_000, maxBuffer: 1_048_576 },
     (error, stdout, stderr) => { if (error && typeof error.code !== "number") reject(error); else resolve({ code: error?.code ?? 0, stdout, stderr }); });
   });
   expect(result.code, result.stderr).toBe(mode === "fail" ? 1 : 0);

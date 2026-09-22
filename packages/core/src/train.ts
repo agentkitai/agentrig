@@ -27,6 +27,7 @@ export const TrainRowSchema = z.object({
 }).strict();
 export type TrainRow = z.infer<typeof TrainRowSchema>;
 export interface TrainRequest {
+  /** Complete environment when provided; do not reintroduce launcher overlays. */
   env?: NodeJS.ProcessEnv;
   executable: string;
   argv: string[];
@@ -41,6 +42,8 @@ export interface TrainStatus { invalidEntries: string[]; queue: number; active: 
 export interface TrainOptions {
   /** CLI entrypoint to re-enter the existing headless run path. */
   cli?: string;
+  /** Snapshot before CLI profile overlays are applied. */
+  launcherEnvironment?: NodeJS.ProcessEnv;
   command?: TrainCommand;
   childEnvironment?: (checkout: string, profile?: string) => Promise<NodeJS.ProcessEnv>;
   status?: (status: TrainStatus) => void;
@@ -144,9 +147,14 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         if (row.resume !== undefined) state.sessionIds.push(row.resume.session);
         const env = row.environment;
         let childEnv = await options.childEnvironment?.(env.checkout, env.profile);
+        const checkEnv = { ...(options.launcherEnvironment ?? process.env) };
+        for (const key of ["CODEX_HOME", "CLAUDE_CONFIG_DIR"]) {
+          if (childEnv?.[key] !== undefined) checkEnv[key] = childEnv[key];
+        }
+        delete checkEnv.AGENTRIG_CHILD_PROFILE;
         const exec = async (executable: string, argv: string[], retry = false, testTimeout?: number): Promise<string> => {
           await appendFile(log, JSON.stringify({ ts: new Date().toISOString(), phase: state.phase, executable, argv, ...(testTimeout === undefined ? {} : { testTimeout }) }) + "\n");
-          let result = await command({ executable, argv, cwd: env.checkout, ...(childEnv === undefined ? {} : { env: childEnv }), log });
+          let result = await command({ executable, argv, cwd: env.checkout, env: checkEnv, log });
           if (result.code !== 0 && retry && executable === "pnpm" && argv.length === 1 && argv[0] === "test") {
             const files = vitestTimeoutFiles(result);
             if (files.length > 0) {
@@ -154,7 +162,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
               for (const file of files) {
                 const isolated = ["exec", "vitest", "run", "--no-file-parallelism", file];
                 await appendFile(log, JSON.stringify({ ts: new Date().toISOString(), phase: state.phase, executable, argv: isolated }) + "\n");
-                const rerun = await command({ executable, argv: isolated, cwd: env.checkout, ...(childEnv === undefined ? {} : { env: childEnv }), log });
+                const rerun = await command({ executable, argv: isolated, cwd: env.checkout, env: checkEnv, log });
                 if (rerun.code !== 0) throw new Error(`isolated Vitest retry failed: ${file}; see row log`);
               }
               return "";
@@ -162,7 +170,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
           }
           if (result.code !== 0 && retry && infrastructure(result)) {
             await appendFile(log, "infrastructure retry 1/1\n");
-            result = await command({ executable, argv, cwd: env.checkout, ...(childEnv === undefined ? {} : { env: childEnv }), log });
+            result = await command({ executable, argv, cwd: env.checkout, env: checkEnv, log });
           }
           if (result.code !== 0) throw new Error(`${executable} ${argv[0]} exited ${result.code}; see row log`);
           return result.stdout.trim();
@@ -224,7 +232,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         if (!pinnedResume) {
           const argv = ["merge-base", "--is-ancestor", pr.mergeCommit.oid, startingBase];
           await appendFile(log, JSON.stringify({ phase: state.phase, executable: "git", argv }) + "\n");
-          const ancestry = await command({ executable: "git", argv, cwd: env.checkout, ...(childEnv === undefined ? {} : { env: childEnv }), log });
+          const ancestry = await command({ executable: "git", argv, cwd: env.checkout, env: checkEnv, log });
           if (ancestry.code !== 1) throw new Error(ancestry.code === 0 ? "PR was already in base before this row" : "cannot verify PR ancestry");
         }
         state.phase = "ci"; await persist();
@@ -248,7 +256,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
 
 /** No shell interpolation, no permission bypass; inherit the operator's normal run configuration. */
 export const trainCommand: TrainCommand = async request => {
-  const inherited = { ...process.env, ...request.env };
+  const inherited = request.env ?? process.env;
   const env = { ...inherited, GIT_TRACE2_EVENT: "0", PATH: (inherited["PATH"] ?? "").split(delimiter).filter(part => !/[\\/]\.git-ai[\\/]bin[\\/]?$/u.test(part)).join(delimiter) };
   return new Promise((resolveResult, reject) => {
     const child = spawn(request.executable, request.argv, { cwd: request.cwd, env, stdio: ["ignore", "pipe", "pipe"] });

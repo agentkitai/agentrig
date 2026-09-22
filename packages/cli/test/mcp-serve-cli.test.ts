@@ -1,3 +1,4 @@
+import { cliEnv } from "./cli-env.js";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { mkdtemp, mkdir, writeFile, readFile, realpath, rm } from "node:fs/promises";
@@ -35,7 +36,7 @@ it("existing 2024 core client calls the real CLI over OS pipes; configured allow
     args: [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "mcp-serve", "--provider", "openai", "--model", "fixture",
       "--base-url", `http://127.0.0.1:${address.port}/v1`, "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"),
       "--allow", "write_file", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
-    env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+    env: { ...Object.fromEntries(Object.entries(cliEnv()).filter((entry): entry is [string, string] => entry[1] !== undefined)),
       HOME: home, USERPROFILE: home, OPENAI_API_KEY: "inert-fixture-key" } });
   cleanup.push(() => client.close());
   await client.start(); expect(calls).toBe(0);

@@ -1,11 +1,11 @@
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runTrain, trainStatus, trainCommand, TrainRowSchema, type TrainCommand } from "@agentkitai/agentrig-core";
 
 const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.map(root => rm(root, { recursive: true, force: true }))); roots.length = 0; });
+afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.map(root => rm(root, { recursive: true, force: true }))); roots.length = 0; });
 const row = { task: "Ship fixture", authorization: "I authorize this fixture task and its merge", scope: ["src"], environment: { checkout: resolve(tmpdir(), "fixture-checkout"), repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"] } };
 async function fixture(count = 1) {
   const root = await mkdtemp(join(tmpdir(), "train-")); roots.push(root);
@@ -392,4 +392,38 @@ it("M-train-home: resolve environment before any child and carry it on every req
   expect(await readdir(join(blocked.root, "queue"))).toEqual(["1.json"]);
   expect(await readdir(join(blocked.root, "halted"))).toEqual([]);
   expect((await trainStatus(blocked.root, { childEnvironment: async () => { throw new Error("REVIEWER_HOME_MISSING"); } })).invalidEntries[0]).toContain("REVIEWER_HOME_MISSING");
+});
+
+// M-check-profile / M-child-profile / M-check-overlay.
+it("keeps profile selection in the run child, never the declared checks", async () => {
+  const f = await fixture(); const checks: string[] = []; const environments: Array<NodeJS.ProcessEnv | undefined> = []; let child = false;
+  vi.stubEnv("AGENTRIG_CHILD_PROFILE", "personal");
+  vi.stubEnv("PROFILE_ONLY", "preAction-overlay");
+  const result = await runTrain(f.root, { launcherEnvironment: { PATH: process.env.PATH, AGENTRIG_CHILD_PROFILE: "inherited", LAUNCHER_ONLY: "kept" }, childEnvironment: async () => ({ ...process.env,
+    AGENTRIG_CHILD_PROFILE: "personal", PROFILE_ONLY: "secret", CODEX_HOME: "/profile/codex" }),
+    command: async request => {
+      if (request.executable === "pnpm") {
+        checks.push(request.argv[0]!); environments.push(request.env);
+        if (request.argv[0] === "test") {
+          // Fake pnpm test, through the real spawn boundary: inherited profile
+          // selection (or a preAction overlay) must not reappear here.
+          const actual = await trainCommand({ ...request, cwd: f.root, executable: process.execPath,
+            argv: ["-e", 'if (process.env.AGENTRIG_CHILD_PROFILE !== undefined || process.env.PROFILE_ONLY !== undefined) process.exit(23);'] });
+          if (actual.code !== 0) return actual;
+          expect(request.env?.PROFILE_ONLY).toBeUndefined();
+          expect(request.env?.LAUNCHER_ONLY).toBe("kept");
+          expect(request.env?.CODEX_HOME).toBe("/profile/codex");
+        }
+      }
+      if (request.executable === process.execPath) {
+        child = true; expect(request.env?.AGENTRIG_CHILD_PROFILE).toBe("personal");
+        expect(request.env?.PROFILE_ONLY).toBe("secret");
+      }
+      return f.command(request);
+    } });
+  expect(result).toBe("empty"); expect(checks).toEqual(["install", "build", "typecheck", "test"]); expect(child).toBe(true);
+  for (const env of environments) {
+    expect(env?.AGENTRIG_CHILD_PROFILE).toBeUndefined(); expect(env?.PROFILE_ONLY).toBeUndefined();
+    expect(env?.LAUNCHER_ONLY).toBe("kept"); expect(env?.CODEX_HOME).toBe("/profile/codex");
+  }
 });
