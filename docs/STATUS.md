@@ -1,5 +1,18 @@
 # Status
 
+## R18d review-tooling residuals (#490, #491, #492; PR #499)
+
+Standalone, non-example verdict delimiter scanning is shared by parsing, indexing
+and posting chunk boundaries. Quoted delimiter mentions cannot invalidate a real
+block; malformed real blocks still reject. Nested space/tab list findings emit
+nonfatal divergence warnings without changing the schema-authoritative index.
+The former fail-closed prose policy now points to one canonical advisory rule.
+Fail-first LF/CRLF regressions and named mutation receipts travel in the PR.
+Independent initial reviews resolved with non-blocking advisories; repair round: 0/3.
+The PR ledger records declared checks, CRLF proof and the operator's scoped
+base-parser exception. The conductor marked this row's residuals complete after
+those reviews; final docs-delta review and exact-head CI remain landing gates.
+
 ## R18e — per-row cost and concurrency (implementation; review pending)
 
 Row/session/model usage is available in train status and `usage --row`; nested

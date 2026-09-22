@@ -514,7 +514,7 @@ it.each(["      ", "        "])("R2-F3 actual nested list code passes: %j", inde
 });
 
 // @ts-expect-error standalone schema helper
-import { verdictBlock } from "../../../scripts/review-verdict.mjs";
+import { parseVerdict, verdictBlock } from "../../../scripts/review-verdict.mjs";
 const structured = {version:1, reviewedHead:head, slot:"Codex", assertedModel:"gpt-5.5", modelSource:"codex launch banner", verdict:"PASS", findings:[]};
 it("M-post-schema: binds head, model and slot before gh, regardless of prose", () => {
   const prose = "Reviewed head: stale~1..HEAD\nA pass verdict lists what you probed and which mutants you ran\n";
@@ -538,4 +538,19 @@ it("M-split-block: chunking never breaks the machine verdict", () => {
   const blocks = large.posts.filter(part => part.includes("<!-- agentrig-verdict:v1 -->"));
   expect(blocks).toHaveLength(1);
   expect(blocks[0]).toContain("<!-- /agentrig-verdict -->");
+});
+
+
+it("#490 quoted delimiter mentions do not redirect the protected posting range", () => {
+  // The real JSON crosses the first chunk boundary if substring offsets win.
+  const mention = "The delimiters are `<!-- agentrig-verdict:v1 -->` and `<!-- /agentrig-verdict -->`.\n";
+  const value = {...structured, modelSource: "x".repeat(800)};
+  const result = run(mention + "Evidence\n".repeat(6600) + verdictBlock(value), undefined, undefined, undefined, undefined, false, 0, "Codex", undefined, "Conductor ledger: quoted delimiter chunk boundary fixture");
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posts.length).toBeGreaterThan(1);
+  const parsed = result.posts.flatMap(part => {
+    try { return [parseVerdict(part)]; } catch { return []; }
+  });
+  expect(parsed).toEqual([value]);
+  expect(result.posts.some(part => part.includes(mention))).toBe(true);
 });

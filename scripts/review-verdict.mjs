@@ -28,13 +28,40 @@ export const ReviewVerdict = z.object({
   }
 });
 export function verdictBlock(value) { return `${START}\n${JSON.stringify(value, null, 2)}\n${END}`; }
-export function hasVerdictBlock(body) { return body.includes('<!-- agentrig-verdict:') || body.includes(END); }
-export function parseVerdict(body, expected = {}) {
-  const starts = body.split(START);
-  if (body.split('<!-- agentrig-verdict:').length !== 2 || starts.length !== 2 || body.split(END).length !== 2 || body.indexOf(END) < body.indexOf(START)) {
+// Only standalone, non-example delimiter lines participate in the protocol.
+// Keep original offsets (including CRLF) for prose diagnostics and posting chunks.
+function verdictMarkers(body) {
+  const markers = [];
+  let fence;
+  for (const match of body.matchAll(/[^\n]*(?:\n|$)/g)) {
+    const line = match[0].replace(/\r?\n$/, '');
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) {
+      if (marker?.[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+      continue;
+    }
+    if (marker) { fence = marker; continue; }
+    // A malformed standalone protocol delimiter is still an attempted block.
+    // Prose substrings, code spans, blockquotes and indented code are not.
+    if (/^ {0,3}<!-- \/?agentrig-verdict(?=[: >]|$)/.test(line)) {
+      const text = line.trim();
+      if (text.includes('-->') && text.indexOf('-->') !== text.length - 3) continue;
+      markers.push({ text, start: match.index, end: match.index + match[0].length });
+    }
+  }
+  return markers;
+}
+export function hasVerdictBlock(body) { return verdictMarkers(body).length > 0; }
+export function verdictRange(body) {
+  const markers = verdictMarkers(body);
+  if (markers.length !== 2 || markers[0].text !== START || markers[1].text !== END) {
     throw new Error('expected exactly one complete agentrig-verdict:v1 block');
   }
-  const verdict = ReviewVerdict.parse(JSON.parse(starts[1].split(END)[0].trim()));
+  return { start: markers[0].start, contentStart: markers[0].end, contentEnd: markers[1].start, end: markers[1].end };
+}
+export function parseVerdict(body, expected = {}) {
+  const range = verdictRange(body);
+  const verdict = ReviewVerdict.parse(JSON.parse(body.slice(range.contentStart, range.contentEnd).trim()));
   for (const key of ['reviewedHead', 'assertedModel', 'slot']) {
     if (expected[key] !== undefined && verdict[key] !== expected[key]) throw new Error(`verdict ${key} mismatch: expected ${expected[key]}`);
   }
