@@ -53,7 +53,7 @@ shell call. For nonempty steps the builder/conductor runs declared bootstrap, op
 steps, each judged by its exit code. Stop on nonzero; do not infer success from output counts.
 Record name, command, exit code, UTC start/end, counts (N/A if unavailable), exact head,
 runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional countsParser
-metadata never overrides the exit code. Receipts, conductor reports and fixer handoffs list
+metadata never overrides the exit code. Receipts, conductor reports and durable fixer pre-push handoffs list
 steps by name, not a hard-coded trio. A changed head invalidates prior same-head receipts.
 
 Empty steps means NO local checks, including bootstrap and preflight: do not execute either.
@@ -358,7 +358,7 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
 2. Only then perform this read-back gate. Read back `gh pr view NN --json body` BEFORE
    spawning the fixer subagent; verify the
    persisted `Repair round: N/3` and assigned ledger blocker IDs match the intended handoff.
-   Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim in the fixer handoff.
+   Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim in the dispatched fixer task.
    Dispatch only ledger-blocking findings. Nonblocking defects go to residual issues; advisory
    notes are not repairs. Record any reclassification in the ledger first with its rationale, then edit and read back
    again before dispatch. Missing or mismatched persistence halts; never delegate its creation.

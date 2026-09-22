@@ -148,7 +148,7 @@ Pass named receipts with head/commands/exits/counts/times as inputs. Reviewers j
 reviewers do NOT run checks. Optional reviewer-owned probes may support findings.
 Zero slots: record `External review: none declared`, skip review worktrees and jobs, and follow
 builder → declared checks → exact-head CI → land. One slot: only it runs and it also owns focused
-material-delta review. Two slots launch in parallel in separate reviewer-owned worktrees you prepare; both launch independently through `scripts/reviewer-adapters.mjs`. Hosted CI
+material-delta review. Two slots launch in parallel in separate reviewer-owned worktrees you prepare; both launch independently. Beside the launch, use this positional contract exactly once: `node scripts/reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix>`. An adapter usage error (exit 64 before vendor launch, with no `<absolute-output-prefix>.stdout`) is a conductor error and does not consume the slot's single reviewer retry. Hosted CI
 monitoring starts immediately and overlaps reviews; green hosted CI is required only at landing.
 Never pass builder context. API reviewers receive the relevant source/diff bundle and receipts.
 
@@ -194,7 +194,7 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
 2. Only then perform this read-back gate. Read back `gh pr view NN --json body` BEFORE
    spawning the fixer subagent; verify the
    persisted `Repair round: N/3` and assigned ledger blocker IDs match the intended handoff.
-   Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim in the fixer handoff.
+   Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim in the dispatched fixer task.
    Dispatch only ledger-blocking findings. Nonblocking defects go to residual issues; advisory
    notes are not repairs. Record any reclassification in the ledger first with its rationale, then edit and read back
    again before dispatch. Missing or mismatched persistence halts; never delegate its creation.

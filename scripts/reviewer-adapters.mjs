@@ -73,16 +73,17 @@ export async function runApi(config, binding, prompt, buildRoleProvider) {
   return { ...validateResult(binding, { model: provider.model, text }, 0), events, modelSource: `providers.${name}.model via constructed provider.model (not wire attestation)` };
 }
 
+const USAGE = "usage: reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix>";
+class UsageError extends Error {}
 export async function main(args) {
   const [configPath, slot, promptPath, cwd, prefix] = args;
-  if (args.length !== 5) throw new Error("usage: reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix>");
+  if (args.length !== 5 || resolve(prefix) !== prefix) throw new UsageError(USAGE);
   const { parseConfigText } = await import("../packages/cli/dist/config.js");
   const config = parseConfigText(configPath, readFileSync(configPath, "utf8"));
   if (!Object.hasOwn(config.reviewers ?? {}, slot)) throw new Error("undeclared reviewer slot");
   const binding = config.reviewers[slot];
   let prompt = readFileSync(promptPath, "utf8");
   if (!prompt.trim()) throw new Error("empty review prompt");
-  if (resolve(prefix) !== prefix) throw new Error("output prefix must be absolute");
   for (const suffix of ["stdout", "stderr", "last", "md", "model.txt", "provenance.json", "verdict.json"]) if (existsSync(`${prefix}.${suffix}`)) throw new Error("output already exists; use a fresh attempt prefix");
   const gitHead = spawnSync("git", ["-C", cwd, "rev-parse", "HEAD"], { encoding: "utf8" });
   if (gitHead.status !== 0) throw new Error("cannot resolve reviewed worktree head");
@@ -116,4 +117,4 @@ export async function main(args) {
   writeFileSync(`${prefix}.model.txt`, result.model + "\n");
   writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ verdict, reviewedHead, slot, adapter: binding.adapter, model: result.model, assertedModel: verdict.assertedModel, transportModel, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
 }
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = 2; });
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = error instanceof UsageError ? 64 : 2; });

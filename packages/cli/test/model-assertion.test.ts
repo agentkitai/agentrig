@@ -14,14 +14,28 @@ it("M-no-family: family assertion needs exact independent transport; preserves a
 it.each([undefined, "gpt-5", "gpt-5.4"])("M-no-transport: family with transport %s fails", transportModel => {
   expect(() => parseVerdict(block("gpt-5"), { assertedModel: "gpt-5.5", transportModel })).toThrow(/assertedModel mismatch/);
 });
+it("M-suffixed-family: suffixed numeric GPT pins accept their major family only with the exact transport pin", () => {
+  expect(parseVerdict(block("gpt-5"), { assertedModel: "gpt-5.6-sol", transportModel: "gpt-5.6-sol" }).assertedModel).toBe("gpt-5");
+  expect(() => parseVerdict(block("gpt-4"), { assertedModel: "gpt-5.6-sol", transportModel: "gpt-5.6-sol" })).toThrow(/assertedModel mismatch/);
+  expect(() => parseVerdict(block("gpt-5"), { assertedModel: "gpt-5.6-sol" })).toThrow(/assertedModel mismatch/);
+  expect(() => parseVerdict(block("gpt-5"), { assertedModel: "gpt-5.6-sol", transportModel: "gpt-5.6" })).toThrow(/assertedModel mismatch/);
+});
 it.each(["gpt-4.1", "claude-opus-5", "gpt-5.4", "gpt-5.5-extra", "GPT-5"])("M-any-family: %s cannot stand in for pinned model", asserted => {
   expect(() => parseVerdict(block(asserted), { assertedModel: "gpt-5.5", transportModel: "gpt-5.5" })).toThrow(/assertedModel mismatch/);
+});
+it("prompt offers family guidance only for supported numeric GPT minor pins, including suffixes", () => {
+  const suffixed = verdictPrompt({ reviewedHead: head, slot: "Codex", assertedModel: "gpt-5.6-sol", modelSource: "transport" });
+  expect(suffixed).toContain("you may assert the major family gpt-5");
+  expect(suffixed).toContain("exact adapter transport proof of gpt-5.6-sol");
+  const unsupported = verdictPrompt({ reviewedHead: head, slot: "Claude", assertedModel: "claude-opus-5", modelSource: "transport" });
+  expect(unsupported).not.toContain("you may assert the major family");
+  expect(unsupported).toContain("Assert the exact pin claude-opus-5");
 });
 it("model prompt supplies pin and transport source without overriding conflicting identity", () => {
   const prompt = verdictPrompt({ reviewedHead: head, slot: "Codex", assertedModel: "gpt-5.5", modelSource: "stderr banner model: line (exactly one)" });
   expect(prompt).toContain("gpt-5.5");
   expect(prompt).toContain("stderr banner model: line (exactly one)");
-  expect(prompt).toContain("unless your own identity contradicts the family");
+  expect(prompt).toContain("If your own identity contradicts the configured pin");
 });
 it.each(["gpt-5", "gpt-4.1", "claude-opus-5"])("adapter transport and receipt integration: %s", asserted => {
   const dir = mkdtempSync(join(tmpdir(), "model-assertion-"));
