@@ -5,16 +5,18 @@ import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
 /** Only operator-owned USER profiles may supply process environment. Project profiles
  * continue to resolve normal options but never grant environment-setting authority. */
-export async function resolveChildEnvironment(options: { cwd?: string; home?: string; profile?: string; env?: NodeJS.ProcessEnv; validateProfile?: boolean; project?: ConfigFile } = {}): Promise<NodeJS.ProcessEnv> {
+export async function resolveChildEnvironment(options: { cwd?: string; home?: string; profile?: string; env?: NodeJS.ProcessEnv; validateProfile?: boolean; explicitTrust?: boolean; project?: ConfigFile } = {}): Promise<NodeJS.ProcessEnv> {
   const cwd = options.cwd ?? process.cwd(), home = options.home ?? homedir();
   const env = { ...(options.env ?? process.env) };
   const profile = options.profile ?? env.AGENTRIG_CHILD_PROFILE;
   const boundary = await resolveProjectBoundary(cwd, home);
   const user = boundary.userStateSafe ? await readConfigFile(join(home, ".agentrig", "config.json")) : undefined;
-  if (options.validateProfile && profile !== undefined && profile !== "recommended") {
+  if (profile !== undefined && profile !== "recommended") {
     // Reuse normal built-in/unknown-profile validation; trusted project declarations
     // may name profiles, but never contribute environment authority.
-    resolveConfig({ defaults: {}, cli: {}, env: {}, ...(user === undefined ? {} : { user }), ...(options.project === undefined ? {} : { project: options.project }), profile });
+    const trust = options.project === undefined ? await resolveProjectTrust(cwd, { home, interactive: false, ...(options.explicitTrust === undefined ? {} : { explicitTrust: options.explicitTrust }) }) : undefined;
+    const project = options.project ?? (trust?.trusted ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json")) : undefined);
+    resolveConfig({ defaults: {}, cli: {}, env: {}, ...(user === undefined ? {} : { user }), ...(project === undefined ? {} : { project }), profile });
   }
   Object.assign(env, profile === undefined ? {} : user?.profiles?.[profile]?.childEnv);
   if (profile !== undefined) env.AGENTRIG_CHILD_PROFILE = profile;

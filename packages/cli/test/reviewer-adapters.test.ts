@@ -169,8 +169,21 @@ it.each(["codex-cli", "claude-cli"])("M-adapter-home: %s refuses missing home be
     const env = { ...process.env, HOME: dir };
     delete env.CODEX_HOME; delete env.CLAUDE_CONFIG_DIR; delete env.AGENTRIG_CHILD_PROFILE;
     const run = spawnSync(process.execPath, ["scripts/reviewer-adapters.mjs", config, "Personal", prompt, dir, prefix], { env, encoding: "utf8" });
-    expect(run.status).toBe(2);
+    expect(run.status).toBe(64);
     expect(run.stderr).toContain("REVIEWER_HOME_MISSING: reviewers:Personal");
     expect(existsSync(`${prefix}.stdout`)).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it("M-A3-invalid-profile: pre-launch profile errors use configuration exit 64", () => {
+  const dir = mkdtempSync(join(tmpdir(), "review-profile-"));
+  try {
+    writeFileSync(join(dir, "config"), JSON.stringify({ reviewers: { Personal: { adapter: "codex-cli", model: "pin" } } }));
+    writeFileSync(join(dir, "prompt"), "review");
+    const env = { ...process.env, HOME: dir, CODEX_HOME: dir, AGENTRIG_CHILD_PROFILE: "typo" };
+    const run = spawnSync(process.execPath, ["scripts/reviewer-adapters.mjs", join(dir, "config"), "Personal", join(dir, "prompt"), dir, join(dir, "out")], { env, encoding: "utf8" });
+    expect(run.status).toBe(64);
+    expect(run.stderr).toContain("unknown config profile");
+    expect(existsSync(join(dir, "out.stdout"))).toBe(false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

@@ -267,3 +267,12 @@ it("topic caps arbitration and explicitly dispositions focused classification di
     expect(() => assertArbitration(topic.replace(phrase, ""))).toThrow();
   }
 });
+
+for (const name of ["ship", "topic", "review"]) {
+  it(`${name}: M-A1-A3 canonical heading and non-retry preflight contract`, () => {
+    const text = readSkillText(new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url), "utf8");
+    expect(text).toContain("Keep this canonical heading unchanged, with no suffix.");
+    expect(text).toContain("separate body line beneath it");
+    expect(text).toContain("pre-launch configuration refusals (exit 64), not retry-consuming exit 2");
+  });
+}

@@ -2,6 +2,12 @@
 
 ## Pending review — issue #506, profile-scoped child environment
 
+Repair round 1 addresses dispatched C1/C2/A1/A3/CI1: credential aliases rejected;
+unknown profiles refused before child launch; doctor skips login probes for invalid
+configuration; review headings remain canonical with separate home provenance;
+preflight exits 64 without consuming the reviewer retry; adapter fixtures own fake
+reviewer homes. Independent delta review and exact-head hosted CI remain pending.
+
 Implementation adds optional validated user-profile childEnv, CLI-wide inheritance,
 per-row train environment and pre-launch reviewer-home guards, safe per-slot doctor
 login-status diagnostics, and adapter/comment home provenance. Project environment

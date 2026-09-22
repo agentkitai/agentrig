@@ -83,8 +83,14 @@ export async function main(args) {
   if (!Object.hasOwn(config.reviewers ?? {}, slot)) throw new Error("undeclared reviewer slot");
   const binding = config.reviewers[slot];
   const { resolveChildEnvironment, reviewerHome } = await import("../packages/cli/dist/child-env.js");
-  const childEnv = await resolveChildEnvironment({ cwd, validateProfile: true, project: config, ...(profile === undefined ? {} : { profile }) });
-  const home = reviewerHome(slot, binding.adapter, childEnv);
+  let childEnv, home;
+  try {
+    childEnv = await resolveChildEnvironment({ cwd, project: config, ...(profile === undefined ? {} : { profile }) });
+    home = reviewerHome(slot, binding.adapter, childEnv);
+  } catch (error) {
+    // Configuration/auth preflight is not a reviewer launch and consumes no retry.
+    throw new UsageError(error.message);
+  }
   let prompt = readFileSync(promptPath, "utf8");
   if (!prompt.trim()) throw new Error("empty review prompt");
   for (const suffix of ["stdout", "stderr", "last", "md", "model.txt", "provenance.json", "verdict.json"]) if (existsSync(`${prefix}.${suffix}`)) throw new Error("output already exists; use a fresh attempt prefix");

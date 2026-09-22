@@ -30,9 +30,9 @@ it("M-profile-precedence: only selected safe user profile overrides inherited va
     expect(await resolveChildEnvironment({ cwd, home, env, profile: "personal" })).toEqual({ ...env, CODEX_HOME: "/personal", LANG: "plain", AGENTRIG_CHILD_PROFILE: "personal" });
     expect((await resolveChildEnvironment({ cwd, home, env, profile: "work" })).CODEX_HOME).toBe("/work");
     expect(await resolveChildEnvironment({ cwd, home, env })).toEqual(env);
-    await expect(resolveChildEnvironment({ cwd, home, env, profile: "typo", validateProfile: true })).rejects.toThrow(/unknown config profile/);
+    await expect(resolveChildEnvironment({ cwd, home, env, profile: "typo" })).rejects.toThrow(/unknown config profile/);
     expect((await resolveChildEnvironment({ cwd, home, env, profile: "personal", validateProfile: true })).CODEX_HOME).toBe("/personal");
-    expect((await resolveChildEnvironment({ cwd: home, home, env, profile: "personal" })).CODEX_HOME).toBe("/shell");
+    await expect(resolveChildEnvironment({ cwd: home, home, env, profile: "personal" })).rejects.toThrow(/unknown config profile/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -48,6 +48,13 @@ it("M-dispatch-env: the CLI preAction makes the selected home visible to spawned
     await mkdir(join(home, ".agentrig"));
     await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: { personal: { childEnv: { CODEX_HOME: "/dispatch/personal" } } } }));
     process.env.HOME = home;
+    process.env.CODEX_HOME = "/wrong-shell";
+    delete process.env.AGENTRIG_CHILD_PROFILE;
+    const refused = buildProgram();
+    let launched = false;
+    refused.command("env-proof").action(() => { launched = true; });
+    await expect(refused.parseAsync(["--profile", "persoanl", "env-proof"], { from: "user" })).rejects.toThrow(/unknown config profile/);
+    expect(launched).toBe(false);
     const program = buildProgram();
     let observed = "";
     program.command("env-proof").action(() => { observed = spawnSync(process.execPath, ["-p", "process.env.CODEX_HOME"], { encoding: "utf8" }).stdout.trim(); });
@@ -80,4 +87,24 @@ it("M-train-slot-config: trusted checkout slots fail fast under the selected use
     Object.assign(process.env, original);
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+it.each(["AWS_CREDENTIALS", "credentials", "MY_CREDENTIALS_FILE", "GITHUB_PAT", "GH_PAT", "PASSWD", "PASSWD_FILE", "AWS_CREDS", "NPM_AUTH_TOKEN", "ApiKey"]) ("M-C1-secret-alias: rejects %s without value disclosure", key => {
+  expect(() => parse({ [key]: "do-not-echo" })).toThrow();
+  try { parse({ [key]: "do-not-echo" }); } catch (error) { expect(String(error)).not.toContain("do-not-echo"); }
+});
+
+it("M-C2-trusted-project: only trusted project profile names participate in validation", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { resolveChildEnvironment } = await import("../src/child-env.js");
+  const dir = await mkdtemp(join(tmpdir(), "project-profile-")), home = join(dir, "home"), cwd = join(dir, "project");
+  try {
+    for (const root of [home, cwd]) await mkdir(join(root, ".agentrig"), { recursive: true });
+    await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ profiles: { work: { childEnv: { CODEX_HOME: "/untrusted-override" } } } }));
+    const env = { CODEX_HOME: "/inherited" };
+    await expect(resolveChildEnvironment({ cwd, home, env, profile: "work", explicitTrust: false })).rejects.toThrow(/unknown config profile/);
+    expect((await resolveChildEnvironment({ cwd, home, env, profile: "work", explicitTrust: true })).CODEX_HOME).toBe("/inherited");
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

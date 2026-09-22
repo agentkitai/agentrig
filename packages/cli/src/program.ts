@@ -187,9 +187,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand); run commands also accept built-in recommended; other unknown names list available profiles (names only)");
   /** Apply the user-owned environment before dispatching any CLI action. */
   program.hook("preAction", async (_thisCommand, actionCommand) => {
-    const profile = (actionCommand.optsWithGlobals() as { profile?: string }).profile;
+    // Doctor owns diagnostic config validation and never probes reviewer login on invalid config.
+    if (actionCommand.name() === "doctor") return;
+    const { profile, trust } = actionCommand.optsWithGlobals() as { profile?: string; trust?: boolean };
     if (profile !== undefined || process.env.AGENTRIG_CHILD_PROFILE !== undefined) {
-      Object.assign(process.env, await resolveChildEnvironment({ ...(profile === undefined ? {} : { profile }) }));
+      Object.assign(process.env, await resolveChildEnvironment({ ...dependencies.config, ...(trust === undefined ? {} : { explicitTrust: trust }), ...(profile === undefined ? {} : { profile }) }));
     }
   });
 

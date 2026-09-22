@@ -662,3 +662,16 @@ it("M-doctor-missing-home: distinct per-slot failure and no login-status launch"
   expect(find((await diagnose(f.options)).lines, "reviewers:Primary")).toContain("REVIEWER_HOME_MISSING");
   expect(calls).toBe(0);
 });
+
+it.each([true, false])("M-C2-doctor-invalid-profile: refuses login-status despite inherited reviewer home (explicit=%s)", async explicit => {
+  const f = fixture();
+  f.files.set(join(ROOT, ".agentrig", "config.json"), JSON.stringify({ reviewers: { Primary: { adapter: "codex-cli", model: "pin" } } }));
+  f.options.cli = explicit ? { profile: "typo" } : {};
+  f.options.env = { CODEX_HOME: "/wrong-shell", ...(explicit ? {} : { AGENTRIG_CHILD_PROFILE: "typo" }) };
+  let calls = 0;
+  f.probes.run = async () => { calls++; return { code: 0, stdout: "", stderr: "" }; };
+  const result = await diagnose(f.options);
+  expect(find(result.lines, "config:profile")).toContain("does not exist");
+  expect(find(result.lines, "reviewers:Primary")).toContain("configuration is invalid");
+  expect(calls).toBe(0);
+});

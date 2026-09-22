@@ -1,5 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { describe, expect, it, vi } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readFile, mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Command } from "commander";
 import { buildProgram, describeStray } from "../src/program.ts";
 import { dreamCommand } from "../src/dream.ts";
@@ -363,3 +365,13 @@ it.each([[[]], [["Continue", "review"]]])("sessions resume forwards optional con
   expect(help).toContain("optional task");
   expect(help).not.toContain("snapshot");
 });
+
+let profileHome: string;
+beforeEach(async () => {
+  profileHome = await mkdtemp(join(tmpdir(), "program-profiles-"));
+  await mkdir(join(profileHome, ".agentrig"));
+  await writeFile(join(profileHome, ".agentrig", "config.json"), JSON.stringify({ profiles: { p: {}, leading: {}, trailing: {} } }));
+  vi.stubEnv("HOME", profileHome);
+  vi.stubEnv("AGENTRIG_CHILD_PROFILE", undefined);
+});
+afterEach(async () => { vi.unstubAllEnvs(); await rm(profileHome, { recursive: true, force: true }); });

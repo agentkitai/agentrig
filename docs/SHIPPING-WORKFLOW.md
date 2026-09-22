@@ -168,6 +168,10 @@ required slot gets one retry then halts. Wrong argument count or an invalid outp
 
 Canonical initial heading:
 `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+
+Keep this canonical heading unchanged, with no suffix. Reviewer provenance (transport model
+and resolved home) belongs in a separate body line beneath it. Missing reviewer homes or
+invalid profiles are pre-launch configuration refusals (exit 64), not retry-consuming exit 2.
 Keep full head/main provenance, asserted model source, adapter launch/provider entry, times,
 exit and worktree in each linked review receipt. Land compares the model with the slot's pinned
 model at the reviewed head; declaration changes are material and require newly declared slot
@@ -299,7 +303,7 @@ per-slot login status and visible identity without reading/printing credentials.
 
 Adapter provenance now includes `resolvedHome` and `homeVariable` for CLI transports.
 Pass the receipt via `post-review-comment.mjs --provenance <receipt>` as usual: the
-posted heading displays the resolved home beside transport model. Preserve that
+posted body displays the resolved home beside transport model beneath the unchanged canonical heading. Preserve that
 receipt through repair/posting; a home path is provenance, not proof of account
 identity. API adapters have no CLI home. Historical receipts without a home retain
 their historical heading; new adapter receipts always carry the resolved home.

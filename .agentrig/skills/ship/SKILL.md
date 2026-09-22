@@ -62,6 +62,10 @@ the slot's pinned model; it duplicates no endpoints, credentials or routing. See
 
 Each declared slot's initial comment must start with:
 `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+
+Keep this canonical heading unchanged, with no suffix. Reviewer provenance (transport model
+and resolved home) belongs in a separate body line beneath it. Missing reviewer homes or
+invalid profiles are pre-launch configuration refusals (exit 64), not retry-consuming exit 2.
 Substitute the slot name, transport-proven pinned model, full reviewed PR head SHA and full origin/main SHA. Preserve the honest assertedModel separately.
 The initial heading model must equal the slot's pinned model. A different model makes this a
 missing required initial review, not a receipt. Require the complete heading, not just a prefix

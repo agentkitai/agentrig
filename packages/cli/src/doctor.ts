@@ -386,7 +386,7 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
     checks.push({ ...loaded.check, label: "config:project" });
   }
 
-  const profile = cli.profile;
+  const profile = cli.profile ?? env.AGENTRIG_CHILD_PROFILE;
   if (profile === undefined) {
     checks.push(line("skip", "config:profile", "no active profile selected"));
   } else if (user?.profiles?.[profile] !== undefined || project?.profiles?.[profile] !== undefined) {
@@ -598,6 +598,7 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
   const reviewerEnv = { ...env, ...(profile === undefined ? {} : user?.profiles?.[profile]?.childEnv) };
   for (const [slot, binding] of Object.entries(project?.reviewers ?? {})) {
     const label = `reviewers:${slot}`;
+    if (configInvalid) { checks.push(line("skip", label, "configuration is invalid; login-status not launched")); continue; }
     try {
       const home = reviewerHome(slot, binding.adapter, reviewerEnv);
       if (!home) { checks.push(line("skip", label, "API adapter; no CLI login-status")); continue; }

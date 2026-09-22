@@ -238,3 +238,7 @@ To continue a halted task, retain its evidence and enqueue a **new unique row id
 with explicit resume pointers and unchanged authorization bounds. Existing done or
 halted row ids and stale result receipts are never reused. Directory layout/name/
 lock errors are command errors before execution, not evidence of a landed row.
+
+Reviewer adapter preflight: missing homes and invalid profiles exit 64 before launch and
+do not consume the single exit-2 retry. Fix configuration before re-dispatch. Review
+headings remain canonical; transport/home provenance is a separate body line.
