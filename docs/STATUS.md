@@ -7649,3 +7649,17 @@ Deterministic fake-command fail-first proofs cover timeout and stray active reco
 usage regressions cover cross-checkout duplicates and coverage boundaries. These are
 not live-band acceptance. Independent review/exact-head hosted CI pending; roadmap
 completion remains conductor-owned.
+
+
+### Issue #502 — declared-check budgets (PR #512)
+
+Project Vitest checks can declare a bounded per-test `testTimeout`; conductor resolution
+and between-row train validation forward it, with train command receipts retaining the
+budget. Omission preserves existing invocation/log shape. AgentRig declares 15000ms;
+named spawn-heavy fixtures use explicit local budgets, not a global default increase.
+The evalset mechanics setup also has an explicit 30000ms per-hook budget, since test
+budgets do not cover hooks. #501's exact-command retry guard is unchanged.
+Independent initial reviews passed; repair round 1 addressed the hook-budget finding
+with fail-first coverage and a killed mutant. LOW coverage observations remain advisories,
+not residual issues. Conductor marks #502's scoped implementation complete; focused
+repair/finalization review, exact-head CI and post-merge CI remain enforced landing gates.

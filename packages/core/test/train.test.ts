@@ -319,3 +319,25 @@ describe("train", () => {
     else await expect(readFile(resultPath, "utf8")).rejects.toThrow(/ENOENT/u);
   });
 });
+
+it.each([undefined, 15000])("logs and forwards the declared train test budget %s", async testTimeout => {
+  const f = await fixture(2);
+  const resolved: string[] = [];
+  expect(await runTrain(f.root, { command: f.command, testTimeout: async (checkout, profile) => {
+    resolved.push(checkout); expect(profile).toBeUndefined(); return testTimeout;
+  } })).toBe("empty");
+  expect(resolved).toEqual([row.environment.checkout, row.environment.checkout]);
+  const argv = testTimeout === undefined ? ["test"] : ["test", "--testTimeout=15000"];
+  expect(f.calls.filter(c => c === argv.join(" "))).toHaveLength(2);
+  for (const id of [1, 2]) {
+    const log = await readFile(join(f.root, `logs/${id}.log`), "utf8");
+    const receipt = log.split("\n").filter(line => line.startsWith("{")).map(line => JSON.parse(line)).find(entry => entry.argv?.[0] === "test");
+    expect(receipt.argv).toEqual(argv);
+    expect(receipt.testTimeout).toBe(testTimeout);
+  }
+});
+it("rejects unbounded train budgets before starting the suite", async () => {
+  const f = await fixture();
+  expect(await runTrain(f.root, { command: f.command, testTimeout: async () => 120001 })).toBe("halted");
+  expect(f.calls).not.toContain("test --testTimeout=120001");
+});

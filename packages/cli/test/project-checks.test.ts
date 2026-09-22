@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect } from "vitest";
 import { parseConfigText, resolveConfig } from "../src/config.js";
 import { validateEvaluationProfile } from "../src/evaluation-fixtures.js";
-import { resolveProjectChecks } from "../src/project-checks.js";
+import { resolveProjectChecks, resolveTrainTestTimeout } from "../src/project-checks.js";
 
 const parse = (checks: unknown) => parseConfigText("fixture", JSON.stringify({ checks }));
 describe("declared project checks", () => {
@@ -121,4 +121,36 @@ it("gates each declared reviewer launch on its tree's conductor preparation", as
     "Empty steps run no commands, including bootstrap/preflight",
     "A separate proof tree does not prepare reviewer dependencies",
   ]) expect(prepare).toContain(required);
+});
+
+it("forwards a declared Vitest budget to the conductor command, preserving omission", async () => {
+  const root = await mkdtemp(join(tmpdir(), "check-budget-"));
+  try {
+    await mkdir(join(root, ".agentrig"));
+    for (const testTimeout of [undefined, 15000]) {
+      await writeFile(join(root, ".agentrig/config.json"), JSON.stringify({ checks: { bootstrap: "setup", steps: [{ name: "test", command: "pnpm test", countsParser: "vitest", testTimeout }] } }));
+      expect((await resolveProjectChecks(root))?.steps[0]).toEqual({ name: "test", command: testTimeout === undefined ? "pnpm test" : "pnpm test --testTimeout=15000", countsParser: "vitest", ...(testTimeout === undefined ? {} : { testTimeout }) });
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+it.each([0, -1, 1.5, 120001, "15000", null])("rejects invalid testTimeout %s", testTimeout => {
+  expect(() => parse({ bootstrap: "setup", steps: [{ name: "test", command: "pnpm test", countsParser: "vitest", testTimeout }] })).toThrow();
+});
+it.each(["echo hi && pnpm test", "pnpm test --testTimeout=1", "python -m pytest"])("rejects ambiguous budget target %s", command => {
+  expect(() => parse({ bootstrap: "setup", steps: [{ name: "test", command, countsParser: "vitest", testTimeout: 15000 }] })).toThrow();
+});
+
+it("train resolves the same profile budget and omission as conductor", async () => {
+  const root = await mkdtemp(join(tmpdir(), "train-budget-"));
+  try {
+    await mkdir(join(root, ".agentrig"));
+    expect(await resolveTrainTestTimeout(root)).toBeUndefined();
+    const step = (testTimeout: number) => ({ name: "test", command: "pnpm test", countsParser: "vitest", testTimeout });
+    await writeFile(join(root, ".agentrig/config.json"), JSON.stringify({ checks: { bootstrap: "setup", steps: [step(15000)] }, profiles: { ci: { checks: { bootstrap: "setup", steps: [step(30000)] } }, none: { checks: { bootstrap: "setup", steps: [] } } } }));
+    expect(await resolveTrainTestTimeout(root)).toBe(15000);
+    expect(await resolveTrainTestTimeout(root, "ci")).toBe(30000);
+    expect(await resolveTrainTestTimeout(root, "none")).toBeUndefined();
+    await writeFile(join(root, ".agentrig/config.json"), JSON.stringify({ checks: { bootstrap: "setup", steps: [step(15000), { ...step(30000), name: "second" }] } }));
+    await expect(resolveTrainTestTimeout(root)).rejects.toThrow("ambiguous");
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

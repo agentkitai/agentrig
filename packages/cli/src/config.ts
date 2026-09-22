@@ -86,7 +86,15 @@ export const ProjectCheckStepSchema = z.object({
   name: checkText(256),
   command: checkText(4096),
   countsParser: z.enum(["vitest", "pytest", "go-test", "cargo-test"]).optional(),
-}).strict();
+  /** Per-test Vitest budget, not a shell/process or hook timeout. */
+  testTimeout: z.number().int().min(1).max(120_000).optional(),
+}).strict().superRefine((step, ctx) => {
+  if (step.testTimeout !== undefined && (step.countsParser !== "vitest"
+    || !/^(?:pnpm test|pnpm exec vitest run|npx vitest run|vitest run)$/u.test(step.command))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["testTimeout"],
+      message: "testTimeout requires countsParser vitest and a bare pnpm test, pnpm exec vitest run, npx vitest run or vitest run command" });
+  }
+});
 export const ProjectChecksSchema = z.object({
   bootstrap: checkText(4096),
   preflight: checkText(4096).optional(),

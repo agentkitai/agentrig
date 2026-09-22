@@ -43,6 +43,8 @@ export interface TrainOptions {
   command?: TrainCommand;
   status?: (status: TrainStatus) => void;
   sleep?: () => Promise<void>;
+  /** Resolve the project-declared Vitest per-test budget after each fast-forward. */
+  testTimeout?: (checkout: string, profile?: string) => Promise<number | undefined>;
 }
 const PR = z.object({ number: z.number().int().positive(), state: z.string(), body: z.string(), baseRefName: z.string(), headRefOid: sha, mergeCommit: z.object({ oid: sha }).nullable() });
 const Runs = z.array(z.object({ workflowName: z.string(), event: z.string(), headBranch: z.string(), headSha: sha, status: z.string(), conclusion: z.string().nullable() }));
@@ -136,8 +138,8 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         state.pr = row.resume?.pr ?? null;
         if (row.resume !== undefined) state.sessionIds.push(row.resume.session);
         const env = row.environment;
-        const exec = async (executable: string, argv: string[], retry = false): Promise<string> => {
-          await appendFile(log, JSON.stringify({ ts: new Date().toISOString(), phase: state.phase, executable, argv }) + "\n");
+        const exec = async (executable: string, argv: string[], retry = false, testTimeout?: number): Promise<string> => {
+          await appendFile(log, JSON.stringify({ ts: new Date().toISOString(), phase: state.phase, executable, argv, ...(testTimeout === undefined ? {} : { testTimeout }) }) + "\n");
           let result = await command({ executable, argv, cwd: env.checkout, log });
           if (result.code !== 0 && retry && executable === "pnpm" && argv.length === 1 && argv[0] === "test") {
             const files = vitestTimeoutFiles(result);
@@ -172,7 +174,10 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         await exec("git", ["merge", "--ff-only", `origin/${env.baseBranch}`], true);
         const startingBase = sha.parse(await exec("git", ["rev-parse", "HEAD"]));
         if (startingBase !== await exec("git", ["rev-parse", `origin/${env.baseBranch}`])) throw new Error("checkout is ahead of origin base");
-        for (const argv of [["install", "--frozen-lockfile"], ["build"], ["typecheck"], ["test"]]) await exec("pnpm", argv, true);
+        const declaredBudget = await options.testTimeout?.(env.checkout, env.profile);
+        const testTimeout = z.number().int().min(1).max(120_000).optional().parse(declaredBudget);
+        for (const argv of [["install", "--frozen-lockfile"], ["build"], ["typecheck"]]) await exec("pnpm", argv, true);
+        await exec("pnpm", testTimeout === undefined ? ["test"] : ["test", `--testTimeout=${testTimeout}`], true, testTimeout);
         state.phase = "run"; await persist();
         if (await exists(resultPath)) throw new Error("stale result receipt; use a new row id for resume");
         const marker = `agentrig-train-row:${randomUUID()}`;

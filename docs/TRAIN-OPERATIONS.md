@@ -133,6 +133,17 @@ different checkouts, rather than combining or overwriting their totals. Atomic m
 exclusive-create temporary names, so an interrupted stale `.tmp` cannot prevent a
 recovery halt record. Stale evidence is left intact.
 
+After each fast-forward, train resolves the checkout's project checks using the row's
+optional profile. A declared `testTimeout` on its bare `pnpm test` entry supplies the
+bounded higher per-test Vitest budget (AgentRig: 15000ms; zod range 1–120000ms).
+The effective argv is `pnpm test --testTimeout=15000`; its validation command log
+records both argv and numeric `testTimeout`. Without that declaration, argv and log
+shape stay unchanged. Duplicate budgeted `pnpm test` entries are ambiguous and halt;
+invalid project config also halts before validation runs. This configures the fixed
+train validation suite, not arbitrary project commands or a shell execution timeout.
+Budgeted/composite/otherwise argument-bearing suites are **not** eligible for the
+exact-command isolated retry below, preserving #501's conservative gate.
+
 Before **each** row, including resumes, validate repository root, clean checkout,
 base branch and exact GitHub origin; fetch, fast-forward only, and refuse a locally
 advanced base. Then run `pnpm install --frozen-lockfile`, `pnpm build`,
