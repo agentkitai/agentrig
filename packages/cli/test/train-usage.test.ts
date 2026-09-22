@@ -55,6 +55,7 @@ it("uses live log prefixes and scopes session and ledger warnings to their rows/
     await ledger.settle(admission, { input: 7, output: 3 }, true);
     await ledger.gap("s", "child");
     await ledger.gap("unknown");
+    await ledger.gap("orphan", "unclaimed");
     await ledger.admit({ segment: "unknown", provider: "openai-chatgpt", model: "chat", reserve: null, rates: null });
     const foreign = new SpendLedger(other);
     const foreignAdmission = await foreign.admit({ session: "parent", segment: "s", provider: "openai-chatgpt", model: "chat", reserve: null, rates: null });
@@ -68,7 +69,8 @@ it("uses live log prefixes and scopes session and ledger warnings to their rows/
       "missing spawn log: child; descendants may be unattributed",
       "session child: ledger coverage gap; row totals exclude unmetered calls",
     ]));
-    expect(two!.coverageWarnings).toHaveLength(2);
+    expect(two!.coverageWarnings).toHaveLength(3);
+    expect(two!.coverageWarnings).toContain(`ledger-wide (${root}): 1 coverage gap(s) for unclaimed sessions; not assignable to a row`);
     expect(two!.coverageWarnings.every(warning => warning.startsWith(`ledger-wide (${root}):`))).toBe(true);
     expect(three!.coverageWarnings.some(warning => warning.includes("ledger") || warning.includes("ambiguous"))).toBe(false);
     expect(await readFile(parentLog, "utf8")).toBe(prefix + '{"type":');
@@ -76,7 +78,20 @@ it("uses live log prefixes and scopes session and ledger warnings to their rows/
     await writeFile(parentLog, prefix + '{"type":\n');
     const corrupt = (await trainUsage(root)).sort((a, b) => ["one", "two", "three"].indexOf(a.row) - ["one", "two", "three"].indexOf(b.row));
     expect(corrupt[0]!.coverageWarnings).toContain("unreadable spawn log: parent; descendants may be unattributed");
-    expect(corrupt[1]!.coverageWarnings).toEqual(two!.coverageWarnings);
+    expect(corrupt[1]!.coverageWarnings).toEqual(two!.coverageWarnings.map(warning => warning.replace("1 coverage gap(s) for unclaimed", "2 coverage gap(s) for unclaimed")));
     expect(corrupt[0]!.totals.input).toBe(0);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it("rejects duplicate row identities across folders and checkouts", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "train-duplicate-")));
+  try {
+    const other = join(root, "other"); await mkdir(other);
+    for (const [folder, checkout] of [["queue", root], ["done", other]]) {
+      await mkdir(join(root, folder));
+      await writeFile(join(root, folder, "same.json"), JSON.stringify({ task: "fixture", authorization: "fixture", scope: ["src"], environment: { checkout, repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"] } }));
+    }
+    await expect(trainUsage(root)).rejects.toThrow("duplicate row identity: same");
+    expect(await trainStatus(root)).toMatchObject({ usage: null, usageError: expect.stringContaining("duplicate row identity: same") });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
