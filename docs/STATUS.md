@@ -1,5 +1,12 @@
 # Status
 
+## Complete — issue #521, declared-check user-only profiles (PR #528)
+
+The public resolver now loads safe user config for `run --profile`-compatible name
+validation while keeping commands project-owned. Train uses the same default path.
+Isolated-home regressions cover user-only names, project overrides, missing checks,
+unknown names, malformed user config, unsafe homes, and explicit injection.
+
 ## Complete — issue #517, builderProvider row field (PR #526)
 
 Train validates optional named builder routing before checkout, passes it to headless
