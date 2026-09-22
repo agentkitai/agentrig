@@ -1,3 +1,4 @@
+import { bound } from "./tools/shared.js";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, createReadStream, appendFile as appendDescriptor, open as openDescriptor, fstat, closeSync, constants } from "node:fs";
 import { promisify } from "node:util";
@@ -456,7 +457,7 @@ export class SessionStore {
     // Reconstruct every interrupted exchange on every resume. Repairs are a projection,
     // not log rewrites: subsequent committed messages must not hide older missing results.
     if (events.some(e => e.type === "message.append")) snapshot.messages = messagesFromEvents(events, true);
-    else balanceInterruptedExchanges(snapshot.messages);
+    else balanceInterruptedExchanges(snapshot.messages, legacyToolResults(snapshot.messages, events));
     const messages = snapshot.messages;
 
     // Snapshot-only observations, not workflow authority. Project identities/status,
@@ -681,7 +682,8 @@ export function messagesFromEvents(events: readonly HarnessEvent[], recoverInter
             ...(!event.ok ? { isError: true } : {}) });
         } else {
           const result = results.get(event.id);
-          if (result) result.content = event.mode === "inject" ? `${result.content}\n\n${event.display}` : event.display;
+          // post_tool persists the complete projected body, not just its injected suffix.
+          if (result) result.content = event.mode === "inject" && event.by !== "post_tool" ? `${result.content}\n\n${event.display}` : event.display;
         }
       }
     }
@@ -753,7 +755,7 @@ export function messagesFromEvents(events: readonly HarnessEvent[], recoverInter
       case "tool.result.patched": {
         const block = latestToolResult(event.id);
         if (block === undefined) break;
-        if (event.mode === "inject") {
+        if (event.mode === "inject" && event.by !== "post_tool") {
           const prior = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
           block.content = `${prior}\n\n${event.display}`;
         } else {
@@ -769,6 +771,51 @@ export function messagesFromEvents(events: readonly HarnessEvent[], recoverInter
   return messages;
 }
 
+type RecoveredResult = Extract<ContentBlock, { type: "tool_result" }>;
+
+function boundedRecoveredResult(result: RecoveredResult | undefined): RecoveredResult | undefined {
+  // Modern overflow patches already carry the exact bounded display and read_output cursor.
+  // Historical raw displays may predate that projection; never replay their full output.
+  return result === undefined || typeof result.content !== "string"
+    ? result : { ...result, content: bound(result.content).display };
+}
+
+/** Pair legacy snapshot exchanges with log occurrences, not a global ID-to-result table. */
+function legacyToolResults(messages: Message[], events: readonly HarnessEvent[]) {
+  const logged = messagesFromEvents(events);
+  const occurrences = new Map<string, Array<{ call: Extract<ContentBlock, { type: "tool_use" }>; result?: RecoveredResult }>>();
+  for (let i = 0; i < logged.length; i++) {
+    const message = logged[i]!;
+    if (message.role !== "assistant") continue;
+    // Steering/advisory messages can separate a durable result from its call.
+    // Never borrow a later assistant occurrence's result, even if IDs are reused.
+    const results: RecoveredResult[] = [];
+    for (let j = i + 1; j < logged.length && logged[j]!.role !== "assistant"; j++) {
+      if (logged[j]!.role === "user") results.push(...logged[j]!.content.filter((b): b is RecoveredResult => b.type === "tool_result"));
+    }
+    for (const call of message.content) {
+      if (call.type !== "tool_use") continue;
+      const result = results.find(b => b.toolUseId === call.id);
+      const entries = occurrences.get(call.id) ?? [];
+      entries.push({ call, ...(result === undefined ? {} : { result }) });
+      occurrences.set(call.id, entries);
+    }
+  }
+  const recovered = new Map<Message, Map<string, RecoveredResult>>();
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "assistant") continue;
+    for (const call of [...message.content].reverse()) {
+      if (call.type !== "tool_use") continue;
+      const occurrence = occurrences.get(call.id)?.pop();
+      if (occurrence?.result === undefined || occurrence.call.name !== call.name || contentHash(occurrence.call.input) !== contentHash(call.input)) continue;
+      const results = recovered.get(message) ?? new Map<string, RecoveredResult>();
+      results.set(call.id, occurrence.result);
+      recovered.set(message, results);
+    }
+  }
+  return recovered;
+}
+
 /** Idempotent projection: committed user results win; event evidence beats uncertainty. */
 function balanceInterruptedExchanges(messages: Message[], recovered = new Map<Message, Map<string, Extract<ContentBlock, { type: "tool_result" }>>>()) {
   for (let i = 0; i < messages.length; i++) {
@@ -777,11 +824,11 @@ function balanceInterruptedExchanges(messages: Message[], recovered = new Map<Me
     const next = messages[i + 1];
     const answered = new Set(next?.role === "user" ? next.content.flatMap(b => b.type === "tool_result" ? [b.toolUseId] : []) : []);
     const missing: ContentBlock[] = assistant.content.flatMap(call => call.type !== "tool_use" || answered.has(call.id) ? [] : [
-      recovered.get(assistant)?.get(call.id) ?? { type: "tool_result" as const, toolUseId: call.id,
+      boundedRecoveredResult(recovered.get(assistant)?.get(call.id)) ?? { type: "tool_result" as const, toolUseId: call.id,
         content: "[interrupted: no completion result was recorded; execution and side effects are unknown — reconcile before retrying]", isError: true, context: { principal: "platform" as const, authority: "advisory" as const } },
     ]);
     if (!missing.length) continue;
-    if (next?.role === "user") messages[i + 1] = { ...next, content: [...next.content, ...missing] };
+    if (next?.role === "user") messages[i + 1] = { ...next, content: [...next.content.filter(b => b.type === "tool_result"), ...missing, ...next.content.filter(b => b.type !== "tool_result")] };
     else messages.splice(i + 1, 0, { role: "user", content: missing });
   }
 }

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { z } from "zod";
-import { createAgent, RulePolicy, SessionStore, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
+import { createAgent, RulePolicy, SessionStore, toAnthropicRequest, toOpenAIRequest, toResponsesInput, type Message, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 
 let root: string;
 afterEach(async () => { if (root) await rm(root, { recursive: true, force: true }); });
@@ -172,4 +172,115 @@ it.each([true, false])("recovers persisted parallel tool results and patches bef
   expect(results[1]?.content).toBe("replacement\n\nextra");
   expect(results[2]).toMatchObject({ isError: true });
   expect(String(results[2]?.content)).toContain("interrupted");
+});
+
+it.each(["modern", "legacy"])("replays %s recorded bounded results before continuation and missing-result placeholders", async format => {
+  root = await mkdtemp(join(tmpdir(), "resume-recorded-boundary-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  const messages: Message[] = [
+    { role: "assistant", content: ["recorded", "missing"].map(id => ({ type: "tool_use", id, name: "read_file", input: {} })) },
+    { role: "user", content: [{ type: "text", text: "Continue with the review" }] },
+  ];
+  await store.append(id, { type: "session.start", task: "review", cwd: root, provider: "fake", model: "fake" });
+  if (format === "modern") for (const message of messages) await store.append(id, { type: "message.append", message });
+  const call = await store.append(id, { type: "tool.call", id: "recorded", name: "read_file", input: {}, inputHash: "hash" });
+  const result = await store.append(id, { type: "tool.result", id: "recorded", toolCallSeq: call.seq, ok: true, display: "REAL RESULT", output: "REAL RESULT" + "x".repeat(60_000), truncated: true, durationMs: 1 });
+  const bounded = `REAL RESULT\n[truncated; read_output seq=${result.seq} from=11 to=30011]`;
+  await store.append(id, { type: "tool.result.patched", id: "recorded", by: "core:output-overflow", display: bounded });
+  if (format === "legacy") await store.writeSnapshot({ sessionId: id, task: "review", cwd: root, turns: 0, ts: 0, messages, usage: { input: 0, output: 0 } });
+  const recovered = await store.resumeSnapshot(id);
+  expect(recovered!.messages.find(m => m.content.some(b => b.type === "text" && b.text === "Continue with the review"))!.content).toEqual([
+    { type: "tool_result", toolUseId: "recorded", content: bounded },
+    expect.objectContaining({ type: "tool_result", toolUseId: "missing", isError: true }),
+    { type: "text", text: "Continue with the review" },
+  ]);
+  for (const wire of [
+    toAnthropicRequest({ messages: recovered!.messages, tools: [], maxTokens: 100 }, "test"),
+    toOpenAIRequest({ messages: recovered!.messages, tools: [], maxTokens: 100 }, "test"),
+    toResponsesInput(recovered!.messages),
+  ]) {
+    const serialized = JSON.stringify(wire);
+    expect(serialized.indexOf("REAL RESULT")).toBeLessThan(serialized.indexOf("Continue with the review"));
+    expect(serialized).toContain("from=11 to=30011");
+  }
+  expect(await store.readAll(id)).toHaveLength(format === "modern" ? 6 : 4);
+});
+
+
+it.each(["modern", "legacy"])("preserves %s stored post-tool truncation boundary instead of concatenating the raw result", async format => {
+  root = await mkdtemp(join(tmpdir(), "resume-final-boundary-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  const assistant: Message = { role: "assistant", content: [{ type: "tool_use", id: "large", name: "read_file", input: {} }] };
+  await store.append(id, { type: "session.start", task: "review", cwd: root, provider: "fake", model: "fake" });
+  if (format === "modern") await store.append(id, { type: "message.append", message: assistant });
+  const call = await store.append(id, { type: "tool.call", id: "large", name: "read_file", input: {}, inputHash: "hash" });
+  await store.append(id, { type: "tool.result", id: "large", toolCallSeq: call.seq, ok: true, display: "RAW".repeat(10_000), durationMs: 1 });
+  // post_tool stores the complete model-facing body even when its hook mode is inject.
+  const bounded = "REAL RESULT" + "x".repeat(29_900) + "\n… [truncated 31234 UTF-16 code units]\nHOOK NOTE";
+  await store.append(id, { type: "tool.result.patched", id: "large", by: "post_tool", mode: "inject", display: bounded });
+  if (format === "legacy") await store.writeSnapshot({ sessionId: id, task: "review", cwd: root, turns: 0, ts: 0, messages: [assistant], usage: { input: 0, output: 0 } });
+  const result = (await store.resumeSnapshot(id))!.messages.flatMap(m => m.content).find(b => b.type === "tool_result");
+  expect(result).toMatchObject({ content: bounded });
+});
+
+it("bounds historical unprojected crash output without losing error status", async () => {
+  root = await mkdtemp(join(tmpdir(), "resume-old-large-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  await store.append(id, { type: "session.start", task: "review", cwd: root, provider: "fake", model: "fake" });
+  await store.append(id, { type: "message.append", message: { role: "assistant", content: [{ type: "tool_use", id: "old", name: "read_file", input: {} }] } });
+  await store.append(id, { type: "tool.result", id: "old", ok: false, display: "a".repeat(60_000), durationMs: 1 });
+  const result = (await store.resumeSnapshot(id))!.messages.flatMap(m => m.content).find(b => b.type === "tool_result");
+  expect(result).toMatchObject({ isError: true });
+  expect(String(result?.content)).toHaveLength(30_000);
+  expect(String(result?.content)).toMatch(/\n… \[truncated \d+ UTF-16 code units\]$/);
+});
+
+it.each([1, 2])("recovers legacy results across %s intervening steering messages before continuation", async count => {
+  root = await mkdtemp(join(tmpdir(), "resume-legacy-steer-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  const assistant: Message = { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "write", input: {} }] };
+  const continuation: Message = { role: "user", content: [{ type: "text", text: "continue review" }] };
+  await store.append(id, { type: "session.start", task: "review", cwd: root, provider: "fake", model: "fake" });
+  await store.append(id, { type: "tool.call", id: "t1", name: "write", input: {}, inputHash: "hash" });
+  for (let i = 0; i < count; i++) await store.append(id, { type: "steer", source: "user", message: `steer ${i}` });
+  await store.append(id, { type: "tool.result", id: "t1", ok: true, display: "durable result", durationMs: 1 });
+  await store.writeSnapshot({ sessionId: id, task: "review", cwd: root, turns: 0, ts: 0, messages: [assistant, continuation], usage: { input: 0, output: 0 } });
+  const before = await store.readAll(id);
+  const recovered = await store.resumeSnapshot(id);
+  expect(recovered!.messages[0]).toEqual(assistant);
+  expect(recovered!.messages[1]!.content).toEqual([
+    { type: "tool_result", toolUseId: "t1", content: "durable result" },
+    ...continuation.content,
+  ]);
+  expect(await store.readAll(id)).toEqual(before);
+});
+
+it("does not recover a legacy result across the next assistant occurrence with the same tool ID", async () => {
+  root = await mkdtemp(join(tmpdir(), "resume-legacy-boundary-"));
+  const store = new SessionStore({ root });
+  const id = store.create();
+  const assistant: Message = { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "write", input: {} }] };
+  const continuation: Message = { role: "user", content: [{ type: "text", text: "continue review" }] };
+  await store.append(id, { type: "session.start", task: "review", cwd: root, provider: "fake", model: "fake" });
+  await store.append(id, { type: "tool.call", id: "t1", name: "write", input: {}, inputHash: "hash" });
+  await store.append(id, { type: "steer", source: "user", message: "first call interrupted" });
+  await store.append(id, { type: "tool.call", id: "t1", name: "write", input: {}, inputHash: "hash" });
+  await store.append(id, { type: "steer", source: "user", message: "second call ongoing" });
+  await store.append(id, { type: "tool.result", id: "t1", ok: true, display: "second occurrence only", durationMs: 1 });
+  await store.writeSnapshot({ sessionId: id, task: "review", cwd: root, turns: 0, ts: 0, messages: [assistant, continuation, assistant, continuation], usage: { input: 0, output: 0 } });
+  const before = await store.readAll(id);
+  const recovered = await store.resumeSnapshot(id);
+  expect(recovered!.messages[1]!.content).toEqual([
+    expect.objectContaining({ type: "tool_result", toolUseId: "t1", isError: true, content: expect.stringContaining("interrupted") }),
+    ...continuation.content,
+  ]);
+  expect(recovered!.messages[3]!.content).toEqual([
+    { type: "tool_result", toolUseId: "t1", content: "second occurrence only" },
+    ...continuation.content,
+  ]);
+  expect(await store.readAll(id)).toEqual(before);
 });
