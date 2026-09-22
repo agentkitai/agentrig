@@ -1,7 +1,6 @@
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { readConfigFile, resolveConfig, type ConfigFile, type ReviewerSlot } from "./config.js";
-import { resolveProviderEntries } from "./provider.js";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
 /** Capture before program preAction applies the selected profile to process.env. */
@@ -50,13 +49,13 @@ export async function trainChildEnvironment(cwd: string, profile?: string, build
   if (builderProvider !== undefined) {
     const selectedProfile = profile ?? env.AGENTRIG_CHILD_PROFILE;
     const activeProfile = selectedProfile === "recommended" && user?.profiles?.recommended === undefined && config?.profiles?.recommended === undefined ? undefined : selectedProfile;
-    const resolved = resolveConfig({ defaults: {}, cli: {}, env,
+    // Match loadRunConfig: map supported environment values only, after the
+    // same user-profile childEnv overlay that the launched process receives.
+    const resolved = resolveConfig({ defaults: {}, cli: {},
+      ...(env.AGENTRIG_MODEL === undefined ? {} : { env: { model: env.AGENTRIG_MODEL } }),
       ...(user === undefined ? {} : { user }), ...(config === undefined ? {} : { project: config }),
       ...(activeProfile === undefined ? {} : { profile: activeProfile }) });
-    const { entries } = resolveProviderEntries({ provider: resolved.provider ?? "anthropic", model: resolved.model ?? "unknown",
-      ...(resolved.providers === undefined ? {} : { providers: resolved.providers }),
-      ...(resolved.roles === undefined ? {} : { roles: resolved.roles }) });
-    if (!Object.hasOwn(entries, builderProvider)) throw new Error(`unknown builder provider entry "${builderProvider}" in active profile`);
+    if (!Object.hasOwn(resolved.providers ?? {}, builderProvider)) throw new Error(`unknown builder provider entry "${builderProvider}" in active profile`);
   }
   assertReviewerHomes(config?.reviewers, env);
   return env;

@@ -71,3 +71,38 @@ it("refuses an unknown builder provider before checkout validation and accepts a
   expect(await runTrain(queue, { ...options, command })).toBe("halted");
   expect(command).toHaveBeenCalled();
 });
+
+// R1: the synthetic runtime entry is not a declared train builder provider.
+it.each(["default", "constructor", "toString"])("rejects undeclared builder %s before queue movement or checkout", async builderProvider => {
+  const { queue } = await fixture();
+  const path = join(queue, "queue/001.json");
+  const row = JSON.parse(await readFile(path, "utf8"));
+  const original = JSON.stringify({ ...row, builderProvider });
+  await writeFile(path, original);
+  const command = vi.fn();
+  expect((await trainStatus(queue, options)).invalidEntries.join("\n")).toContain("unknown builder provider");
+  expect(await runTrain(queue, { ...options, command })).toBe("halted");
+  expect(command).not.toHaveBeenCalled();
+  expect(await readFile(path, "utf8")).toBe(original);
+  expect(await readdir(join(queue, "active"))).toEqual([]);
+});
+
+// R3: lower-case environment keys are legal child environment, not config values.
+it("validates the launched profile overlay without treating child environment as config", async () => {
+  const { checkout, queue, home } = await fixture();
+  await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: { personal: {
+    providers: { sol: { provider: "openai", model: "fixture" } },
+    childEnv: { providers: "x", model: "not-config", AGENTRIG_MODEL: "mapped-model" },
+  } } }));
+  const path = join(queue, "queue/001.json");
+  const row = JSON.parse(await readFile(path, "utf8"));
+  await writeFile(path, JSON.stringify({ ...row, builderProvider: "sol" }));
+  expect((await trainStatus(queue, options)).invalidEntries).toEqual([]);
+  expect(await readdir(join(queue, "queue"))).toEqual(["001.json"]);
+  expect(await readdir(queue)).not.toContain("active");
+  expect(await trainChildEnvironment(checkout, "personal", "sol"))
+    .toMatchObject({ providers: "x", model: "not-config", AGENTRIG_MODEL: "mapped-model" });
+  const command = vi.fn(async () => ({ code: 1, stdout: "", stderr: "checkout sentinel" }));
+  expect(await runTrain(queue, { ...options, command })).toBe("halted");
+  expect(command).toHaveBeenCalled();
+});

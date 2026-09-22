@@ -145,6 +145,8 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  /** Train-internal builder-only route; additive to the resolved base system prompt. */
+  builderProvider?: string;
   /** Internal notice for mounted UIs; not a user configuration key. */
   defaultHookNotice?: string;
   tui?: TuiSettings;
@@ -830,7 +832,8 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     sandbox,
     // a function so a resumed session gets its snapshot's cwd, not this process's
     systemPrompt: (ctx) => promptBlocks({
-      system: opts.system ?? defaultSystemPrompt(ctx.cwd),
+      system: [opts.system ?? defaultSystemPrompt(ctx.cwd),
+        ...(opts.builderProvider === undefined ? [] : [`Train builder provider entry: ${JSON.stringify(opts.builderProvider)}. See ship's builder routing rule.`])].join("\n\n"),
       systemOrigin: opts.system === undefined ? "cli:default-system" : "cli:--system",
       // the generation in force when the session starts, so the listing and the `skill` tool
       // above cannot disagree about what this conversation may load
