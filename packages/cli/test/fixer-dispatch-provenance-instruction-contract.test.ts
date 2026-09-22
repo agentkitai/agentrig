@@ -19,6 +19,7 @@ const shipSentences = [
   "If the subagent tool exposes the child session ID synchronously, include it in that comment before invocation.",
   "If the ID is available only when the synchronous tool call returns, write `child session id: pending tool result` in the dispatch comment, then immediately edit that comment or reply to it with the actual child session ID when the call returns; never invent an ID or delay the task-text comment until child completion.",
   "If the call fails after dispatch or returns without an ID, read the immutable session-store `subagent.spawn` event and update the comment with its actual child session ID before proceeding; absence of both an exposed ID and a matching spawn event halts.",
+  "Invoke the fixer subagent tool without its optional `label` field; because immutable `subagent.spawn.task` records `input.label ?? input.task`, only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.",
 ] as const;
 
 const landSentences = [
@@ -37,6 +38,7 @@ const policySentences = [
   "Immediately before fixer invocation, the conductor must post and read back a durable PR comment with the exact complete dispatched task text and dispatch time, independently of fixer survival.",
   "Include the child session ID before invocation when exposed synchronously; otherwise record `child session id: pending tool result` and immediately edit or reply with the actual ID when the synchronous call returns, without delaying the task-text comment or inventing an ID.",
   "If the call fails after dispatch or returns without an ID, the conductor must read the immutable session-store `subagent.spawn` event and update the comment with its actual child session ID before proceeding; absence of both an exposed ID and a matching spawn event halts.",
+  "The conductor must invoke the fixer subagent tool without its optional `label` field: immutable `subagent.spawn.task` records `input.label ?? input.task`, so only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.",
   "Land may accept that conductor comment matched to the immutable session-store `subagent.spawn` event's exact task text and child session ID as sufficient dispatch provenance, so a missing fixer handoff alone is not a halt; when neither source exists land halts, and all receipt ordering, round/OLD/blocker identity, exact heading/source identity, and durable pre-edit comparison checks still apply.",
 ] as const;
 
@@ -46,7 +48,8 @@ const squashSentences = [
 
 const statusSentences = [
   "Fixers now publish the dispatched round, receipt, exact finding sources, dispatch time and pre-edit comparison before pushing; ship conductors independently persist exact task/session provenance, and land accepts the matched conductor comment plus immutable spawn while retaining every ordering, identity and pre-edit check.",
-  "The squash rule's sole identifier exception preserves a verbatim human authorization quote without attributing commit authorship to a model or agent; repair round: 0/3, review disposition pending, and no roadmap completion is claimed.",
+  "Fixer tool invocations omit the optional `label` so immutable `subagent.spawn.task` preserves the full task used for provenance matching.",
+  "The squash rule's sole identifier exception preserves a verbatim human authorization quote without attributing commit authorship to a model or agent; repair round: 1/3, blocker X-F1 repaired pending focused review, and no roadmap completion is claimed.",
 ] as const;
 
 function expectSentences(text: string, sentences: readonly string[]): void {

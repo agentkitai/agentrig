@@ -102,6 +102,7 @@ The fixer must post and read back a durable pre-push GitHub PR handoff comment q
 Immediately before fixer invocation, the conductor must post and read back a durable PR comment with the exact complete dispatched task text and dispatch time, independently of fixer survival.
 Include the child session ID before invocation when exposed synchronously; otherwise record `child session id: pending tool result` and immediately edit or reply with the actual ID when the synchronous call returns, without delaying the task-text comment or inventing an ID.
 If the call fails after dispatch or returns without an ID, the conductor must read the immutable session-store `subagent.spawn` event and update the comment with its actual child session ID before proceeding; absence of both an exposed ID and a matching spawn event halts.
+The conductor must invoke the fixer subagent tool without its optional `label` field: immutable `subagent.spawn.task` records `input.label ?? input.task`, so only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.
 Land may accept that conductor comment matched to the immutable session-store `subagent.spawn` event's exact task text and child session ID as sufficient dispatch provenance, so a missing fixer handoff alone is not a halt; when neither source exists land halts, and all receipt ordering, round/OLD/blocker identity, exact heading/source identity, and durable pre-edit comparison checks still apply.
 
 Collect all declared initial verdicts before one repair batch. Give the fixer all blocking
