@@ -5,7 +5,10 @@
 Train explicitly loads safe user config alongside trusted project config; user-only
 profiles also validate in train test-budget resolution. Queue schema/environment/budget
 errors are reported as `invalidEntries` before claim rather than consumed halts.
-Regression and CLI status coverage added; independent review pending. No roadmap
+Repair round 1 narrows preclaim validation to the selected first queued row; later
+malformed rows and historical non-row filenames remain read-only status diagnostics.
+Invalid selected rows stay queued without commands or consumed halt evidence.
+Focused isolation regressions added; independent delta review pending. No roadmap
 completion marker is set.
 
 ## Review heading contract follow-up — issue #515 (implementation; review pending)

@@ -212,8 +212,9 @@ Train test-budget resolution recognizes user-only profile names too, while keepi
 check declarations project-owned.
 
 `train --status` validates queued row schemas, profile/reviewer environments and test
-budgets read-only, reporting failures in `invalidEntries`. Dispatch refuses invalid
-entries before claiming a row: the JSON remains in `queue/`, no child runs and no
+budgets read-only, reporting failures in `invalidEntries`. Dispatch validates only the selected first queued row before claiming it; later queue
+errors and non-row filenames in `done/` or `halted/` remain informational status
+diagnostics, not dispatch gates. An invalid selected row is never skipped: the JSON remains in `queue/`, no child runs and no
 consumed halt record is created. Fix the config or queued row and retry. Failures
 after checkout starts still move the claimed row to `halted/`.
 
