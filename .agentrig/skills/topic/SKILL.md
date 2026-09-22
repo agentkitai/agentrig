@@ -94,7 +94,7 @@ the slot's pinned model; it duplicates no endpoints, credentials or routing. See
 
 Each declared slot's initial comment must start with:
 `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the slot name, asserted model, full reviewed PR head SHA and full origin/main SHA.
+Substitute the slot name, transport-proven pinned model, full reviewed PR head SHA and full origin/main SHA. Preserve the honest assertedModel separately.
 The initial heading model must equal the slot's pinned model. A different model makes this a
 missing required initial review, not a receipt. Require the complete heading, not just a prefix
 or SHA in the body. Post with `scripts/post-review-comment.mjs` using the slot name and the
@@ -110,7 +110,7 @@ builder → declared checks → exact-head CI → land, subject to authorization
 With zero slots use the author’s named check receipts; no conductor-review preparation is required.
 With one slot launch only it; that same slot is the focused-delta reviewer. With two slots launch
 both independently and use one independent focused-delta reviewer for material repairs.
-Land requires only declared headings, and compares each asserted model against that slot's pin.
+Land requires only declared headings, and binds each heading model to that slot's pin and checks assertedModel with trusted adapter provenance.
 Reviewers share no context with the builder and should differ by vendor or at least model.
 The independent conductor's same-head declared checks must be GREEN BEFORE launching any reviewer;
 pass named receipts as inputs, never builder reasoning. For empty steps pass the explicit none receipt.
@@ -285,7 +285,8 @@ For each recorded row, in order:
    - **Validate and post.** Re-fetch PR HEAD with `gh pr view NN --json headRefOid`. If it changed, do not call the new head reviewed; stale output is not a current-head
      review: retain its historical provenance and cover the delta or restart as required by §3.
      Validate the delimited JSON against the base zod schema and expected full reviewedHead,
-     assertedModel and slot. Reject malformed, duplicate, missing or stale structured verdicts;
+     assertedModel and slot. A GPT major-family assertion is accepted only with the adapter-owned
+     exact-pin transportModel receipt (never reviewer-authored evidence); retain both strings. Reject malformed, duplicate, missing or stale structured verdicts;
      never fall back when a machine block is present but invalid. No first-line head gate,
      echo denylist or prose SHA-claim validator remains. Prose quotations and range expressions
      are evidence, not authority. Only legacy artifacts with no block use the narrow logged
@@ -304,11 +305,11 @@ For each recorded row, in order:
      # Extract with the slot's configured adapter id (including api:<name>).
      node <REPO>/scripts/review-finding-index.mjs --extract '<ADAPTER>' '<PREFIX>.md' '<PREFIX>.verdict.md' || exit 2
      # Slot posting gate
-     node <REPO>/scripts/review-finding-index.mjs --validate '<PREFIX>.verdict.md' 'HEAD' '<SLOT>' '<MODEL>' > '<PREFIX>.validated.json' || exit 2
+     node <REPO>/scripts/review-finding-index.mjs --validate '<PREFIX>.verdict.md' 'HEAD' '<SLOT>' '<MODEL>' '<PREFIX>.provenance.json' > '<PREFIX>.validated.json' || exit 2
      [ -s "<OUT>/checks.md" ] || exit 2
      [ -s "<PREFIX>.provenance.json" ] || exit 2
      cat "<OUT>/checks.md" "<PREFIX>.provenance.json" > "<PREFIX>.proof.md" || exit 2
-     node <REPO>/scripts/post-review-comment.mjs NN '<SLOT>' '<PREFIX>.model.txt' '<PREFIX>.verdict.md' "HEAD" "MAIN" '<PREFIX>.comment.md' '<PREFIX>.proof.md' --config '<WT>/.agentrig/config.json' || exit 2
+     node <REPO>/scripts/post-review-comment.mjs NN '<SLOT>' '<PREFIX>.model.txt' '<PREFIX>.verdict.md' "HEAD" "MAIN" '<PREFIX>.comment.md' '<PREFIX>.proof.md' --config '<WT>/.agentrig/config.json' --provenance '<PREFIX>.provenance.json' || exit 2
      ```
      Persist the complete verdict, adapter provenance and check receipts in linked PR comments.
      Large payloads use the helper's canonical bounded chunks and durable posting receipt; never
@@ -484,3 +485,22 @@ Pending CI and non-blocking polish are not halts by themselves; unresolved class
 
 Do not claim a train completed unless every row landed sequentially and `main` CI was green on the
 last merge commit. Do not merge anything after a stop condition.
+
+### Trusted model provenance through posting and landing
+
+The heading uses the **transport-proven pinned model**, never a rewritten self-assertion.
+Preserve assertedModel and modelSource separately in the structured verdict, including honest
+family-only assertions. API configured model echoes are not transport attestation: API slots
+currently require exact assertions and record `transportModel: null`; they do not gain family
+relaxation. Only independent CLI transport envelopes currently attest exact transport identity.
+For exact API assertions the heading is the exact validated configured pin, not a claim of
+independent observed transport. Never synthesize a receipt from review prose or the pin.
+
+Retain the actual adapter-written `<PREFIX>.provenance.json` together with its output (bound to
+reviewed head, slot, configured model, assertedModel, verdict, and successful exit), and preserve
+its durable artifact location in the PR handoff. Posting uses
+`--provenance <PREFIX>.provenance.json`; land retrieves that same trusted adapter receipt, not a
+reviewer-authored replacement, and passes its local path as `TRUSTED_ADAPTER_RECEIPT` to
+`--validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`. Validate the reassembled
+canonical body when split comments are used. Missing or mismatched provenance halts: recover
+the original adapter artifact or rerun the adapter, never fill transportModel from configuration.

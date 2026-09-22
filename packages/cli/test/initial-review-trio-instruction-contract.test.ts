@@ -69,7 +69,7 @@ it.each(["valid", "stale", "overlong", "heading", "missing-checks", "missing-pro
     const block = mode === "heading" ? body : `${body}\n<!-- agentrig-verdict:v1 -->\n${JSON.stringify({version:1, reviewedHead:mode === "stale" ? main : mode === "overlong" ? head + "a" : head, slot:"Custom", assertedModel:"pin", modelSource:"fixture", verdict:"PASS", findings:[]})}\n<!-- /agentrig-verdict -->`;
     writeFileSync(`${prefix}.md`, block);
     if (mode !== "missing-checks") writeFileSync(join(dir, "checks.md"), "green checks");
-    if (mode !== "missing-provenance") writeFileSync(`${prefix}.provenance.json`, "{}");
+    if (mode !== "missing-provenance") writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ exit:0, reviewedHead:head, slot:"Custom", adapter:"api:peer", model:"pin", transportModel:"pin", assertedModel:"pin", verdict:{version:1, reviewedHead:head, assertedModel:"pin", modelSource:"fixture", slot:"Custom", verdict:"PASS", findings:[]} }));
     const command = gate.replaceAll("<ADAPTER>", "api:peer").replaceAll("<REPO>", repo).replaceAll("<OUT>", dir).replaceAll("<PREFIX>", prefix).replaceAll("<WT>/.agentrig/config.json", join(dir, "config.json")).replaceAll("'<SLOT>'", "'Custom'").replaceAll("'HEAD'", `'${head}'`).replaceAll("<MODEL>", "pin").replaceAll('"HEAD"', `"${head}"`).replaceAll('"MAIN"', `"${main}"`).replace(".mjs NN ", ".mjs 414 ");
     const run = spawnSync("/bin/sh", ["-c", `${command}\nprintf gate-complete`], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
     expect(run.status, run.stderr).toBe(mode === "valid" ? 0 : 2);

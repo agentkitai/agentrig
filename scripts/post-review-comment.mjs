@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "nod
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
-import { verdictRange } from "./review-verdict.mjs";
+import { verdictRange, parseVerdict, receiptTransport } from "./review-verdict.mjs";
 import { reviewerVerdict, assertReviewerVerdict } from "./review-finding-index.mjs";
 
 try {
@@ -16,6 +16,13 @@ try {
     configFile = args[configFlag + 1];
     if (!configFile) throw new Error("--config requires a path");
     args.splice(configFlag, 2);
+  }
+  const provenanceFlag = args.indexOf("--provenance");
+  let provenanceFile;
+  if (provenanceFlag !== -1) {
+    provenanceFile = args[provenanceFlag + 1];
+    if (!provenanceFile) throw new Error("--provenance requires a path");
+    args.splice(provenanceFlag, 2);
   }
   if (args.length !== 7 && args.length !== 8) throw new Error("expected PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]");
   const [pr, reviewer, modelFile, bodyFile, head, main, outputFile, proofFile] = args;
@@ -31,7 +38,9 @@ try {
   const raw = reviewerVerdict(readFileSync(bodyFile, "utf8"), slots[reviewer].adapter);
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");
   if (!body.trim()) throw new Error("empty reviewer body");
-  const verdict = assertReviewerVerdict(body, { reviewedHead: head, assertedModel: model, slot: reviewer });
+  const expected = { reviewedHead: head, assertedModel: model, slot: reviewer };
+  if (provenanceFile) expected.transportModel = receiptTransport(JSON.parse(readFileSync(provenanceFile, "utf8")), expected, parseVerdict(body, { reviewedHead: head, slot: reviewer }), slots[reviewer].adapter);
+  const verdict = assertReviewerVerdict(body, expected);
   let sizeExplanation;
   if (Buffer.byteLength(body, "utf8") > 40 * 1024) {
     const ledger = process.env.REVIEW_LARGE_BODY_LEDGER;

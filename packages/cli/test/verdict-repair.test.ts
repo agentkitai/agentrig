@@ -29,7 +29,7 @@ it("C-F1 real adapter and posting reject exact prompt echo without gh", () => {
     for (const name of ["codex", "gh"]) chmodSync(join(dir, name), 0o755);
     const adapter = run("reviewer-adapters", [join(dir, "config"), "Codex", join(dir, "prompt"), dir, join(dir, "out")]);
     const echo = readFileSync(join(dir, "echo"), "utf8");
-    expect(echo).toBe(`Review this change independently.\n\n${verdictPrompt({ ...binding, reviewedHead: head, modelSource: "reviewer assertion; transport provenance recorded separately" })}`);
+    expect(echo).toBe(`Review this change independently.\n\n${verdictPrompt({ ...binding, reviewedHead: head, modelSource: "stderr banner model: line (exactly one)" })}`);
     writeFileSync(join(dir, "model"), "pinned");
     const post = run("post-review-comment", ["489", "Codex", join(dir, "model"), join(dir, "echo"), head, binding.reviewedHead, join(dir, "posted"), "--config", join(dir, "config")]);
     expect.soft(adapter.status, adapter.stderr).not.toBe(0);

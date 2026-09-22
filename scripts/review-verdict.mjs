@@ -62,11 +62,28 @@ export function verdictRange(body) {
 export function parseVerdict(body, expected = {}) {
   const range = verdictRange(body);
   const verdict = ReviewVerdict.parse(JSON.parse(body.slice(range.contentStart, range.contentEnd).trim()));
+  // A family assertion is not proof of a minor pin. Only adapter-owned transport is.
+  const familyPin = /^gpt-(\d+)\.\d+$/.exec(expected.assertedModel ?? "");
+  const familyMatch = familyPin && verdict.assertedModel === `gpt-${familyPin[1]}`
+    && expected.transportModel === expected.assertedModel;
   for (const key of ['reviewedHead', 'assertedModel', 'slot']) {
+    if (key === 'assertedModel' && familyMatch) continue;
     if (expected[key] !== undefined && verdict[key] !== expected[key]) throw new Error(`verdict ${key} mismatch: expected ${expected[key]}`);
   }
   return verdict;
 }
 export function verdictPrompt({ reviewedHead, assertedModel, slot, modelSource }) {
-  return `Preserve your human review prose. Include exactly one delimited JSON verdict block (not a code fence). Prose is not the verdict protocol; do not infer PASS from silence. Report your actual asserted model and its source; do not copy an expected model if it differs. Every finding has severity CRITICAL/HIGH/MEDIUM/LOW, exact verbatim heading, location file:line, boolean blocking, concrete failure scenario. PASS cannot include blocking findings. Required bindings: reviewedHead=${JSON.stringify(reviewedHead)}, slot=${JSON.stringify(slot)}. Expected model=${JSON.stringify(assertedModel)}; source guidance=${JSON.stringify(modelSource)}. Replace every placeholder below with your review result; the template is deliberately not a valid verdict:\n${verdictBlock({version:1, reviewedHead:'<full reviewed commit SHA>', assertedModel:'<actual model>', modelSource:'<actual source>', slot:'<review slot>', verdict:'<PASS or FAIL>', findings:'<array of finding objects; [] only if no findings>'})}`;
+  return `Preserve your human review prose. Include exactly one delimited JSON verdict block (not a code fence). Prose is not the verdict protocol; do not infer PASS from silence. The adapter pins model ${assertedModel ?? "(not supplied)"}; its own transport provenance (${modelSource ?? "not supplied"}) must independently prove that exact pin before acceptance. Assert the pin unless your own identity contradicts the family; report that contradiction honestly. If your identity only establishes the family, you may assert that family; it is accepted only with exact adapter transport proof. Never claim to have observed transport evidence yourself. Report the source of your assertion. Every finding has severity CRITICAL/HIGH/MEDIUM/LOW, exact verbatim heading, location file:line, boolean blocking, concrete failure scenario. PASS cannot include blocking findings. Required bindings: reviewedHead=${JSON.stringify(reviewedHead)}, slot=${JSON.stringify(slot)}. Expected model=${JSON.stringify(assertedModel)}; source guidance=${JSON.stringify(modelSource)}. Replace every placeholder below with your review result; the template is deliberately not a valid verdict:\n${verdictBlock({version:1, reviewedHead:'<full reviewed commit SHA>', assertedModel:'<actual model>', modelSource:'<actual source>', slot:'<review slot>', verdict:'<PASS or FAIL>', findings:'<array of finding objects; [] only if no findings>'})}`;
+}
+
+/** Read only a trusted adapter-owned receipt; callers must not use reviewer-authored JSON. */
+export function receiptTransport(receipt, expected, verdict, adapter) {
+  if (receipt.exit !== 0 || receipt.reviewedHead !== expected.reviewedHead || receipt.slot !== expected.slot
+    || receipt.model !== expected.assertedModel
+    || (receipt.transportModel !== expected.assertedModel && !(receipt.adapter?.startsWith("api:") && receipt.transportModel === null))
+    || receipt.assertedModel !== verdict.assertedModel || JSON.stringify(receipt.verdict) !== JSON.stringify(verdict)
+    || (adapter !== undefined && receipt.adapter !== adapter)) throw new Error("adapter provenance binding mismatch");
+  // Only CLI adapters currently obtain identity from an independent transport envelope.
+  // API provider.model (including legacy receipts) is just the configured pin echoed back.
+  return ["codex-cli", "claude-cli"].includes(receipt.adapter) ? receipt.transportModel : undefined;
 }

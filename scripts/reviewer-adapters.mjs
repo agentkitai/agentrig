@@ -87,7 +87,7 @@ export async function main(args) {
   const gitHead = spawnSync("git", ["-C", cwd, "rev-parse", "HEAD"], { encoding: "utf8" });
   if (gitHead.status !== 0) throw new Error("cannot resolve reviewed worktree head");
   const reviewedHead = gitHead.stdout.trim();
-  prompt += `\n\n${verdictPrompt({ reviewedHead, assertedModel: binding.model, slot, modelSource: "reviewer assertion; transport provenance recorded separately" })}`;
+  prompt += `\n\n${verdictPrompt({ reviewedHead, assertedModel: binding.model, slot, modelSource: cliAdapters[binding.adapter]?.modelSource ?? `providers.${binding.adapter.slice(4)}.model` })}`;
   const started = new Date().toISOString();
   let result, launch;
   if (binding.adapter.startsWith("api:")) {
@@ -108,10 +108,12 @@ export async function main(args) {
     result = validateResult(binding, adapter.extract(run.stdout, run.stderr, existsSync(`${prefix}.last`) ? readFileSync(`${prefix}.last`, "utf8") : ""), run.status);
     result.modelSource = adapter.modelSource;
   }
-  const verdict = parseVerdict(result.text, { reviewedHead, assertedModel: result.model, slot });
+  // API provider.model is only a configured echo; only CLI envelopes attest transport.
+  const transportModel = binding.adapter.startsWith("api:") ? null : result.model;
+  const verdict = parseVerdict(result.text, { reviewedHead, assertedModel: binding.model, transportModel: transportModel ?? undefined, slot });
   writeFileSync(`${prefix}.md`, result.text);
   writeFileSync(`${prefix}.verdict.json`, JSON.stringify(verdict, null, 2) + "\n");
   writeFileSync(`${prefix}.model.txt`, result.model + "\n");
-  writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ verdict, reviewedHead, slot, adapter: binding.adapter, model: result.model, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
+  writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ verdict, reviewedHead, slot, adapter: binding.adapter, model: result.model, assertedModel: verdict.assertedModel, transportModel, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
 }
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = 2; });

@@ -56,11 +56,11 @@ the slot's pinned model; it duplicates no endpoints, credentials or routing. See
 
 Each declared slot's initial comment must start with:
 `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the slot name, asserted model, full reviewed PR head SHA and full origin/main SHA.
+Substitute the slot name, transport-proven pinned model, full reviewed PR head SHA and full origin/main SHA.
 The initial heading model must equal the slot's pinned model. A different model makes this a
 missing required initial review, not a receipt. Require the complete heading, not just a prefix
 or SHA in the body. Post with `scripts/post-review-comment.mjs` using the slot name and the
-reviewed config path; never compose an alternate heading inline. Persist per-adapter provenance
+reviewed config path and `--provenance <PREFIX>.provenance.json`; never compose an alternate heading inline. Persist per-adapter provenance
 (launch/provider entry, model assertion source, start/end, exit, head/main and worktree) with the verdict.
 Never infer the asserted model from reviewer prose. Truncation, failed runs, ambiguous assertion,
 empty output or pin mismatch are not completed reviews. Retry once with fresh artifacts, then halt.
@@ -75,7 +75,10 @@ builder → declared checks → exact-head CI → land, subject to authorization
 With zero slots use the author’s named check receipts; no conductor-review preparation is required.
 With one slot launch only it; that same slot is the focused-delta reviewer. With two slots launch
 both independently and use one independent focused-delta reviewer for material repairs.
-Land requires only declared headings, and compares each asserted model against that slot's pin.
+Land requires only declared headings and exact adapter transport pins. A supported numeric major-family
+assertion for a configured minor pin is accepted only with adapter-owned exact-pin
+transport provenance; a different family or minor remains fatal. Preserve assertedModel
+and transportModel separately in the receipt; never relabel the reviewer's assertion.
 Reviewers share no context with the builder and should differ by vendor or at least model.
 The independent conductor's same-head declared checks must be GREEN BEFORE launching any reviewer;
 pass named receipts as inputs, never builder reasoning. For empty steps pass the explicit none receipt.
@@ -184,3 +187,22 @@ is advisory, not a blocker while the ledger is unresolved.
 - When a conductor supplied the tree, leave its cleanup to the conductor after reporting the
   restored/joined state. Otherwise remove your own worktree when done. Leave the main working
   tree and every sibling reviewer tree exactly as you found them.
+
+### Trusted model provenance through posting and landing
+
+The heading uses the **transport-proven pinned model**, never a rewritten self-assertion.
+Preserve assertedModel and modelSource separately in the structured verdict, including honest
+family-only assertions. API configured model echoes are not transport attestation: API slots
+currently require exact assertions and record `transportModel: null`; they do not gain family
+relaxation. Only independent CLI transport envelopes currently attest exact transport identity.
+For exact API assertions the heading is the exact validated configured pin, not a claim of
+independent observed transport. Never synthesize a receipt from review prose or the pin.
+
+Retain the actual adapter-written `<PREFIX>.provenance.json` together with its output (bound to
+reviewed head, slot, configured model, assertedModel, verdict, and successful exit), and preserve
+its durable artifact location in the PR handoff. Posting uses
+`--provenance <PREFIX>.provenance.json`; land retrieves that same trusted adapter receipt, not a
+reviewer-authored replacement, and passes its local path as `TRUSTED_ADAPTER_RECEIPT` to
+`--validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`. Validate the reassembled
+canonical body when split comments are used. Missing or mismatched provenance halts: recover
+the original adapter artifact or rerun the adapter, never fill transportModel from configuration.

@@ -4,7 +4,7 @@ import { cliAdapters, normalizeReviewerHead } from "./reviewer-adapters.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { verdictRange, hasVerdictBlock, parseVerdict } from "./review-verdict.mjs";
+import { verdictRange, hasVerdictBlock, parseVerdict, receiptTransport } from "./review-verdict.mjs";
 
 // Current adapters already return verdict-only text (.last for Codex, .result for Claude).
 // Also support old transcript artifacts without cutting a markerless verdict's provenance.
@@ -104,9 +104,12 @@ function proseFindings(body, unsupported, verdict) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     if (process.argv[2] === "--validate") {
-      const [, , , input, reviewedHead, slot, assertedModel] = process.argv;
-      if (process.argv.length !== 7) throw new Error("usage: --validate FILE HEAD SLOT MODEL");
-      const verdict = parseVerdict(readFileSync(input, "utf8"), { reviewedHead, slot, assertedModel });
+      const [, , , input, reviewedHead, slot, assertedModel, provenance] = process.argv;
+      if (![7, 8].includes(process.argv.length)) throw new Error("usage: --validate FILE HEAD SLOT MODEL [ADAPTER_PROVENANCE]");
+      const body = readFileSync(input, "utf8");
+      const expected = { reviewedHead, slot, assertedModel };
+      if (provenance) expected.transportModel = receiptTransport(JSON.parse(readFileSync(provenance, "utf8")), expected, parseVerdict(body, { reviewedHead, slot }));
+      const verdict = parseVerdict(body, expected);
       console.log(JSON.stringify(verdict, null, 2));
     } else if (process.argv[2] === "--extract") {
       const [, , , adapter, input, output] = process.argv;

@@ -241,3 +241,33 @@ An early missing marker is advisory, not a blocker while the ledger is unresolve
 must not request a repair round for that scheduled finalization. Cover the final docs-only
 delta under the normal delta policy and re-verify exact-head CI. The land gate is unchanged:
 the done marker must be present on the head being landed; land never adds it itself.
+
+### Transport-proven family assertions (R18d / #500)
+
+The configured minor pin remains exact: CLI adapters require their independently observed
+transport provenance to equal it; API configured echoes only support exact assertions. Only a numeric GPT major-family assertion (`gpt-5` for `gpt-5.5`) may differ,
+and only with that independent exact-pin proof. Different families, different minors, and
+family assertions without transport proof fail closed. Verdict JSON cannot supply transport proof.
+Adapter receipts retain `assertedModel` and `transportModel` separately; `model` and the canonical
+heading retain the transport-proven pin. Prompts state the pin and transport source, asking reviewers
+to assert the pin unless their own identity contradicts its family, without pretending to observe
+the transport. Pass the trusted adapter receipt as the final `--validate` argument in shipping workflows and as
+`post-review-comment.mjs --provenance PATH` (after `--config PATH`); both bind receipt to head, slot,
+pin and verdict, and posting also binds the configured adapter. Never substitute reviewer-authored
+JSON for the adapter receipt. Exact assertions retain the legacy no-receipt script path; shipping workflows still carry the actual adapter receipt through landing.
+
+### Transport authority at the posting/landing boundary
+
+API `provider.model` echoes the configured request label, not independently observed
+transport identity. API adapters therefore record `transportModel: null` and require
+an exact `assertedModel`; legacy API receipts carrying the configured echo cannot
+authorize family relaxation either. CLI transport envelopes remain independent exact
+pin evidence. Preserve the honest `assertedModel` and `modelSource` in all verdicts.
+
+Headings carry the transport-proven pinned model (for API, the exact validated configured
+pin, without implying independently observed transport). Keep the actual adapter-written
+`<PREFIX>.provenance.json` as a durable artifact and record its location in the handoff.
+Posting supplies `--provenance <PREFIX>.provenance.json`. Land retrieves the same artifact
+and runs `node scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`
+on the reassembled canonical body. Never reconstruct a receipt from the configured pin
+or reviewer prose; missing or mismatched artifacts require recovery or an adapter rerun.

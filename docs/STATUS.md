@@ -1,5 +1,16 @@
 # Status
 
+PR #504 repair round 1 addresses C1/X1 only: API configured echoes no longer authorize
+family relaxation (exact API assertions remain usable); landing and all workflow copies
+retain the actual adapter receipt, transport-pinned headings, and honest assertions.
+Fail-first API/CLI/landing regressions and named mutants accompany the repair receipt.
+Independent delta review and landing remain pending; ROADMAP is not marked complete.
+
+R18d #500 builder follow-up: model-family assertions now require independent exact-pin adapter
+transport provenance; receipts preserve both assertion and transport strings. Targeted fail-first
+and negative-family/absent-transport coverage added. Review/landing pending; ROADMAP completion
+remains conductor-owned.
+
 ## R18d review-tooling residuals (#490, #491, #492; PR #499)
 
 Standalone, non-example verdict delimiter scanning is shared by parsing, indexing
