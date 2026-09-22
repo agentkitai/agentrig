@@ -121,7 +121,7 @@ it("every repository skill instruction reader uses the shared skill-text loader"
     }
   }
   expect(violations).toEqual([]);
-});
+}, 30_000);
 
 it.each([
   'import { readFile } from "node:fs/promises"; const read = p => readFile(p); read(".agentrig/skills/topic/SKILL.md");',

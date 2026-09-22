@@ -88,7 +88,7 @@ describe("E1 independent outcome checks", () => {
     expect(await readFile(join(second, leaf), "utf8")).toBe(original);
     expect(Object.isFrozen(mechanicsSources)).toBe(true);
     passed(worker("A1", second));
-  });
+  }, 30_000);
   it("vendors exact upstream bytes and runs all upstream cases separately", async () => {
     for (const [path, expected] of Object.entries({ "index.js": "27f19b757f7c1186b92c405a213bf0dd9b6cbe95",
       "test.js": "0f0242777b6b1ce79853ebc20621ced787c94751", LICENSE: "9af4a67d206f24ecdbb5fdff2839041ca0bbd346" })) {
@@ -101,7 +101,7 @@ describe("E1 independent outcome checks", () => {
     const source = await readFile(join(path, "index.js"), "utf8");
     await writeFile(join(path, "index.js"), source.replace("num.trim() !== ''", "num !== ''"));
     failed(worker("X1", path)); failed(worker("X1", path, "regression"));
-  });
+  }, 30_000);
 
   it.each(["X2", "X3"])("%s accepts a correct implementation and rejects coercion/missing output", async (id) => {
     const path = await external();
@@ -115,7 +115,7 @@ describe("E1 independent outcome checks", () => {
     failed(worker(id, path));
     // A task failure is not disguised as regression failure.
     passed(worker(id, path, "regression"));
-  });
+  }, 30_000);
 
   it("X4 checks actual findings, source quotes and required prose rather than a done claim", async () => {
     const path = await external();
@@ -191,7 +191,7 @@ describe("E1 independent outcome checks", () => {
     passed(worker("A4", path));
     await writeFile(join(path, "answer.json"), JSON.stringify({ ...answer, snapshots: "sum", missingUsage: "zero" }));
     failed(worker("A4", path));
-  });
+  }, 30_000);
 });
 
 describe("E1 workspace and outcome mechanics", () => {
@@ -340,5 +340,5 @@ syncBuiltinESMExports();`);
     expect(result.status).toBe(2); expect(JSON.parse(result.stdout).outcome).toBe("BLOCKED");
     const prep = spawnSync(process.execPath, [join(root, "eval/workspace.mjs"), "__proto__", root, join(path, "task")], { encoding: "utf8" });
     expect(prep.status).toBe(2); expect(prep.stderr).toContain("unknown task");
-  });
+  }, 30_000);
 });

@@ -147,12 +147,26 @@ AgentRig's worked example (also committed as its project config):
     "preflight": "pnpm test:preflight",
     "steps": [
       { "name": "build", "command": "pnpm build" },
-      { "name": "test", "command": "pnpm test", "countsParser": "vitest" },
+      { "name": "test", "command": "pnpm test", "countsParser": "vitest", "testTimeout": 15000 },
       { "name": "typecheck", "command": "pnpm typecheck" }
     ]
   }
 }
 ```
+
+A Vitest step may declare `testTimeout` as an integer from 1 to 120000 milliseconds.
+It is a **per-test** budget, not a process or hook deadline. To avoid ambiguous shell
+rewrites, it requires `countsParser: "vitest"` and a bare `pnpm test`,
+`pnpm exec vitest run`, `npx vitest run` or `vitest run` command. The resolver appends
+`--testTimeout=<milliseconds>` to the returned command (and retains the numeric field);
+conductor receipts must record that effective command and budget. Omitting the field
+returns the command unchanged. Composite commands or commands already carrying arguments
+must instead declare their arguments directly, without this field. AgentRig declares
+15000ms for sustained train/conductor load; ordinary `pnpm test` still uses Vitest's
+unchanged default. Spawn-heavy instruction walking, reviewer CLI fixtures and evaluator
+workers declare 30000ms on their individual tests; the npm-pack fixture retains its
+existing explicit 60000ms outer deadline and 45000ms owned-process deadline. These do
+not change assertions, hook limits, worker limits, or the global Vitest default.
 
 Python can declare bootstrap `python -m pip install -e .` and a step named `unit` running
 `python -m pytest` with `countsParser: "pytest"`; Rust can declare `cargo fetch` and

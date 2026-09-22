@@ -4,7 +4,7 @@
     "preflight": "pnpm test:preflight",
     "steps": [
       { "name": "build", "command": "pnpm build" },
-      { "name": "test", "command": "pnpm test", "countsParser": "vitest" },
+      { "name": "test", "command": "pnpm test", "countsParser": "vitest", "testTimeout": 15000 },
       { "name": "typecheck", "command": "pnpm typecheck" }
     ]
   },

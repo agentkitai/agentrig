@@ -93,7 +93,7 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     expect(existsSync(`${failed}.provenance.json`)).toBe(false);
     expect(readFileSync(`${failed}.stdout`, "utf8")).toBe("partial");
   } finally { rmSync(dir, { recursive: true, force: true }); }
-});
+}, 30_000);
 it("M-cap-bypass: capped API entries fail before provider construction with an actionable diagnostic", async () => {
   let constructed = false;
   const config = parseConfigText("fixture", JSON.stringify({ dailyCap: "5", providers: { capped: { provider: "openai", model: "pinned" } } }));
