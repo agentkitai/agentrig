@@ -97,3 +97,16 @@ it("standalone dogfood delegates the entire slot lifecycle without fixed launch/
 it("M-raw-prototype-key: rejects own __proto__ before record normalization", () => {
   expect(() => parseConfigText("fixture", '{"reviewers":{"__proto__":{"adapter":"codex-cli","model":"pin"}}}')).toThrow(/invalid reviewer slot name/);
 });
+
+// This assertion deliberately targets the live project declaration, not a fixture reviewer.
+it("pins the live project reviewer slots centrally", () => {
+  const config = parseConfigText("project", read(".agentrig/config.json"));
+  expect(config.reviewers).toEqual({
+    "Claude Code": { adapter: "claude-cli", model: "claude-opus-5" },
+    Codex: { adapter: "codex-cli", model: "gpt-5.6-sol" },
+  });
+  for (const path of ["docs/SHIPPING-WORKFLOW.md", ...["review", "ship", "land"].map(skill => `.agentrig/skills/${skill}/SKILL.md`)]) {
+    expect(read(path)).toContain("The project config is the single source of truth for live slot model pins");
+    expect(read(path)).not.toContain(config.reviewers!.Codex!.model);
+  }
+});

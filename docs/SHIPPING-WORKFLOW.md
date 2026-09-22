@@ -134,6 +134,8 @@ required for landing.
 
 The repository's `.agentrig/config.json` may declare `reviewers`: 0, 1 or 2 named slots.
 Missing `reviewers` or `{}` means none; profile/home values do not silently supply reviewers.
+The project config is the single source of truth for live slot model pins; workflow examples
+and standalone test fixtures are not alternative project pin declarations.
 Each slot declares only `adapter` and pinned `model`. CLI adapter definitions and launch commands
 live in `scripts/reviewer-adapters.mjs`; `api:<name>` binds an existing named `providers` entry
 whose model equals the slot pin. API entries retain their existing provider, endpoint, credential
