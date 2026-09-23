@@ -1,5 +1,13 @@
 # Status
 
+## Pending review — issue #533, verdict blocking boolean wording
+
+The reviewer verdict prompt preserves the strict finding object shape while explicitly stating
+that `blocking` is a boolean, preventing reviewers from interpreting the quoted placeholder as a
+string contract. Fail-first prompt-text and named mutation proofs accompany the PR. Repair round:
+0/3; independent conductor review and exact-head CI remain pending. No roadmap completion marker
+is set.
+
 ## Pending review — issues #535 and #536, land provenance quotation clarifications
 
 Land distinguishes identifiers introduced by the lander from broken source URLs or anchors
