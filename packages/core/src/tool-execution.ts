@@ -462,6 +462,7 @@ async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext)
     // what tool.call recorded — not anything the tool or model could claim later
     emit: emitFromTool(tool.name, callEvent.seq),
     signal: signal,
+    spawnHook: (point, spawn) => hook(point, { sessionId: id, cwd, turn: turns, spawn }, undefined, point === "pre_spawn"),
     endSignal: endSignal,
   };
   if (isolated) bindIsolatedContext(ctx, () => context.schedule?.authorized(), [config.store.root]);

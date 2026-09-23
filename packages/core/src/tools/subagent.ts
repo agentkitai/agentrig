@@ -401,6 +401,28 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
       if (role !== undefined && roleEntry === undefined && role["model-role"] !== "subagents") return refuse("agent role model-role is unavailable");
       const entry = role === undefined ? input.provider : roleEntry;
       const choice: SubagentChoice | undefined = entry === undefined ? undefined : { provider: entry };
+      const roleSnapshot = role === undefined ? undefined : Object.freeze({
+        name: role.name, origin: role.origin, hash: role.hash,
+        tools: Object.freeze([...role.tools]), modelRole: role["model-role"], delegable: role.delegable,
+      });
+      const spawnContext = Object.freeze({ task: input.task, parent: ctx.sessionId,
+        ...(roleSnapshot === undefined ? {} : { role: roleSnapshot }) });
+      if (ctx.spawnHook !== undefined) {
+        // Reserve synchronously BEFORE the asynchronous gate. Concurrent public SDK calls
+        // must not both pass a maxChildren/budget check while either hook is waiting.
+        const tokens = opts.childBudget?.maxTokens ?? 0;
+        const usd = opts.childBudget?.maxUsd ?? 0;
+        for (const p of chain) { p.children++; p.live++; p.tokens += tokens; p.usd += usd; }
+        try {
+          const result = await ctx.spawnHook("pre_spawn", spawnContext);
+          if (result.denied !== undefined) return refuse(`subagent spawn denied: ${result.denied}`);
+          ctx.signal.throwIfAborted();
+        } finally {
+          // No child started: replace this provisional reservation with the existing spawn
+          // reservation below, with no intervening await; a refusal consumes no capacity.
+          for (const p of chain) { p.children--; p.live--; p.tokens -= tokens; p.usd -= usd; }
+        }
+      }
       const config = opts.childConfig(choice);
       if (role !== undefined) {
         const available = new Set([...config.tools.map(tool => tool.name), SUBAGENT_TOOL, "read_output"]);
@@ -495,7 +517,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
           ctx.signal.throwIfAborted();
           binding.ready();
         }
-        ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task,
+        ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task, taskText: input.task,
           ...(role === undefined ? {} : { role: { name: role.name, hash: role.hash, tools: [...(allowlist ?? [])],
             modelRole: role["model-role"], delegable: role.delegable && (allowlist?.includes(SUBAGENT_TOOL) ?? false) && depth + 1 < maxDepth,
             maxTurns: effectiveTurns } }) });
@@ -582,6 +604,9 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
         /** The turn in progress. */
         let current = "";
         try {
+          // The child exists and spawn is emitted. Notification failure cannot undo it.
+          try { await ctx.spawnHook?.("post_spawn", Object.freeze({ ...spawnContext, childId: id })); }
+          catch { /* Direct SDK dispatchers, like registered hooks, cannot strand a child. */ }
           for await (const e of session.events) {
             // the child's transcript stays in the child's log: forwarding it would defeat the
             // context isolation that is the entire reason to spawn one

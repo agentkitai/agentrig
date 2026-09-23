@@ -27,6 +27,8 @@ export const HookPoint = z.enum([
   "post_model",
   "pre_tool",
   "post_tool",
+  "pre_spawn",
+  "post_spawn",
   "pre_compact",
   "session_end",
 ]);
@@ -37,6 +39,21 @@ export type HookResult =
   | { action: "deny"; reason: string }
   | { action: "modify"; patch: unknown }
   | { action: "inject"; message: string };
+
+/** Immutable, resolved spawn inputs; post_spawn additionally identifies the launched child. */
+export interface SpawnHookContext {
+  readonly task: string;
+  readonly parent: string;
+  readonly role?: Readonly<{
+    name: string;
+    origin: string;
+    hash: string;
+    tools: readonly string[];
+    modelRole: string;
+    delegable: boolean;
+  }>;
+  readonly childId?: string;
+}
 
 /** What a handler is given, narrowed per point. Extra fields are added, never repurposed. */
 export interface HookContext {
@@ -84,6 +101,8 @@ export interface HookContext {
   messages?: Message[];
   /** `session_end`: how the session finished. */
   summary?: SessionSummary;
+  /** pre_spawn/post_spawn: exact submitted task and selected role; never a rewrite seam. */
+  spawn?: SpawnHookContext;
   signal: AbortSignal;
 }
 
@@ -149,6 +168,8 @@ const ALLOWED: Record<HookPoint, ReadonlySet<HookResult["action"]>> = {
   post_model: new Set(["continue", "inject"]),
   pre_tool: new Set(["continue", "deny", "modify"]),
   post_tool: new Set(["continue", "modify", "inject"]),
+  pre_spawn: new Set(["continue", "deny"]),
+  post_spawn: new Set(["continue"]),
   pre_compact: new Set(["continue", "deny"]),
   session_end: new Set(["continue"]),
 };

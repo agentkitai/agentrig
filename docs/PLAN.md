@@ -348,8 +348,26 @@ passing checks are evidence only for what they actually test. See [decision](pla
 
 ### 2.7 Hooks
 
+R19a's first generic-mechanism slice adds extension hook points `pre_spawn` and
+`post_spawn`. `HookContext.spawn` carries the exact submitted task, parent session
+ID and optional immutable selected-role provenance (declared tools, not a rewritten
+policy). Post additionally carries the launched child's ID. Pre runs before child
+configuration/start, provisionally reserves shared capacity during the asynchronous
+gate, accepts only `continue`/`deny`, and fails closed on hook errors/timeouts or
+unsupported results. Post follows the existing spawn emission and is observational;
+its failures cannot erase or strand the child. Neither point permits modification or
+injection. With no registered spawn hooks, existing dispatch remains unchanged.
+
+The public `querySpawnLog(store, parent, { childId?, role? })` reads physical immutable
+`subagent.spawn` events in append order without fork-ancestry expansion, live state,
+backfills or writes. Strict log decoding propagates corruption/incomplete writes.
+The optional additive event field `taskText` records exact submitted input; existing
+`task` retains display-label semantics, and old events may lack `taskText` or role.
+No new event type or renderer behavior is introduced. Named-provider-bound roles and
+skill includes/assets/flags remain separate pending R19a slices.
+
 ```ts
-type HookPoint = 'user_prompt' | 'pre_model' | 'post_model' | 'pre_tool' | 'post_tool' | 'pre_compact' | 'session_end';
+type HookPoint = 'user_prompt' | 'pre_model' | 'post_model' | 'pre_tool' | 'post_tool' | 'pre_spawn' | 'post_spawn' | 'pre_compact' | 'session_end';
 type HookResult = { action: 'continue' } | { action: 'deny'; reason: string } | { action: 'modify'; patch: unknown } | { action: 'inject'; message: string };
 interface Hook { point: HookPoint; handler(ctx: HookContext): Promise<HookResult> }
 ```
