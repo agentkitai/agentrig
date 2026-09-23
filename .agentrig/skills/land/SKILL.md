@@ -138,11 +138,14 @@ also compare against the pre-dispatch receipt and persisted fixer task, and requ
 recorded precondition comparison before editing. Deferred/advisory rows need no fixer task.
 A missing, edited or mismatched heading/anchor blocks landing even when the local finding ID
 matches; preserve conflicting texts and halt, never retroactively rewrite the assignment.
-Before making any landing-gate claim that cites a comment ID, comment URL or SHA, fetch the live PR body and comments, then quote the exact fetched body or comment text containing that identifier.
+Before making a landing-gate claim that attributes a comment ID, comment URL or SHA to the PR body or a comment, fetch the live PR body and comments, then quote the exact fetched body or comment text containing that identifier.
+For a landing-gate claim sourced from a fetched GitHub API response, including a `headRefOid` or CI SHA, quote the exact response field and value from that fetched response.
+An API-response quotation does not replace the exact fetched body or comment quotation required for an attributed provenance claim.
 Only cite a comment ID present in the session-fetched comment listing; never supply one from memory or inference.
 Write the fetched live PR comment listing to a session-owned `comments.json` and retain it through the landing gate; only cite a comment ID that is present in that artifact.
 For every cited comment ID, quote the exact corresponding fetched `body` field from that same `comments.json` artifact.
-An ID absent from that listing, or a 404 from an ID that cannot be traced to the fetched data, is a lander error and never a PR defect.
+A comment ID the lander introduces that is absent from that listing, or a 404 for such an ID that cannot be traced to the fetched data, is a lander error and never a PR defect.
+A PR-supplied finding source URL or anchor that is absent, edited or mismatched remains subject to the existing halt gate above; never recast it as a lander-introduced citation error.
 The fixer's durable pre-push handoff requires the dispatched round, persisted read-back receipt, each exact finding source, dispatch time and pre-edit comparison; it does not require the full dispatched task.
 The full dispatched task belongs in the conductor's durable dispatch-time PR comment, which must match the immutable session-store `subagent.spawn` event by exact task text and child session ID.
 A missing durable fixer pre-push handoff alone is not a halt when that matched conductor-comment-plus-spawn provenance exists.
