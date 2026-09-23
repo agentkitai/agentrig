@@ -458,7 +458,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
     // a child gets the SUBAGENTS role's provider by default, or the entry the parent named at
     // spawn time; it never silently inherits the parent's own entry (R3.5a). Tools and permissions
     // are the parent's, but NOT the ability to spawn — `subagentTool` builds that at depth + 1.
-    ...(w.opts.providers !== undefined && Object.keys(w.opts.providers).length > 0
+    ...((w.opts.providers !== undefined && Object.keys(w.opts.providers).length > 0) || w.agentRoles?.some(role => role.provider !== undefined)
       ? { providerChoices: { names: w.providers.names, default: w.providers.roleNames.subagents, main: w.providers.roleNames.main } }
       : {}),
     childConfig: (choice) => {
