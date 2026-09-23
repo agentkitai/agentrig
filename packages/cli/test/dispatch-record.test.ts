@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt) {
+async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt, listing?: Record<string, unknown>[]) {
   const root = await mkdtemp(join(tmpdir(), "dispatch-")); roots.push(root);
   await mkdir(join(root, "bin"));
   const script = `#!/usr/bin/env node
@@ -20,6 +20,7 @@ if(a[0]==='pr' && a[1]==='view') {
   if(mode==='pinned-missing'){console.error('not found');process.exit(1);}
   console.log(JSON.stringify({number:mode==='pinned-wrong'?8:7,state:mode==='pinned-closed'?'CLOSED':'OPEN',headRefName:'builder-branch',headRefOid:'a'.repeat(40),body:'old marker'}));process.exit(0);
 }
+if(a[0]==='pr' && a[1]==='list' && ${listing !== undefined}) { console.log(${JSON.stringify(JSON.stringify(listing ?? []))});process.exit(0); }
 if(a[0]==='pr' && ${activation}) {
   const pr={number:7,headRefName:'builder-branch',headRefOid:'a'.repeat(40),body:'agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099'};
   const other={...pr,number:8,body:'unrelated'};
@@ -148,4 +149,26 @@ it("unpinned row resume posts and verifies after fresh marker association", asyn
   expect(p.calls).toContain("issues/7/comments");
   expect(p.calls).toContain("issues/comments/123");
   expect(p.body).toContain(p.task);
+});
+
+// Keep body and every other identity field valid: the old body-only validator
+// must not accidentally satisfy these malformed-listing regressions.
+it.each([
+  ["number string", { number: "8" }],
+  ["number zero", { number: 0 }],
+  ["number negative", { number: -1 }],
+  ["number fractional", { number: 1.5 }],
+  ["number unsafe", { number: Number.MAX_SAFE_INTEGER + 1 }],
+  ["headRefName non-string", { headRefName: 8 }],
+  ["headRefName empty", { headRefName: "" }],
+  ["headRefOid empty", { headRefOid: "" }],
+  ["headRefOid short", { headRefOid: "a".repeat(39) }],
+  ["headRefOid non-hex", { headRefOid: "g".repeat(40) }],
+])("unbound initial builder denies unrelated listing with malformed %s", async (_name, invalid) => {
+  const listing = [{ number: 8, headRefName: "unrelated-feature", headRefOid: "a".repeat(40), body: "unrelated valid body", ...invalid }];
+  const p = await probe("ok", "subagent", undefined, undefined, true, "Follow ship for a new task.", listing);
+  expect(p.result.action).toBe("deny");
+  expect(p.result.reason).toContain("invalid PR lookup entry");
+  expect(p.calls).toContain('"pr","list"');
+  expect(p.calls).not.toContain("POST");
 });
