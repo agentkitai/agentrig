@@ -1220,8 +1220,9 @@ product direction—is explicitly deferred. This definition marks no row complet
 Acceptance is row-specific in the [contract](plans/R19.md). The target has three
 layers: a workflow-agnostic harness, a ship workflow pack, and a train application.
 The sequence is strictly R19a → R19b → R19c → R19d → R19e → R19f. Rules effective
-now: wording/clarification follow-ups and LOW observations are advisories rather than
-automatic residual rows; new or stricter gates require Amit's row authorization; a
+now: wording or clarification follow-ups to an existing gate are advisories rather
+than automatic residual rows; this does not exempt LOW correctness findings from
+normal residual handling. New or stricter gates require Amit's row authorization; a
 rule broken twice becomes a mechanism rather than more skill text; and gate work has
 a per-band budget with most rows about the harness.
 

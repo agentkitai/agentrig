@@ -13,8 +13,11 @@ dispatch publication and merge guarding become pack hooks. The one-time PR #538
 posting-order waiver is historical and does not weaken that gate. [#519](https://github.com/agentkitai/agentrig/issues/519)
 is being re-planned around a builder checklist of recurring review-finding classes;
 its prior live-ablation design is not a current measurement or an active R19 row.
-LOW observations and wording/clarification follow-ups remain advisories, with no
-automatic residual issue.
+For this documentation-only definition task, Amit separately directed that its LOW
+observations are advisories with no residual issues. That task-local disposition does
+not exempt future LOW findings, including correctness defects, from normal residual
+handling. The standing R19 rule applies only to wording or clarification follow-ups
+to an existing gate, which remain advisories rather than automatic residual rows.
 
 ## Implemented and reviewed — issue #531, train GitHub rate-limit retries
 
