@@ -97,3 +97,47 @@ it("RL6 repeated short waits cannot bypass cumulative ceiling", async () => {
   expect(sleep).toHaveBeenCalledTimes(2);
   expect(underlying).toHaveBeenCalledTimes(3);
 });
+it("B1 bare PR number 429 preserves permanent failure without probing or waiting", async () => {
+  const f = await fixture(); const sleep = vi.fn(async () => undefined);
+  const failure = { code: 1, stdout: "", stderr: "GraphQL: Could not resolve to a PullRequest with the number of 429." };
+  const underlying = vi.fn(async () => failure);
+  const command = trainGithubCommand(underlying, { ceilingMs: 1, sleep });
+  expect(await command({ executable: "gh", argv: ["pr", "view", "429"], cwd: f.root, log: join(f.root, "gh.log") })).toEqual(failure);
+  expect(underlying).toHaveBeenCalledTimes(1);
+  expect(sleep).not.toHaveBeenCalled();
+});
+it.each(["HTTP 429", "HTTP/2 429", "HTTP/1.1 429", "HTTP 403: API rate limit exceeded", "HTTP 403: secondary rate limit"])('B1 retains explicit status and rate-limit diagnostics: %s', async stderr => {
+  const f = await fixture(); const sleep = vi.fn(async () => undefined);
+  const underlying = vi.fn().mockResolvedValueOnce({ code: 1, stdout: "", stderr: `${stderr}\nRetry-After: 1` }).mockResolvedValue({ code: 0, stdout: "ok", stderr: "" });
+  const command = trainGithubCommand(underlying, { sleep });
+  expect((await command({ executable: "gh", argv: ["pr", "view"], cwd: f.root, log: join(f.root, "gh.log") })).stdout).toBe("ok");
+  expect(sleep).toHaveBeenCalledExactlyOnceWith(1000);
+  expect(underlying).toHaveBeenCalledTimes(2);
+});
+for (const phase of ["pr", "run"]) for (const unrelatedReset of [101, 3400]) it(`B2 ${phase} recovers using its own resource, unrelated reset ${unrelatedReset}`, async () => {
+  const f = await fixture(); const sleep = vi.fn(async () => undefined);
+  let elapsed = 0; let probes = 0; let attempts = 0;
+  sleep.mockImplementation(async ms => { elapsed += ms; });
+  const resource = phase === "pr" ? "graphql" : "core";
+  const other = phase === "pr" ? "core" : "graphql";
+  const command = trainGithubCommand(async request => {
+    if (request.executable === "gh" && request.argv[0] === "api") {
+      probes++;
+      return { code: 0, stderr: "", stdout: JSON.stringify({ resources: {
+        [resource]: { remaining: 0, reset: 130 },
+        [other]: { remaining: 0, reset: unrelatedReset },
+        search: { remaining: 0, reset: unrelatedReset },
+      } }) };
+    }
+    if (request.executable === "gh" && request.argv[0] === phase) {
+      attempts++;
+      if (elapsed < 30000) return { code: 1, stdout: "", stderr: "HTTP 403: API rate limit exceeded" };
+    }
+    return f.command(request);
+  }, { now: () => 100000 + elapsed, sleep });
+  expect(await runTrain(f.root, { command })).toBe("empty");
+  expect(await readdir(join(f.root, "done"))).toEqual(["1.json"]);
+  expect(sleep).toHaveBeenCalledExactlyOnceWith(30000);
+  expect(probes).toBe(1);
+  expect(attempts).toBe(2);
+});

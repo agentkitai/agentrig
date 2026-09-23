@@ -13,7 +13,7 @@ export function trainGithubCommand(
     for (let attempt = 0; ; attempt++) {
       const result = await command(request);
       const text = `${result.stderr}\n${result.stdout}`;
-      const limited = /\b429\b/u.test(text) || /(?:rate limit|secondary rate|abuse detection)/iu.test(text);
+      const limited = /\bHTTP(?:\/\d+(?:\.\d+)?)?\s+429\b/iu.test(text) || /(?:rate limit|secondary rate|abuse detection)/iu.test(text);
       if (result.code === 0 || !limited) return result;
       let delay: number | undefined;
       const retry = text.match(/^\s*retry-after:\s*(.+)$/imu)?.[1]?.trim();
@@ -29,8 +29,13 @@ export function trainGithubCommand(
         if (probe.code === 0) {
           try {
             const data = JSON.parse(probe.stdout) as { resources?: Record<string, { remaining?: unknown; reset?: unknown }> };
-            const resets = Object.values(data.resources ?? {}).filter(r => r.remaining === 0 && typeof r.reset === "number" && Number.isFinite(r.reset)).map(r => (r.reset as number) * 1000 - now());
-            if (resets.length) delay = Math.max(1000, ...resets);
+            // The host's PR lookup uses GraphQL; run-list uses REST core.
+            // Other quotas must neither extend the wait nor cause premature retries.
+            const resource = request.argv[0] === "pr" && request.argv[1] === "view" ? "graphql"
+              : request.argv[0] === "run" && request.argv[1] === "list" ? "core" : undefined;
+            const quota = resource === undefined ? undefined : data.resources?.[resource];
+            if (quota?.remaining === 0 && typeof quota.reset === "number" && Number.isFinite(quota.reset))
+              delay = Math.max(1000, quota.reset * 1000 - now());
           } catch { /* Missing/malformed metadata uses conservative secondary-limit backoff. */ }
         }
       }
