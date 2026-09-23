@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 
 // Framework hook exceptions/timeouts fail open. Own all failures and finish five
 // seconds before that deadline. Never retry a write whose outcome is ambiguous.
-export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, rowForSession = () => undefined, resumePrForSession = () => undefined } = {}) {
+export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false } = {}) {
   return async context => {
     if (context.tool?.name !== "subagent") return { action: "continue" };
     const deadline = Date.now() + budgetMs;
@@ -55,11 +55,11 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
         // evidence of absence. A full bounded page denies rather than hiding a PR.
         const response = JSON.parse(await command(gh, ["pr", "list", "--state", "open", "--json", "number,headRefName,headRefOid,body", "--limit", "100"]));
         if (!Array.isArray(response) || response.length >= 100) throw new Error("invalid or truncated PR lookup response");
-        if (response.some(pr => !pr || typeof pr.body !== "string")) throw new Error("invalid PR lookup entry");
+        if (response.some(pr => !pr || typeof pr.body !== "string" || typeof pr.headRefName !== "string" || !pr.headRefName || !Number.isSafeInteger(pr.number) || pr.number <= 0 || !/^[a-f0-9]{40}$/u.test(pr.headRefOid))) throw new Error("invalid PR lookup entry");
         prs = row ? response.filter(pr => typeof pr.body === "string" && pr.body.split(/\r?\n/u).includes(row)) : response.filter(pr => pr.headRefName === branch);
-        // An unmatched checkout (including a base-branch conductor) cannot prove
-        // absence while other PRs exist. Never guess which task they belong to.
-        if (!row && prs.length === 0 && response.length > 0) throw new Error("open PRs exist but none matches this checkout; dispatch from the task PR branch or use the host row binding");
+        // A resumed row has an existing association to establish, unlike an
+        // initial builder. Never guess from the checkout or an old row marker.
+        if (row && isResumeForSession(context.sessionId) && prs.length === 0) throw new Error("resumed row has no verified PR association; add the fresh row marker to the PR body or set explicit resume.pr");
       }
       if (!Array.isArray(prs)) throw new Error("invalid PR lookup response");
       if (prs.length === 0) return { action: "continue" };
@@ -84,6 +84,7 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
 export function activate(ctx) {
   const rows = new Map();
   const resumePrs = new Map();
+  const resumes = new Map();
   // The host embeds this instruction line in the initial prompt; only the PR
   // body binding is on its own line (packages/core/src/train.ts).
   // Remember it per session so conductors on main resolve the builder's PR.
@@ -100,11 +101,12 @@ export function activate(ctx) {
         if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("invalid host Row");
         if (row.resume !== undefined && (!row.resume || typeof row.resume !== "object" || Array.isArray(row.resume))) throw new Error("invalid resume");
         resumePrs.set(context.sessionId, row.resume?.pr);
+        resumes.set(context.sessionId, row.resume !== undefined);
       } catch {
         resumePrs.set(context.sessionId, null);
       }
     }
     return { action: "continue" };
   });
-  ctx.hooks.on("pre_tool", createDispatchHook({ rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id) }), { timeoutMs: 30_000 });
+  ctx.hooks.on("pre_tool", createDispatchHook({ rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id), isResumeForSession: id => resumes.get(id) }), { timeoutMs: 30_000 });
 }

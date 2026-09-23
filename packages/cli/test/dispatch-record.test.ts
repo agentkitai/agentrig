@@ -24,7 +24,7 @@ if(a[0]==='pr' && ${activation}) {
   const pr={number:7,headRefName:'builder-branch',headRefOid:'a'.repeat(40),body:'agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099'};
   const other={...pr,number:8,body:'unrelated'};
   // Simulate a PR already visible in the repository connection but not indexed by search.
-  const prs=a.includes('--search') || a.includes('--head') || mode==='no-pr' ? [] : mode==='truncated' ? Array.from({length:100},()=>other) : mode==='ambiguous' ? [pr,pr] : mode==='malformed' ? [{number:8}] : [other,pr];
+  const prs=a.includes('--search') || a.includes('--head') || mode==='no-pr' ? [] : mode==='truncated' ? Array.from({length:100},()=>other) : mode==='ambiguous' ? [{...pr,headRefName:'main'},{...pr,headRefName:'main'}] : mode==='malformed' ? [{number:8}] : [other,pr];
   console.log(JSON.stringify(prs));process.exit(0);
 }
 if(a[0]==='pr'){console.log(JSON.stringify(mode==='no-pr'?[]:[{number:7,headRefName:mode==='row'?'builder-branch':'feature',headRefOid:'a'.repeat(40),body:mode==='row'?'agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099':''}]));process.exit(0);}
@@ -91,7 +91,7 @@ it.each(["truncated", "ambiguous", "malformed", "lookup-failure", "post-failure"
 });
 
 // Non-train conductors do not receive the host binding and stay on main.
-it.each(["ok", "ambiguous", "truncated", "malformed", "lookup-failure"])("unbound conductor on main denies existing or uncertain PRs: %s", async mode => {
+it.each(["ambiguous", "truncated", "malformed", "lookup-failure"])("unbound conductor on main denies ambiguous or uncertain PRs: %s", async mode => {
   const p = await probe(mode, "subagent", undefined, undefined, true, "Follow topic for this band; repair the open feature PR.");
   expect(p.result.action).toBe("deny");
   expect(p.calls).not.toContain("--head");
@@ -125,4 +125,27 @@ it.each(['"7"', '0', '-1', '1.5', 'null', '9007199254740992'])("activate rejects
   const p = await probe("ok", "subagent", undefined, undefined, true, resumePrompt.replace('"pr":7', '"pr":' + value));
   expect(p.result.action).toBe("deny");
   expect(p.calls).not.toContain("POST");
+});
+
+it("unbound initial builder continues with unrelated open PRs", async () => {
+  const p = await probe("ok", "subagent", undefined, undefined, true, "Follow ship for a new task.");
+  expect(p.result.action).toBe("continue");
+  expect(p.calls).toContain('"--limit","100"');
+  expect(p.calls).not.toContain("POST");
+});
+it.each(["ok", "no-pr"])("unpinned row resume denies without fresh association: %s", async mode => {
+  const p = await probe(mode, "subagent", undefined, undefined, true, resumePrompt.replace(',"pr":7', ''));
+  expect(p.result.action).toBe("deny");
+  expect(p.result.reason).toContain("resume.pr");
+  expect(p.result.reason).toContain("fresh row marker");
+  expect(p.calls).not.toContain("POST");
+  expect(p.calls).not.toContain('"view"');
+});
+it("unpinned row resume posts and verifies after fresh marker association", async () => {
+  const prompt = hostPrompt.replace('"authorization":"not authorized to merge"}', '"authorization":"not authorized to merge","resume":{"session":"prior-session"}}');
+  const p = await probe("ok", "subagent", undefined, undefined, true, prompt);
+  expect(p.result.action).toBe("continue");
+  expect(p.calls).toContain("issues/7/comments");
+  expect(p.calls).toContain("issues/comments/123");
+  expect(p.body).toContain(p.task);
 });

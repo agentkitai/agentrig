@@ -8,6 +8,8 @@ Repair round 2 addresses remaining C1/D1: unbound dispatch enumerates the same b
 
 Repair round 3 addresses E1: activation reads the host Row JSON’s explicit numeric resume PR, resolves that exact open PR directly despite a fresh marker, and denies invalid pins or missing/closed/mismatched results without candidate fallback. Literal host-resume regressions fail first and kill the ignore-explicit-resume-pr mutant. Initial builder, row/branch resolution, timeout/rate-limit and byte-verification coverage remain intact. Independent focused review is pending; final-round receipts are in PR #545.
 
+Repair round 4 (owner amendment on PR #545) corrects exactly RX1/RC2 and RC1: bounded valid unbound listings with no branch match allow the initial builder despite unrelated PRs; explicit row resumes without a PR pin deny until the fresh marker identifies an open PR. No old-marker/branch guess for resumed rows. This supersedes round 2’s unrelated-PR denial. Malformed/truncated/ambiguous/failed lookups still deny; pinned, fresh-row and branch publication/read-back flows and deadline/rate-limit behavior remain covered. Fail-first and targeted mutant evidence is retained in the PR handoff; independent focused reviews remain pending.
+
 # Status
 
 ## Defined, not started — R19 Harness, Pack, Train
