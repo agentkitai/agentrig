@@ -1,14 +1,14 @@
-## R19a final slice — skill includes, assets, and flags (implementation complete; review pending)
+## R19a done — spawn hooks/logs #549, provider-bound roles #559, skill includes/assets/flags #562
 
 The three R19a mechanism slices are spawn hooks/logs **#549**, provider-bound roles **#559**,
-and this final includes/assets/flags PR (`feat/r19a-skill-bundles`). The final slice adds bounded,
+and the final includes/assets/flags slice **#562**. The final slice adds bounded,
 deterministic bundle resolution, whole-skill rejection of invalid/cyclic references, inert
 asset paths, refresh tracking, and opt-in generic `fresh-session` TUI dispatch. Existing skills
 are unchanged; no ship migration or removal of the legacy topic guard is included. PLAN §2.3
 and the R19 plan record the precise manifest contract and acceptance coverage. Fail-first,
 mutation, declared-check and session-provenance receipts are in this PR's durable handoff.
-**R19a remains in progress until the conductor resolves independent reviews and records the
-final completion marker across all three PRs.** R19c/R19e remain follow-on work. LOW observations
+**R19a is done across all three PRs: both declared independent reviews of the final slice
+passed, and the conductor ledger has no blocking findings.** R19c/R19e remain follow-on work. LOW observations
 and wording followups are advisories, not automatic residuals under the task's R19 gate-growth rules.
 
 ## R19a — partial implementation: spawn lifecycle + immutable spawn-log query
