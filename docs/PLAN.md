@@ -132,6 +132,47 @@ or replay messages. Optional diagnostics on the original result separate touched
 other-file errors and unknown/incomplete observations; zero findings are not correctness proof.
 See [R15b](plans/R15b.md) for parser, output, cancellation and cooperative writer limits.
 
+#### Opt-in skill bundles (R19a)
+
+V1 skill frontmatter accepts `includes`, `assets`, and `flags` as **single-line JSON arrays**
+(not YAML lists). Omitting these fields preserves legacy parsing and invocation. For example,
+a `release/SKILL.md` may declare:
+
+```yaml
+includes: ["parts/checks.md", "parts/handoff.md"]
+assets: ["assets/check.sh"]
+flags: ["fresh-session"]
+```
+
+Every reference, including references in nested fragments, is relative to the entry skill's
+containing directory. Paths are portable, normalized relative paths: ASCII letters/digits,
+`_`, `-`, `.`, and `/` separators; no empty, `.` or `..` segments, absolute paths, drive prefixes,
+backslashes, duplicate entries, or symlink components. Includes must end in `.md`. Fragments
+are plain markdown or frontmatter with **only** `includes`; metadata/flags/generated provenance
+cannot be inherited from fragments. Discovery expands depth-first in declaration order, then
+appends the entry body, joining nonempty trimmed bodies with blank lines. A shared fragment
+may appear more than once in a DAG; active-path cycles reject the whole skill. No partial skill
+is published on missing, nonregular, oversized, invalid, or cyclic references; `onError` reports
+why. The entry remains the catalogue name/description authority.
+
+Limits: 32 references per field, 256 characters per path, 16 include levels, 64 include visits,
+and the existing per-skill byte ceiling (256 KiB default) for entry plus bytes read from includes
+and for the final composed body. Include reads also charge the existing 8 MiB root scan budget;
+exceeding that budget discards the entire root, not a checked prefix. Each asset must be a
+regular file under the same per-file byte ceiling. Discovery never reads asset contents or
+executes assets: their absolute paths are appended under a labelled bundled-assets section so
+slash activation and the `skill` tool receive the same resolved body. Ordinary tool permissions
+still govern later asset access/execution. Installed package integrity checks remain in force.
+Resolution snapshots include bodies at discovery/refresh; asset paths are references, not byte
+snapshots. Filesystem validation does not create a sandbox against concurrent directory mutation.
+
+`flags` currently admits only `fresh-session`; unknown/duplicate flags are invalid. Explicit TUI
+slash invocation of a flagged skill refuses an existing conversation with a `/new` instruction;
+it never silently discards history. This is a host invocation constraint, not a permission,
+provider override, merge approval, or restriction on the model's ordinary `skill` read tool.
+Refresh fingerprints include bundle metadata and the composed body. Existing skills opt in
+only when their manifests change; the legacy `/topic` guard remains until R19e.
+
 ### 2.4 Permissions
 
 The user-directed [unattended workflow amendment](plans/unattended-workflow.md)
@@ -363,8 +404,9 @@ The public `querySpawnLog(store, parent, { childId?, role? })` reads physical im
 backfills or writes. Strict log decoding propagates corruption/incomplete writes.
 The optional additive event field `taskText` records exact submitted input; existing
 `task` retains display-label semantics, and old events may lack `taskText` or role.
-No new event type or renderer behavior is introduced. Named-provider-bound roles and
-skill includes/assets/flags remain separate pending R19a slices.
+No new event type or renderer behavior is introduced by the spawn-hook slice. The
+provider-bound role slice is recorded in the R19 plan; skill includes/assets/flags are
+specified in §2.3. Final R19a completion remains conductor-owned.
 
 ```ts
 type HookPoint = 'user_prompt' | 'pre_model' | 'post_model' | 'pre_tool' | 'post_tool' | 'pre_spawn' | 'post_spawn' | 'pre_compact' | 'session_end';

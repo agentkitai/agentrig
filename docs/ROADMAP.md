@@ -1210,7 +1210,7 @@ product direction—is explicitly deferred. This definition marks no row complet
 
 | Row | Deliverable | Package target |
 |---|---|---|
-| R19a (M1) | **Generic mechanisms in core:** spawn hooks, roles with provider binding, skill includes/assets/flags, spawn-log API. No behaviour change. | core + generic CLI |
+| R19a (M1) — **done** (#549, #559, #562) | **Generic mechanisms in core:** spawn hooks, roles with provider binding, skill includes/assets/flags, spawn-log API. No behaviour change. | core + generic CLI |
 | R19b (M2) | **CLI contribution points:** pack commands, pack config namespace (still reads top-level reviewers/checks, warns), public API. | generic CLI |
 | R19c (M3) | **Create the ship pack:** move skills, scripts, `SHIPPING-WORKFLOW` and workflow tests; collapse duplicated sections into includes; own required CI lane. | ship pack |
 | R19d (M4) | **Move the train out of core into its own package with pluggable row stages; the ship pack supplies prompt, receipt and landing verification; drop core exports.** | train + ship pack + core |
@@ -1219,6 +1219,11 @@ product direction—is explicitly deferred. This definition marks no row complet
 
 Acceptance is row-specific in the [contract](plans/R19.md). The target has three
 layers: a workflow-agnostic harness, a ship workflow pack, and a train application.
+R19a is done: spawn hooks/logs #549; provider-bound roles #559; final skill
+includes/assets/flags slice #562. Both declared independent reviews of the final slice passed;
+the conductor ledger records no blocking findings and completes all R19a acceptance items.
+No R19c skill migration or R19e topic cleanup is included.
+
 The sequence is strictly R19a → R19b → R19c → R19d → R19e → R19f. Rules effective
 now: wording or clarification follow-ups to an existing gate are advisories rather
 than automatic residual rows; this does not exempt LOW correctness findings from

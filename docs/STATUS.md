@@ -1,3 +1,16 @@
+## R19a done — spawn hooks/logs #549, provider-bound roles #559, skill includes/assets/flags #562
+
+The three R19a mechanism slices are spawn hooks/logs **#549**, provider-bound roles **#559**,
+and the final includes/assets/flags slice **#562**. The final slice adds bounded,
+deterministic bundle resolution, whole-skill rejection of invalid/cyclic references, inert
+asset paths, refresh tracking, and opt-in generic `fresh-session` TUI dispatch. Existing skills
+are unchanged; no ship migration or removal of the legacy topic guard is included. PLAN §2.3
+and the R19 plan record the precise manifest contract and acceptance coverage. Fail-first,
+mutation, declared-check and session-provenance receipts are in this PR's durable handoff.
+**R19a is done across all three PRs: both declared independent reviews of the final slice
+passed, and the conductor ledger has no blocking findings.** R19c/R19e remain follow-on work. LOW observations
+and wording followups are advisories, not automatic residuals under the task's R19 gate-growth rules.
+
 ## R19a — partial implementation: spawn lifecycle + immutable spawn-log query
 
 Issue #560 builder implementation (conductor review/landing pending): explicitly provider-bound roles expose the resolved named entry as optional `role.provider` in frozen pre/post-spawn hook snapshots and immutable `subagent.spawn` provenance. Existing fields and unbound-role shapes remain unchanged; schema round-trip, gate inspection and rendering regressions cover the additive field. R19a remains partial; remaining skill composition is outside this slice. LOW observations and wording followups remain advisories, not residual issues.
@@ -23,13 +36,13 @@ plus named-mutant receipts are recorded in the PR handoff. Both initial reviews 
 focused Codex repair-delta review are complete; C1/X1 are resolved, with LOW observations
 retained as advisories. This first slice is reviewed; the remaining R19a scope stays pending.
 
-R19a remains **in progress**, not done. Provider-bound role slice (review pending):
+R19a remains **in progress**, not done. Provider-bound role slice (#559):
 optional validated `provider` references named host entries and overrides `model-role`;
 unavailable entries refuse before hooks/configuration/start. Unbound routing, caller
 role/provider exclusivity and all existing role restrictions stay unchanged. Flat
 `default` entries are exposed for bound-role CLI wiring. No new event types or R19b work.
-Remaining slice: validated deterministic skill includes/assets/flags (including
-invalid/cyclic inputs). Conductor owns final R19a completion after reviews.
+Final slice implementation: validated deterministic skill includes/assets/flags (including
+invalid/cyclic inputs), recorded above. Conductor owns final R19a completion after reviews.
 R19b has not started. The conductor owns final row/band markers. Acceptance proof lives
 in `packages/core/test/spawn-hooks.test.ts`, `packages/core/test/agent-roles.test.ts`
 and `packages/cli/test/subagent-wiring.test.ts`; exact-head declared-check and named-mutant
