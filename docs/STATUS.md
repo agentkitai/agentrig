@@ -1,5 +1,15 @@
 # Status
 
+## Pending review — issues #535 and #536, land provenance quotation clarifications
+
+Land distinguishes identifiers introduced by the lander from broken source URLs or anchors
+already supplied by the PR: introduced comment IDs are fetched-only and untraceable IDs are
+lander errors, while PR-supplied source mismatches retain the existing halt gate. Claims sourced
+from fetched GitHub API responses, including head and CI SHAs, quote the exact response field and
+value without weakening exact body/comment quotations for attributed provenance. Fail-first
+instruction-contract and named mutation proof accompany the PR. Repair round: 0/3; independent
+conductor review and exact-head CI remain pending. No roadmap completion marker is set.
+
 ## Pending review — issue #527, fetched lander provenance
 
 Land now quotes the exact fetched PR body or comment text behind every landing-gate
