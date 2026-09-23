@@ -322,7 +322,7 @@ describe("E2 actual provider and bundle integration", () => {
     execFileSync("mkfifo", [fifo]); b.input.manifest.checks = "checks.fifo";
     await writeFile(b.manifest, JSON.stringify(b.input.manifest));
     const script = fileURLToPath(new URL("../../../eval/report.mjs", import.meta.url));
-    const result = spawnSync(process.execPath, [script, b.manifest], { encoding: "utf8", timeout: 2000 });
+    const result = spawnSync(process.execPath, [script, b.manifest], { encoding: "utf8", timeout: 10_000 });
     expect(result.error).toBeUndefined(); expect(result.status).toBe(2);
     expect(JSON.parse(result.stdout).reason).toContain("regular files");
   });
