@@ -2,6 +2,8 @@
 
 Trusted project pre_tool hook posts and byte-verifies every post-PR subagent task, head, time and parent session; failures deny within its 25-second deadline. Initial no-PR dispatch is untouched. Ship/topic delegate only dispatch-task posting to the hook; land matches immutable spawn provenance. Separate repair-ledger receipts remain mandatory. No roadmap completion claimed.
 
+Repair round 1 addresses C1–C4/X1: activation captures the literal train-host instruction on main, row resolution enumerates open PRs directly with fail-closed 100-result truncation, and activation-level fake-gh regressions cover the search-index gap and publication failures. The reviewer binding-dead mutant and search/truncation mutants are killed; exact-head repair receipts are recorded in PR #545.
+
 # Status
 
 ## Implemented and reviewed — issue #531, train GitHub rate-limit retries

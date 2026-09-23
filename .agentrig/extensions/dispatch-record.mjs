@@ -41,9 +41,11 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       const branch = (await command(git, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
       if (!branch || branch === "HEAD") throw new Error("cannot resolve current branch");
       const row = rowForSession(context.sessionId);
-      // Branch lookup does not confuse a lookup failure with the initial no-PR case.
-      const response = JSON.parse(await command(gh, ["pr", "list", "--state", "open", ...(row ? ["--search", `"${row}" in:body`] : ["--head", branch]), "--json", "number,headRefName,headRefOid,body", "--limit", "100"]));
+      // Enumerate the repository connection directly: search-index emptiness is not
+      // evidence of absence. A full bounded page denies rather than hiding a PR.
+      const response = JSON.parse(await command(gh, ["pr", "list", "--state", "open", ...(row ? [] : ["--head", branch]), "--json", "number,headRefName,headRefOid,body", "--limit", "100"]));
       if (!Array.isArray(response) || response.length >= 100) throw new Error("invalid or truncated PR lookup response");
+      if (response.some(pr => !pr || typeof pr.body !== "string")) throw new Error("invalid PR lookup entry");
       const prs = row ? response.filter(pr => typeof pr.body === "string" && pr.body.split(/\r?\n/u).includes(row)) : response;
       if (!Array.isArray(prs)) throw new Error("invalid PR lookup response");
       if (prs.length === 0) return { action: "continue" };
@@ -67,11 +69,12 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
 
 export function activate(ctx) {
   const rows = new Map();
-  // The host puts its exact binding on an own line of the initial user prompt.
+  // The host embeds this instruction line in the initial prompt; only the PR
+  // body binding is on its own line (packages/core/src/train.ts).
   // Remember it per session so conductors on main resolve the builder's PR.
   ctx.hooks.on("user_prompt", context => {
-    const matches = context.prompt?.match(/^agentrig-train-row:[a-f0-9-]{36}\r?$/gmu) ?? [];
-    if (matches.length === 1) rows.set(context.sessionId, matches[0].trim());
+    const matches = [...(context.prompt?.matchAll(/^Include this exact host-generated row binding on its own line in the PR body: (agentrig-train-row:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\r?$/gmu) ?? [])];
+    if (matches.length === 1) rows.set(context.sessionId, matches[0][1]);
     return { action: "continue" };
   });
   ctx.hooks.on("pre_tool", createDispatchHook({ rowForSession: id => rows.get(id) }), { timeoutMs: 30_000 });
