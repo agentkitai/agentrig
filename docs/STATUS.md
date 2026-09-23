@@ -1,3 +1,15 @@
+## Dispatch record hook (#539) — implementation, pending independent review
+
+Trusted project pre_tool hook posts and byte-verifies every post-PR subagent task, head, time and parent session; failures deny within its 25-second deadline. Initial no-PR dispatch is untouched. Ship/topic delegate only dispatch-task posting to the hook; land matches immutable spawn provenance. Separate repair-ledger receipts remain mandatory. No roadmap completion claimed.
+
+Repair round 1 addresses C1–C4/X1: activation captures the literal train-host instruction on main, row resolution enumerates open PRs directly with fail-closed 100-result truncation, and activation-level fake-gh regressions cover the search-index gap and publication failures. The reviewer binding-dead mutant and search/truncation mutants are killed; exact-head repair receipts are recorded in PR #545.
+
+Repair round 2 addresses remaining C1/D1: unbound dispatch enumerates the same bounded repository connection, selects only exact branch matches, and denies unmatched checkouts when any open PR exists (including non-train conductors on main). No guessed PR or default-branch assumption; genuine empty repositories still continue. Non-train activation regressions fail on the old hook and kill the unmatched-PR bypass mutant. Independent focused review remains pending; exact-head receipts are in PR #545.
+
+Repair round 3 addresses E1: activation reads the host Row JSON’s explicit numeric resume PR, resolves that exact open PR directly despite a fresh marker, and denies invalid pins or missing/closed/mismatched results without candidate fallback. Literal host-resume regressions fail first and kill the ignore-explicit-resume-pr mutant. Initial builder, row/branch resolution, timeout/rate-limit and byte-verification coverage remain intact. Independent focused review is pending; final-round receipts are in PR #545.
+
+Repair round 4 (owner amendment on PR #545) corrects exactly RX1/RC2 and RC1: bounded valid unbound listings with no branch match allow the initial builder despite unrelated PRs; explicit row resumes without a PR pin deny until the fresh marker identifies an open PR. No old-marker/branch guess for resumed rows. This supersedes round 2’s unrelated-PR denial. Malformed/truncated/ambiguous/failed lookups still deny; pinned, fresh-row and branch publication/read-back flows and deadline/rate-limit behavior remain covered. Fail-first and targeted mutant evidence is retained in the PR handoff; independent focused reviews remain pending.
+
 # Status
 
 ## Defined, not started — R19 Harness, Pack, Train

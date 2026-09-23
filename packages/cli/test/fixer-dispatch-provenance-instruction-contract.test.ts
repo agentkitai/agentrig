@@ -15,10 +15,10 @@ const dogfoodSentences = [
 ] as const;
 
 const shipSentences = [
-  "Immediately before invoking the fixer subagent, post and read back a durable GitHub PR comment containing the exact complete fixer task text and dispatch time; this dispatch comment must exist independently of fixer survival.",
-  "If the subagent tool exposes the child session ID synchronously, include it in that comment before invocation.",
-  "If the ID is available only when the synchronous tool call returns, write `child session id: pending tool result` in the dispatch comment, then immediately edit that comment or reply to it with the actual child session ID when the call returns; never invent an ID or delay the task-text comment until child completion.",
-  "If the call fails after dispatch or returns without an ID, read the immutable session-store `subagent.spawn` event and update the comment with its actual child session ID before proceeding; absence of both an exposed ID and a matching spawn event halts.",
+  "The trusted project extension `.agentrig/extensions/dispatch-record.mjs` records every subagent dispatch after a PR exists, including the exact complete task, dispatch time, current PR head SHA and parent session id.",
+  "The hook posts the dispatch comment and verifies its API read-back byte-for-byte before allowing the tool call; any lookup, post or read-back failure denies dispatch clearly.",
+  "Before a PR exists the hook leaves the initial builder invocation untouched; conductors do not manually post or read back dispatch-task comments.",
+  "Match the hook comment to the immutable session-store `subagent.spawn` event by exact task text and parent session id; obtain the child session ID from that event, never by inventing it.",
   "Invoke the fixer subagent tool without its optional `label` field; because immutable `subagent.spawn.task` records `input.label ?? input.task`, only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.",
 ] as const;
 
@@ -37,21 +37,21 @@ const landSentences = [
   "A comment ID the lander introduces that is absent from that listing, or a 404 for such an ID that cannot be traced to the fetched data, is a lander error and never a PR defect.",
   "A PR-supplied finding source URL or anchor that is absent, edited or mismatched remains subject to the existing halt gate above; never recast it as a lander-introduced citation error.",
   "The fixer's durable pre-push handoff requires the dispatched round, persisted read-back receipt, each exact finding source, dispatch time and pre-edit comparison; it does not require the full dispatched task.",
-  "The full dispatched task belongs in the conductor's durable dispatch-time PR comment, which must match the immutable session-store `subagent.spawn` event by exact task text and child session ID.",
-  "A missing durable fixer pre-push handoff alone is not a halt when that matched conductor-comment-plus-spawn provenance exists.",
+  "The full dispatched task belongs in the hook's durable dispatch-time PR comment, which must match the immutable session-store `subagent.spawn` event by exact task text and parent session id; obtain the child session ID from that event.",
+  "A missing durable fixer pre-push handoff alone is not a halt when that matched hook-comment-plus-spawn provenance exists.",
   "That matched pair is sufficient dispatch provenance, but it does not waive receipt-before-dispatch ordering, round/OLD/blocker identity, exact heading/source identity, or the fixer's durable pre-edit comparison with comment ID and head.",
-  "If neither the durable fixer pre-push handoff nor that matched conductor-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.",
+  "If neither the durable fixer pre-push handoff nor that matched hook-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.",
 ] as const;
 
 const policySentences = [
   "Require successful edit and read-back of that receipt before dispatch and quote it in the dispatched fixer task; the fixer separately quotes it in the pre-push handoff when that record survives.",
   "Land checks the same persisted receipt against the accepted dispatch-provenance source and requires its timestamp before dispatch; private notes or retroactive receipt creation do not satisfy the gate.",
   "The fixer must post and read back a durable pre-push GitHub PR handoff comment quoting verbatim its dispatched `Repair round: N/3` line, dispatched `Pre-dispatch read-back` receipt, every assigned exact finding heading and source comment URL/anchor, dispatch time, and pre-edit live-review-versus-ledger comparison result with each checked comment ID and PR head.",
-  "Immediately before fixer invocation, the conductor must post and read back a durable PR comment with the exact complete dispatched task text and dispatch time, independently of fixer survival.",
-  "Include the child session ID before invocation when exposed synchronously; otherwise record `child session id: pending tool result` and immediately edit or reply with the actual ID when the synchronous call returns, without delaying the task-text comment or inventing an ID.",
-  "If the call fails after dispatch or returns without an ID, the conductor must read the immutable session-store `subagent.spawn` event and update the comment with its actual child session ID before proceeding; absence of both an exposed ID and a matching spawn event halts.",
+  "The trusted project extension `.agentrig/extensions/dispatch-record.mjs` records every subagent dispatch after a PR exists, including the exact complete task, dispatch time, current PR head SHA and parent session id.",
+  "The hook posts the dispatch comment and verifies its API read-back byte-for-byte before allowing the tool call; any lookup, post or read-back failure denies dispatch clearly.",
+  "Before a PR exists the hook leaves the initial builder invocation untouched; conductors do not manually post or read back dispatch-task comments.",
   "The conductor must invoke the fixer subagent tool without its optional `label` field: immutable `subagent.spawn.task` records `input.label ?? input.task`, so only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.",
-  "Land may accept that conductor comment matched to the immutable session-store `subagent.spawn` event's exact task text and child session ID as sufficient dispatch provenance, so a missing durable fixer pre-push handoff alone is not a halt; when neither source exists land halts, and all receipt ordering, round/OLD/blocker identity, exact heading/source identity, and durable pre-edit comparison checks still apply.",
+  "Land may accept the hook dispatch comment matched to the immutable session-store `subagent.spawn` event by exact task text and parent session id as sufficient dispatch provenance; obtain the child session ID from that event. A missing durable fixer pre-push handoff alone is not a halt; when neither source exists land halts, and all receipt ordering, round/OLD/blocker identity, exact heading/source identity, and durable pre-edit comparison checks still apply.",
 ] as const;
 
 const squashSentences = [
@@ -140,4 +140,10 @@ it("squash exception permits only quoted human text, not agent authorship", () =
   expectSentences(text, squashSentences);
   expect(() => expectSentences(text.replace("verbatim human authorization quote", "generated implementation note"), squashSentences)).toThrow();
   expect(() => expectSentences(text.replace("never add model or agent authorship attribution", "add agent authorship attribution"), squashSentences)).toThrow();
+});
+
+it("topic delegates dispatch records to the hook without replacing ledger receipts", () => {
+  const text = readSkillText(".agentrig/skills/topic/SKILL.md");
+  for (const sentence of shipSentences.slice(0, 4)) expect(text).toContain(sentence);
+  expect(text).toContain("Keep the separate pre-dispatch PR-body receipt and repair ledger gates unchanged.");
 });
