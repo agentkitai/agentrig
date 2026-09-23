@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { extensionFixture } from "./fixtures/extensions.ts";
 import { afterEach, expect, it } from "vitest";
 import { createAgent, subagentTool, SessionStore, RulePolicy, querySpawnLog,
-  loadExtensions, type ToolContext, type HookResult, type Hook, type HookContext, type HarnessEvent, type ModelProvider, type ModelEvent, type AgentRole } from "@agentkitai/agentrig-core";
+  loadExtensions, type ToolContext, type HookResult, type Hook, type HookContext, HarnessEvent, type ModelProvider, type ModelEvent, type AgentRole } from "@agentkitai/agentrig-core";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -15,10 +15,13 @@ function provider(turns: ModelEvent[][] = []): ModelProvider {
 const task = "  exact task\r\nUnicode: λ\nDo not substitute the label.  ";
 const role: AgentRole = { name: "reader", tools: [], "model-role": "subagents", delegable: false,
   body: "Read only", origin: "fixture:role", hash: "1".repeat(64) };
-async function fixture(hooks: Hook[], named = true, calls = 1) {
+async function fixture(hooks: Hook[], named = true, calls = 1, bound?: string) {
   const cwd = await mkdtemp(join(tmpdir(), "spawn-hooks-")); roots.push(cwd);
   const store = new SessionStore({ root: join(cwd, "logs") }); const order: string[] = [];
-  const tool = subagentTool({ roles: [role], maxChildren: 1, childConfig: () => {
+  const tool = subagentTool({ roles: [{ ...role, ...(bound === undefined ? {} : { provider: bound }) }],
+    providerChoices: { names: ["specialist", "legacy"], default: "legacy", main: "legacy" }, modelRoles: { subagents: "legacy" },
+    maxChildren: 1, childConfig: (choice) => {
+    expect(choice).toEqual(named ? { provider: bound ?? "legacy" } : undefined);
     order.push("configure"); return { provider: provider(), tools: [], permissions: new RulePolicy([], "allow"), systemPrompt: "child", store, repoMap: false };
   }, createAgent });
   const session = createAgent({ provider: provider(Array.from({ length: calls }, (_, n) => [
@@ -37,6 +40,7 @@ it.each([true, false])("pre/post see exact task, selected role and parent; post 
   expect(seen.map(s => s.point)).toEqual(["pre_spawn", "post_spawn"]);
   const spawns = await querySpawnLog(f.store, f.session.id);
   expect(spawns).toHaveLength(1);
+  if (named) expect(spawns[0]!.role).not.toHaveProperty("provider");
   expect(spawns[0]).toMatchObject({ type: "subagent.spawn", sessionId: f.session.id, task: "display label", taskText: task });
   expect(seen[0]!.spawn).toEqual({ task, parent: f.session.id, ...(named ? { role: { name: role.name, origin: role.origin, hash: role.hash, tools: role.tools, modelRole: role["model-role"], delegable: role.delegable } } : {}) });
   expect(seen[1]!.spawn).toEqual({ ...seen[0]!.spawn, childId: spawns[0]!.id });
@@ -181,4 +185,35 @@ export function activate(ctx) {
   expect(events.find(e => e.type === "tool.result")).toMatchObject({ok:true, display:"probe completed"});
   expect(seen).toEqual([]);
   expect(await querySpawnLog(store, session.id)).toEqual([]);
+});
+
+it("bound role provider survives both frozen hooks and the immutable event round-trip", async () => {
+  const seen: HookContext["spawn"][] = [];
+  const f = await fixture(["pre_spawn", "post_spawn"].map(point => ({ point, handler: (ctx: HookContext) => {
+    seen.push(ctx.spawn);
+    expect(Object.isFrozen(ctx.spawn!.role)).toBe(true);
+    return { action: "continue" };
+  } } as Hook)), true, 1, "specialist");
+  expect(seen).toHaveLength(2);
+  for (const spawn of seen) expect(spawn!.role).toEqual({ name: role.name, origin: role.origin,
+    hash: role.hash, tools: [], modelRole: "subagents", delegable: false, provider: "specialist" });
+  const live = f.events.find(e => e.type === "subagent.spawn")!;
+  expect(live).toMatchObject({ role: { provider: "specialist", modelRole: "subagents" } });
+  expect(HarnessEvent.parse(JSON.parse(JSON.stringify(live)))).toEqual(live);
+  expect(await querySpawnLog(f.store, f.session.id)).toEqual([live]);
+});
+
+it("pre-spawn gate inspects the bound entry rather than legacy model-role routing", async () => {
+  const f = await fixture([{ point: "pre_spawn", handler: ctx =>
+    ctx.spawn?.role?.provider === "specialist" ? { action: "deny", reason: "bound entry denied" } : { action: "continue" },
+  }], true, 1, "specialist");
+  expect(f.order).toEqual([]);
+  expect(await querySpawnLog(f.store, f.session.id)).toEqual([]);
+  expect(f.events.find(e => e.type === "tool.result" && !e.ok)).toMatchObject({ display: expect.stringContaining("bound entry denied") });
+});
+
+it.each(["", "Bad", "a".repeat(129), "cloud/model"])("spawn role rejects invalid provider entry %s", provider => {
+  expect(() => HarnessEvent.parse({ type: "subagent.spawn", id: "child", task: "task", seq: 1, ts: 1, sessionId: "parent",
+    role: { name: "reader", hash: role.hash, tools: [], modelRole: "subagents", delegable: false, maxTurns: 1, provider },
+  })).toThrow();
 });

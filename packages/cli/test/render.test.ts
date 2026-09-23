@@ -737,3 +737,14 @@ it("renders provider slot waits in trace and conversation", () => {
   expect(renderEvent(wait)).toContain('waiting for provider entry="login" maxConcurrent=1');
   expect(renderChatEvent(wait)).toBe("Waiting for provider entry login (maxConcurrent=1)");
 });
+
+it("renders optional bound-role provider while preserving unbound spawn output", () => {
+  const base = { type: "subagent.spawn", id: "child", task: "task", role: {
+    name: "reader", hash: "1".repeat(64), tools: [], modelRole: "subagents", delegable: false, maxTurns: 2,
+  } };
+  const unbound = event(base);
+  const bound = event({ ...base, role: { ...base.role, provider: "specialist" } });
+  expect(renderEvent(bound)).toBe(`${renderEvent(unbound)} provider=specialist`);
+  expect(renderEvent(unbound)).toContain("role=reader maxTurns=2 tools=");
+  expect(renderEvent(unbound)).not.toContain("provider=");
+});
