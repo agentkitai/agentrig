@@ -103,6 +103,9 @@ and is required only at landing. Changed heads invalidate prior same-head check 
 
 ## Review scratch cleanup
 
+Durable adapter evidence is not scratch: the Durable review evidence (#547)
+contract below is required before this cleanup. Never remove its receipt/output pairs.
+
 Human cleanup contract (generalized to declared slots):
 
 > After the initial declared review pass and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to all owned worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.
@@ -283,11 +286,46 @@ relaxation. Only independent CLI transport envelopes currently attest exact tran
 For exact API assertions the heading is the exact validated configured pin, not a claim of
 independent observed transport. Never synthesize a receipt from review prose or the pin.
 
-Retain the actual adapter-written `<PREFIX>.provenance.json` together with its output (bound to
-reviewed head, slot, configured model, assertedModel, verdict, and successful exit), and preserve
-its durable artifact location in the PR handoff. Posting uses
-`--provenance <PREFIX>.provenance.json`; land retrieves that same trusted adapter receipt, not a
+Retain the adapter-written durable `provenance.json` and adjacent `review.md`, bound to
+repository/PR/pass, reviewed head, slot, configured model, assertedModel, verdict, and successful
+exit. Preserve the adapter stdout manifest (receipt/output locators and receipt SHA-256) in the
+PR handoff. The scratch `<PREFIX>.provenance.json` is only a posting-compatible copy. Posting
+uses `--provenance <PREFIX>.provenance.json`; land retrieves the durable trusted receipt, not a
 reviewer-authored replacement, and passes its local path as `TRUSTED_ADAPTER_RECEIPT` to
 `--validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`. Validate the reassembled
 canonical body when split comments are used. Missing or mismatched provenance halts: recover
 the original adapter artifact or rerun the adapter, never fill transportModel from configuration.
+
+### Durable review evidence (#547)
+
+Before every adapter `--run`, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
+`AGENTRIG_REVIEW_PR=NN` and `AGENTRIG_REVIEW_PASS=PASS` (a unique initial or focused
+pass name). Missing/invalid identity refuses launch. The adapter itself writes both
+`review.md` and `provenance.json` under
+`$HOME/.agentrig/review-evidence/OWNER/REPO/NN/PASS/ATTEMPT/`, using exclusive files
+and a unique attempt id. Its stdout JSON supplies `receipt`, `output`, and `sha256`
+(the receipt digest); the receipt binds the output digest and pass identity as well
+as the head/slot/model/adapter/verdict. Record this manifest verbatim in the PR
+handoff for every successful slot and pass, not just a prose model claim. OUT's
+`<PREFIX>.provenance.json` is only a posting-compatible scratch copy, not the durable
+artifact. The durable evidence directory is outside OUT, reviewer temporary roots,
+proof TMPDIR and worktrees: never include it in scratch cleanup. Retain superseded
+passes too. If HOME places it inside any cleanup root, halt before launch and fix
+that environment; do not relocate evidence into temporary storage.
+
+Before deleting scratch, validate each saved manifest with the command below and
+read back the PR handoff. Land, including a separate later session, retrieves the
+manifest from that handoff and runs this same gate BEFORE comment validation:
+
+```sh
+node scripts/review-provenance.mjs "$RECEIPT" "$RECEIPT_SHA256" "$REPOSITORY" "$PR" "$PASS" "$REVIEWED_HEAD" "$SLOT" "$MODEL" "$ADAPTER"
+```
+
+A missing receipt/output, digest mismatch, or identity/verdict binding mismatch
+halts. Use the original durable receipt as `TRUSTED_ADAPTER_RECEIPT` for the existing
+`review-finding-index.mjs --validate` gate on the live (reassembled if chunked)
+comment; the durable gate does not replace live-comment checks. Never regenerate
+provenance from prose/configuration. If landing on another host, transfer the exact
+receipt and adjacent `review.md`, retaining the PR-persisted digest and identity;
+if unavailable, recover original artifacts or rerun review. Scratch cleanup never
+deletes these durable artifacts and cannot be used to waive the land gate.

@@ -102,8 +102,10 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ reviewers: { custom: { adapter, model: "pinned" } } }));
     const prompt = join(dir, "prompt"); writeFileSync(prompt, "source bundle; checks green");
-    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix, "--profile", "personal"], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, HOME: home, CODEX_HOME: "/wrong-shell", CLAUDE_CONFIG_DIR: "/wrong-shell", CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", CLAUDE_CODE_CHILD_SESSION: "child", CLAUDE_CODE_MESSAGING_SOCKET: "/parent/socket", CLAUDE_CODE_MESSAGING_TOKEN: "parent-token", CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge", CLAUDE_PID: "12345", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
-    const prefix = join(dir, "out");
+    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix, "--profile", "personal"], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, HOME: home, CODEX_HOME: "/wrong-shell", CLAUDE_CONFIG_DIR: "/wrong-shell", CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", CLAUDE_CODE_CHILD_SESSION: "child", CLAUDE_CODE_MESSAGING_SOCKET: "/parent/socket", CLAUDE_CODE_MESSAGING_TOKEN: "parent-token", CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge", CLAUDE_PID: "12345", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept", AGENTRIG_REVIEW_REPOSITORY: "owner/repo", AGENTRIG_REVIEW_PR: "547", AGENTRIG_REVIEW_PASS: "initial" } });
+    const scratch = join(dir, "scratch");
+    mkdirSync(scratch);
+    const prefix = join(scratch, "out");
     const run = invoke(prefix);
     expect(run.status, run.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "argv"), "utf8"))).toEqual(cliAdapters[adapter].template.map((value: string) => value.replace("{model}", "pinned").replace("{lastMessage}", `${prefix}.last`)));
@@ -119,6 +121,28 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     expect(adapter === "claude-cli" ? JSON.parse(readFileSync(`${prefix}.stdout`, "utf8")).result : readFileSync(`${prefix}.last`, "utf8")).toBe(reviewText);
     expect(Date.parse(provenance.finished)).toBeGreaterThanOrEqual(Date.parse(provenance.started));
     expect(invoke(prefix).status).not.toBe(0);
+    // M-scratch-only: delete the entire review scratch, validate in a new process.
+    const manifest = JSON.parse(run.stdout);
+    const landing = fileURLToPath(new URL("../../../scripts/review-provenance.mjs", import.meta.url));
+    const validate = (digest = manifest.sha256, pass = "initial") => spawnSync(process.execPath,
+      [landing, manifest.receipt, digest, "owner/repo", "547", pass, head, "custom", "pinned", adapter], { encoding: "utf8" });
+    const savedReceipt = readFileSync(manifest.receipt, "utf8");
+    const savedOutput = readFileSync(manifest.output, "utf8");
+    rmSync(scratch, { recursive: true });
+    expect(validate().status, validate().stderr).toBe(0);
+    expect(savedOutput).toBe(reviewText);
+    // M-wrong-pass / M-receipt-tamper / M-output-tamper / M-missing-receipt.
+    expect(validate(manifest.sha256, "delta-1").status).not.toBe(0);
+    writeFileSync(manifest.receipt, savedReceipt + " ");
+    expect(validate().status).not.toBe(0);
+    writeFileSync(manifest.receipt, savedReceipt);
+    writeFileSync(manifest.output, savedOutput + "\ntampered");
+    expect(validate().status).not.toBe(0);
+    rmSync(manifest.output);
+    expect(validate().status).not.toBe(0);
+    writeFileSync(manifest.output, savedOutput);
+    rmSync(manifest.receipt);
+    expect(validate().status).not.toBe(0);
     writeFileSync(binary, `#!${process.execPath}\nprocess.stdout.write('partial'); process.exit(1);\n`);
     const failed = join(dir, "failed");
     expect(invoke(failed).status).not.toBe(0);
@@ -190,4 +214,14 @@ it("M-A3-invalid-profile: pre-launch profile errors use configuration exit 64", 
     expect(run.stderr).toContain("unknown config profile");
     expect(existsSync(join(dir, "out.stdout"))).toBe(false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// @ts-expect-error skill-side JS module intentionally has no runtime TS package surface
+import { reviewIdentity } from "../../../scripts/review-provenance.mjs";
+it("durable identity refuses missing or path-traversing metadata before launch", () => {
+  const valid = { AGENTRIG_REVIEW_REPOSITORY: "owner/repo", AGENTRIG_REVIEW_PR: "547", AGENTRIG_REVIEW_PASS: "delta-1" };
+  expect(reviewIdentity(valid)).toEqual({ repository: "owner/repo", pr: "547", pass: "delta-1" });
+  for (const env of [{}, { ...valid, AGENTRIG_REVIEW_PASS: "../escape" }, { ...valid, AGENTRIG_REVIEW_REPOSITORY: "owner/.." }, { ...valid, AGENTRIG_REVIEW_PR: "0" }]) {
+    expect(() => reviewIdentity(env)).toThrow(/AGENTRIG_REVIEW/);
+  }
 });
