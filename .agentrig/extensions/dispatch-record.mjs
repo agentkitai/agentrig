@@ -43,10 +43,13 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       const row = rowForSession(context.sessionId);
       // Enumerate the repository connection directly: search-index emptiness is not
       // evidence of absence. A full bounded page denies rather than hiding a PR.
-      const response = JSON.parse(await command(gh, ["pr", "list", "--state", "open", ...(row ? [] : ["--head", branch]), "--json", "number,headRefName,headRefOid,body", "--limit", "100"]));
+      const response = JSON.parse(await command(gh, ["pr", "list", "--state", "open", "--json", "number,headRefName,headRefOid,body", "--limit", "100"]));
       if (!Array.isArray(response) || response.length >= 100) throw new Error("invalid or truncated PR lookup response");
       if (response.some(pr => !pr || typeof pr.body !== "string")) throw new Error("invalid PR lookup entry");
-      const prs = row ? response.filter(pr => typeof pr.body === "string" && pr.body.split(/\r?\n/u).includes(row)) : response;
+      const prs = row ? response.filter(pr => typeof pr.body === "string" && pr.body.split(/\r?\n/u).includes(row)) : response.filter(pr => pr.headRefName === branch);
+      // An unmatched checkout (including a base-branch conductor) cannot prove
+      // absence while other PRs exist. Never guess which task they belong to.
+      if (!row && prs.length === 0 && response.length > 0) throw new Error("open PRs exist but none matches this checkout; dispatch from the task PR branch or use the host row binding");
       if (!Array.isArray(prs)) throw new Error("invalid PR lookup response");
       if (prs.length === 0) return { action: "continue" };
       if (prs.length !== 1) throw new Error("ambiguous PR for current branch");

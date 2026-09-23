@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false) {
+async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt) {
   const root = await mkdtemp(join(tmpdir(), "dispatch-")); roots.push(root);
   await mkdir(join(root, "bin"));
   const script = `#!/usr/bin/env node
@@ -38,7 +38,7 @@ import { activate } from ${JSON.stringify(pathToFileURL(resolve(".agentrig/exten
 const hooks = new Map();
 activate({ hooks: { on(point, handler, options) { hooks.set(point, {handler, options}); } } });
 if(hooks.get("pre_tool").options.timeoutMs !== 30000) throw new Error("hook budget changed");
-await hooks.get("user_prompt").handler({sessionId:"parent-123", prompt:${JSON.stringify(hostPrompt)}});
+await hooks.get("user_prompt").handler({sessionId:"parent-123", prompt:${JSON.stringify(prompt)}});
 await hooks.get("user_prompt").handler({sessionId:"other", prompt:"unrelated prompt"});
 await hooks.get("user_prompt").handler({sessionId:"parent-123", prompt:"continue repair"});
 console.log(JSON.stringify(await hooks.get("pre_tool").handler({cwd:${JSON.stringify(root)},sessionId:"parent-123",tool:{name:${JSON.stringify(name)},input:{task:${JSON.stringify(task)}}}})));`;
@@ -84,4 +84,18 @@ it("activate permits the confirmed no-PR initial builder", async () => {
 it.each(["truncated", "ambiguous", "malformed", "lookup-failure", "post-failure", "read-failure", "mismatch", "rate-limit"])("activate fails closed for %s", async mode => {
   const p = await probe(mode, "subagent", undefined, undefined, true);
   expect(p.result.action).toBe("deny");
+});
+
+// Non-train conductors do not receive the host binding and stay on main.
+it.each(["ok", "ambiguous", "truncated", "malformed", "lookup-failure"])("unbound conductor on main denies existing or uncertain PRs: %s", async mode => {
+  const p = await probe(mode, "subagent", undefined, undefined, true, "Follow topic for this band; repair the open feature PR.");
+  expect(p.result.action).toBe("deny");
+  expect(p.calls).not.toContain("--head");
+  expect(p.calls).not.toContain("POST");
+});
+it("unbound conductor on main continues only with confirmed no PR", async () => {
+  const p = await probe("no-pr", "subagent", undefined, undefined, true, "Follow ship for a new task.");
+  expect(p.result.action).toBe("continue");
+  expect(p.calls).not.toContain("--head");
+  expect(p.calls).not.toContain("POST");
 });

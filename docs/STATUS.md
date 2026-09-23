@@ -4,6 +4,8 @@ Trusted project pre_tool hook posts and byte-verifies every post-PR subagent tas
 
 Repair round 1 addresses C1–C4/X1: activation captures the literal train-host instruction on main, row resolution enumerates open PRs directly with fail-closed 100-result truncation, and activation-level fake-gh regressions cover the search-index gap and publication failures. The reviewer binding-dead mutant and search/truncation mutants are killed; exact-head repair receipts are recorded in PR #545.
 
+Repair round 2 addresses remaining C1/D1: unbound dispatch enumerates the same bounded repository connection, selects only exact branch matches, and denies unmatched checkouts when any open PR exists (including non-train conductors on main). No guessed PR or default-branch assumption; genuine empty repositories still continue. Non-train activation regressions fail on the old hook and kill the unmatched-PR bypass mutant. Independent focused review remains pending; exact-head receipts are in PR #545.
+
 # Status
 
 ## Implemented and reviewed — issue #531, train GitHub rate-limit retries
