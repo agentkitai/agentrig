@@ -16,6 +16,10 @@ fs.appendFileSync(root+'/calls',JSON.stringify(a)+'\\n');
 if(a[0]==='rev-parse') { console.log(${JSON.stringify(activation ? 'main' : 'feature')});process.exit(0); }
 if(mode==='timeout'){setTimeout(()=>{},10000);return;}
 if(mode==='lookup-failure'){console.error('unavailable');process.exit(1);}
+if(a[0]==='pr' && a[1]==='view') {
+  if(mode==='pinned-missing'){console.error('not found');process.exit(1);}
+  console.log(JSON.stringify({number:mode==='pinned-wrong'?8:7,state:mode==='pinned-closed'?'CLOSED':'OPEN',headRefName:'builder-branch',headRefOid:'a'.repeat(40),body:'old marker'}));process.exit(0);
+}
 if(a[0]==='pr' && ${activation}) {
   const pr={number:7,headRefName:'builder-branch',headRefOid:'a'.repeat(40),body:'agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099'};
   const other={...pr,number:8,body:'unrelated'};
@@ -97,5 +101,28 @@ it("unbound conductor on main continues only with confirmed no PR", async () => 
   const p = await probe("no-pr", "subagent", undefined, undefined, true, "Follow ship for a new task.");
   expect(p.result.action).toBe("continue");
   expect(p.calls).not.toContain("--head");
+  expect(p.calls).not.toContain("POST");
+});
+
+const resumePrompt = hostPrompt.replace('"authorization":"not authorized to merge"}', '"authorization":"not authorized to merge","resume":{"session":"prior-session","pr":7}}')
+  .replace('17b1b85d-5d2f-4e35-aafc-3c5272028099', '00000000-0000-4000-8000-000000000001');
+it("activate pinned resume resolves exact open PR despite fresh unmatched host marker", async () => {
+  const p = await probe("ok", "subagent", undefined, undefined, true, resumePrompt);
+  expect(p.result.action).toBe("continue");
+  expect(p.calls).toContain('"pr","view","7"');
+  expect(p.calls).not.toContain('"list"');
+  expect(p.calls).toContain("issues/7/comments");
+  expect(p.calls).toContain("issues/comments/123");
+  expect(p.body).toContain(p.task);
+});
+it.each(["pinned-missing", "pinned-closed", "pinned-wrong", "lookup-failure", "post-failure", "read-failure", "mismatch", "rate-limit"])("activate pinned resume denies %s without fallback", async mode => {
+  const p = await probe(mode, "subagent", undefined, undefined, true, resumePrompt);
+  expect(p.result.action).toBe("deny");
+  expect(p.calls).not.toContain('"list"');
+  if (mode.startsWith("pinned-")) expect(p.calls).not.toContain("POST");
+});
+it.each(['"7"', '0', '-1', '1.5', 'null', '9007199254740992'])("activate rejects invalid explicit resume.pr %s", async value => {
+  const p = await probe("ok", "subagent", undefined, undefined, true, resumePrompt.replace('"pr":7', '"pr":' + value));
+  expect(p.result.action).toBe("deny");
   expect(p.calls).not.toContain("POST");
 });

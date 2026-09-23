@@ -6,6 +6,8 @@ Repair round 1 addresses C1–C4/X1: activation captures the literal train-host 
 
 Repair round 2 addresses remaining C1/D1: unbound dispatch enumerates the same bounded repository connection, selects only exact branch matches, and denies unmatched checkouts when any open PR exists (including non-train conductors on main). No guessed PR or default-branch assumption; genuine empty repositories still continue. Non-train activation regressions fail on the old hook and kill the unmatched-PR bypass mutant. Independent focused review remains pending; exact-head receipts are in PR #545.
 
+Repair round 3 addresses E1: activation reads the host Row JSON’s explicit numeric resume PR, resolves that exact open PR directly despite a fresh marker, and denies invalid pins or missing/closed/mismatched results without candidate fallback. Literal host-resume regressions fail first and kill the ignore-explicit-resume-pr mutant. Initial builder, row/branch resolution, timeout/rate-limit and byte-verification coverage remain intact. Independent focused review is pending; final-round receipts are in PR #545.
+
 # Status
 
 ## Implemented and reviewed — issue #531, train GitHub rate-limit retries

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 
 // Framework hook exceptions/timeouts fail open. Own all failures and finish five
 // seconds before that deadline. Never retry a write whose outcome is ambiguous.
-export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, rowForSession = () => undefined } = {}) {
+export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, rowForSession = () => undefined, resumePrForSession = () => undefined } = {}) {
   return async context => {
     if (context.tool?.name !== "subagent") return { action: "continue" };
     const deadline = Date.now() + budgetMs;
@@ -41,15 +41,26 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       const branch = (await command(git, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
       if (!branch || branch === "HEAD") throw new Error("cannot resolve current branch");
       const row = rowForSession(context.sessionId);
-      // Enumerate the repository connection directly: search-index emptiness is not
-      // evidence of absence. A full bounded page denies rather than hiding a PR.
-      const response = JSON.parse(await command(gh, ["pr", "list", "--state", "open", "--json", "number,headRefName,headRefOid,body", "--limit", "100"]));
-      if (!Array.isArray(response) || response.length >= 100) throw new Error("invalid or truncated PR lookup response");
-      if (response.some(pr => !pr || typeof pr.body !== "string")) throw new Error("invalid PR lookup entry");
-      const prs = row ? response.filter(pr => typeof pr.body === "string" && pr.body.split(/\r?\n/u).includes(row)) : response.filter(pr => pr.headRefName === branch);
-      // An unmatched checkout (including a base-branch conductor) cannot prove
-      // absence while other PRs exist. Never guess which task they belong to.
-      if (!row && prs.length === 0 && response.length > 0) throw new Error("open PRs exist but none matches this checkout; dispatch from the task PR branch or use the host row binding");
+      const pinned = resumePrForSession(context.sessionId);
+      if (pinned !== undefined && (!row || !Number.isSafeInteger(pinned) || pinned <= 0)) throw new Error("invalid host resume PR binding");
+      let prs;
+      if (pinned !== undefined) {
+        // A resumed host mints a fresh marker but explicitly pins the existing PR.
+        // Resolve that identity directly, never infer it from candidate PR bodies.
+        const pr = JSON.parse(await command(gh, ["pr", "view", String(pinned), "--json", "number,state,headRefName,headRefOid,body"]));
+        if (!pr || pr.number !== pinned || pr.state !== "OPEN") throw new Error("pinned resume PR is missing, closed or mismatched");
+        prs = [pr];
+      } else {
+        // Enumerate the repository connection directly: search-index emptiness is not
+        // evidence of absence. A full bounded page denies rather than hiding a PR.
+        const response = JSON.parse(await command(gh, ["pr", "list", "--state", "open", "--json", "number,headRefName,headRefOid,body", "--limit", "100"]));
+        if (!Array.isArray(response) || response.length >= 100) throw new Error("invalid or truncated PR lookup response");
+        if (response.some(pr => !pr || typeof pr.body !== "string")) throw new Error("invalid PR lookup entry");
+        prs = row ? response.filter(pr => typeof pr.body === "string" && pr.body.split(/\r?\n/u).includes(row)) : response.filter(pr => pr.headRefName === branch);
+        // An unmatched checkout (including a base-branch conductor) cannot prove
+        // absence while other PRs exist. Never guess which task they belong to.
+        if (!row && prs.length === 0 && response.length > 0) throw new Error("open PRs exist but none matches this checkout; dispatch from the task PR branch or use the host row binding");
+      }
       if (!Array.isArray(prs)) throw new Error("invalid PR lookup response");
       if (prs.length === 0) return { action: "continue" };
       if (prs.length !== 1) throw new Error("ambiguous PR for current branch");
@@ -72,13 +83,28 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
 
 export function activate(ctx) {
   const rows = new Map();
+  const resumePrs = new Map();
   // The host embeds this instruction line in the initial prompt; only the PR
   // body binding is on its own line (packages/core/src/train.ts).
   // Remember it per session so conductors on main resolve the builder's PR.
   ctx.hooks.on("user_prompt", context => {
     const matches = [...(context.prompt?.matchAll(/^Include this exact host-generated row binding on its own line in the PR body: (agentrig-train-row:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\r?$/gmu) ?? [])];
-    if (matches.length === 1) rows.set(context.sessionId, matches[0][1]);
+    if (matches.length === 1) {
+      rows.set(context.sessionId, matches[0][1]);
+      // Read only the host's adjacent single-line JSON row. Invalid explicit pins
+      // are remembered as invalid so pre_tool denies instead of failing open.
+      try {
+        const preceding = context.prompt.slice(0, matches[0].index).trimEnd().split(/\r?\n/u).at(-1);
+        if (!preceding?.startsWith("Row: ")) throw new Error("missing host Row");
+        const row = JSON.parse(preceding.slice(5));
+        if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("invalid host Row");
+        if (row.resume !== undefined && (!row.resume || typeof row.resume !== "object" || Array.isArray(row.resume))) throw new Error("invalid resume");
+        resumePrs.set(context.sessionId, row.resume?.pr);
+      } catch {
+        resumePrs.set(context.sessionId, null);
+      }
+    }
     return { action: "continue" };
   });
-  ctx.hooks.on("pre_tool", createDispatchHook({ rowForSession: id => rows.get(id) }), { timeoutMs: 30_000 });
+  ctx.hooks.on("pre_tool", createDispatchHook({ rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id) }), { timeoutMs: 30_000 });
 }
