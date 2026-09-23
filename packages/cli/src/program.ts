@@ -1,3 +1,4 @@
+import { registerCliPacks, type CliPack } from "./cli-packs.js";
 import { resolveChildEnvironment } from "./child-env.js";
 import { registerTrainCommand } from "./train.js";
 import { Command, InvalidArgumentError } from "commander";
@@ -143,6 +144,8 @@ function sequence(value: string): number {
 }
 
 export interface ProgramDependencies {
+  /** Explicit trusted host packs; no automatic project code loading. */
+  packs?: CliPack[];
   scheduleNow?: () => Date;
   run?: typeof runCommand;
   tui?: typeof startTui;
@@ -851,5 +854,6 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
 
+  registerCliPacks(program, dependencies.packs ?? []);
   return program;
 }

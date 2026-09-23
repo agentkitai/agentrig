@@ -1,3 +1,20 @@
+## R19b partial — CLI commands and public API slice (pending independent review)
+
+R19a prerequisites were independently verified on fetched `origin/main`: spawn hooks/logs
+#549, provider-bound roles #559, includes/assets/flags #562 are complete. This explicitly
+authorized reduced R19b slice adds strict trusted-host CLI command descriptors and an
+import-safe public CLI package root exposing role-provider construction, trusted child
+environments, and project checks. Public APIs and limits are documented in PLAN §5.1.
+Fixture tests cover dispatch/help, literal argv, malformed/colliding descriptors, async
+completion/error propagation, published-root imports and direct/symlink bin use.
+Fail-first, named mutation, full-check receipts and session provenance are in the PR handoff.
+
+**Remaining R19b:** namespaced config registration/strict process-file validation and legacy
+`reviewers`/`checks` warning migration. Existing config and package/extension loading are
+unchanged. No R19c/d skills/scripts/train work is included. The ROADMAP row remains open;
+the conductor owns its final marker after review. Review ledger initialized empty;
+repair counter 0; residuals none. Independent review follows.
+
 ## R19a done — spawn hooks/logs #549, provider-bound roles #559, skill includes/assets/flags #562
 
 The three R19a mechanism slices are spawn hooks/logs **#549**, provider-bound roles **#559**,

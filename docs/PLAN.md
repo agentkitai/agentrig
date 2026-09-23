@@ -1056,6 +1056,59 @@ Keep it thin: every command is a few lines over the SDK. If a feature needs CLI-
 
 ---
 
+### 5.1 Trusted host CLI packs and public construction API (R19b slice)
+
+`@agentkitai/agentrig-cli` is an import-safe public module as well as an executable.
+Importing the root never parses the importing process's argv. Direct and symlinked bin
+invocation still run the CLI. Import the package root, never private `dist/*.js` helpers.
+
+A trusted host supplies `buildProgram({ packs: CliPack[] })`. Each pack has `name`,
+`summary`, and nonempty `commands`; each command has `name`, `summary`, and
+`run(argv, context)`. This is **explicit host code registration**, not project config,
+extension discovery, an install-time hook, or a sandbox. No filesystem loader is added;
+existing installed-package/extension discovery is unchanged.
+
+Pack commands live under `<pack> <command> [args...]`; option-like operands require `--`.
+Unknown options/commands fail through Commander. Entire batches validate strictly before
+registration: at most 32 packs, 1–64 commands per pack, ASCII names matching
+`[a-z][a-z0-9-]{0,31}`, 1–200 character summaries rejecting line breaks, C0/C1 controls and
+Unicode embedding/isolation controls, function handlers, no unknown fields. Duplicate namespaces
+or commands and collisions with builtins, their aliases, or `help` are errors. Builtins
+are never shadowed. Handlers receive copied operands and `{ profile?, print(text) }`,
+not a mutable Commander tree. Profile is the root/inherited selection, not resolved or
+trusted config. `print` uses Commander's output sink. Async completion/errors propagate.
+
+```ts
+import { buildProgram, type CliPack } from "@agentkitai/agentrig-cli";
+const pack: CliPack = {
+  name: "fixture", summary: "Fixture commands",
+  commands: [{ name: "echo", summary: "Echo operands",
+    async run(args, { print }) { print(args.join(" ")); } }],
+};
+await buildProgram({ packs: [pack] }).parseAsync(process.argv);
+```
+
+The public root also exports these existing helpers without changing their semantics:
+- `buildRoleProvider(options, role, hooks?)`: constructs only one runtime role's provider,
+  validating all bindings. Roles are `main | supervisor | memory | subagents`, not external
+  skill role labels. `buildProviders` constructs the full set; `resolveProviderEntries`
+  resolves names without construction. Credentials, concurrency and daily-cap refusals
+  remain unchanged. Construction itself does not make a model request.
+- `resolveChildEnvironment(options?)`: trusted user profile overlay onto cloned inherited
+  env. Only user profiles supply environment values. Trusted project config may be read
+  to validate profile names but never supplies environment authority. Explicit profile
+  beats inherited `AGENTRIG_CHILD_PROFILE`; home/project trust boundaries remain unchanged.
+- `resolveProjectChecks(projectRoot, profile?, user?)`: validates/returns project `checks`
+  (including profile selection and declared test-timeout expansion) or `undefined`. User
+  config may validate profile names, never supply commands. Does not execute commands,
+  grant trust or load plugins.
+- Types: `ProgramDependencies`, `CliPack`, `CliPackCommand`, `ProviderOptions`,
+  `ProviderHooks`, `ProviderSet`, `ConfigFile`, `ProjectChecks`, `Role`, `ProviderEntry`, `Roles`.
+
+**Remaining R19b:** strict namespaced pack config registration, file/process boundary
+validation of that config, and legacy `reviewers`/`checks` migration warnings. None is
+claimed by this slice; legacy config behavior remains unchanged. R19c/d moves are excluded.
+
 ## 6. Build order
 
 | M | Deliverable | Proves |
