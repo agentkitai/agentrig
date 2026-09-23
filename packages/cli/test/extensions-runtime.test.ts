@@ -146,3 +146,20 @@ ctx.hooks.on("pre_model",()=>{calls++;return {action:"continue"}})}`);
   const module = await import(pathToFileURL(path).href); expect(module.calls).toBe(2);
   await controller.shutdown();
 });
+
+it("trusted headless project discovers and loads the dispatch hook without prompting", async () => {
+  const f = await fixture();
+  const directory = join(f.cwd, ".agentrig/extensions");
+  await mkdir(directory, { recursive: true });
+  for (const suffix of ["mjs", "json"]) await writeFile(join(directory, `dispatch-record.${suffix}`), await readFile(new URL(`../../../.agentrig/extensions/dispatch-record.${suffix}`, import.meta.url)));
+  const notices: string[] = [];
+  const built = await build(f, ["--trust", "--headless"], notices);
+  expect(notices.some(message => message.includes("dispatch-record") && message.includes("ambient Node host code"))).toBe(true);
+  expect(notices.some(message => /failed|refused/i.test(message))).toBe(false);
+  const run = built.agent.run("headless discovery fixture", { cwd: f.cwd });
+  for await (const _event of run.events) { /* drain */ }
+  await run.done;
+  const events = await new SessionStore({ root: join(f.root, "logs") }).readAll(run.id);
+  expect(events.some(event => event.type === "extension.loaded" && event.name === "dispatch-record")).toBe(true);
+  expect(events.some(event => event.type === "extension.error")).toBe(false);
+});

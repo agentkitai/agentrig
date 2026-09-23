@@ -231,10 +231,11 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    live comments and PR body; compare each assigned verbatim finding heading and comment anchor
    against the ledger, pre-dispatch receipt and task. On any mismatch refuse the assignment and
    return the conflicting texts without changes; do not repair the receipt yourself.
-   Immediately before invoking the fixer subagent, post and read back a durable GitHub PR comment containing the exact complete fixer task text and dispatch time; this dispatch comment must exist independently of fixer survival.
-   If the subagent tool exposes the child session ID synchronously, include it in that comment before invocation.
-   If the ID is available only when the synchronous tool call returns, write `child session id: pending tool result` in the dispatch comment, then immediately edit that comment or reply to it with the actual child session ID when the call returns; never invent an ID or delay the task-text comment until child completion.
-   If the call fails after dispatch or returns without an ID, read the immutable session-store `subagent.spawn` event and update the comment with its actual child session ID before proceeding; absence of both an exposed ID and a matching spawn event halts.
+   The trusted project extension `.agentrig/extensions/dispatch-record.mjs` records every subagent dispatch after a PR exists, including the exact complete task, dispatch time, current PR head SHA and parent session id.
+   The hook posts the dispatch comment and verifies its API read-back byte-for-byte before allowing the tool call; any lookup, post or read-back failure denies dispatch clearly.
+   Before a PR exists the hook leaves the initial builder invocation untouched; conductors do not manually post or read back dispatch-task comments.
+Invoke every subagent without its optional `label` field so the immutable spawn preserves the exact task. The hook remembers the host own-line train-row binding from the user prompt for conductors working on main; otherwise it resolves the current branch PR.
+   Match the hook comment to the immutable session-store `subagent.spawn` event by exact task text and parent session id; obtain the child session ID from that event, never by inventing it.
    Invoke the fixer subagent tool without its optional `label` field; because immutable `subagent.spawn.task` records `input.label ?? input.task`, only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.
    Only then call the fixer described below, carrying that persisted ledger and counter.
 

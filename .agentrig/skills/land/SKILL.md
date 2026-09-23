@@ -149,10 +149,10 @@ For every cited comment ID, quote the exact corresponding fetched `body` field f
 A comment ID the lander introduces that is absent from that listing, or a 404 for such an ID that cannot be traced to the fetched data, is a lander error and never a PR defect.
 A PR-supplied finding source URL or anchor that is absent, edited or mismatched remains subject to the existing halt gate above; never recast it as a lander-introduced citation error.
 The fixer's durable pre-push handoff requires the dispatched round, persisted read-back receipt, each exact finding source, dispatch time and pre-edit comparison; it does not require the full dispatched task.
-The full dispatched task belongs in the conductor's durable dispatch-time PR comment, which must match the immutable session-store `subagent.spawn` event by exact task text and child session ID.
-A missing durable fixer pre-push handoff alone is not a halt when that matched conductor-comment-plus-spawn provenance exists.
+The full dispatched task belongs in the hook's durable dispatch-time PR comment, which must match the immutable session-store `subagent.spawn` event by exact task text and parent session id; obtain the child session ID from that event.
+A missing durable fixer pre-push handoff alone is not a halt when that matched hook-comment-plus-spawn provenance exists.
 That matched pair is sufficient dispatch provenance, but it does not waive receipt-before-dispatch ordering, round/OLD/blocker identity, exact heading/source identity, or the fixer's durable pre-edit comparison with comment ID and head.
-If neither the durable fixer pre-push handoff nor that matched conductor-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.
+If neither the durable fixer pre-push handoff nor that matched hook-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.
 
 ## 2. Merge
 

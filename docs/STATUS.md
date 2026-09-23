@@ -1,3 +1,7 @@
+## Dispatch record hook (#539) — implementation, pending independent review
+
+Trusted project pre_tool hook posts and byte-verifies every post-PR subagent task, head, time and parent session; failures deny within its 25-second deadline. Initial no-PR dispatch is untouched. Ship/topic delegate only dispatch-task posting to the hook; land matches immutable spawn provenance. Separate repair-ledger receipts remain mandatory. No roadmap completion claimed.
+
 # Status
 
 ## Implemented and reviewed — issue #531, train GitHub rate-limit retries
