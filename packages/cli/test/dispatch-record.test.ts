@@ -187,6 +187,29 @@ it("repair matching live source posts PASS before dispatch may start", async () 
   expect(p.calls.indexOf('"pr","view"')).toBeLessThan(p.calls.indexOf('"POST"'));
   expect(p.calls.indexOf('issues/comments/456')).toBeLessThan(p.calls.indexOf('"POST"'));
 });
+const historicalOld = `Pre-dispatch read-back: Repair round: 1/3; blockers X1; OLD ${"b".repeat(40)}; verified 2026-09-22T00:00:00Z`;
+it.each([
+  `> ${historicalOld}`,
+  `  > > ${historicalOld}`,
+  `\`\`\`text\n${historicalOld}\n\`\`\``,
+  `~~~text\n${historicalOld}\n~~~`,
+])("repair ignores historical OLD in excluded receipt lines: %s", async history => {
+  const task = `${history}\n${repairTask}\n${history}`;
+  const p = await repairProbe("ok", task);
+  expect(p.result.action).toBe("continue");
+  expect(p.body).toContain("Pre-edit comparison: PASS");
+  expect(p.body).toContain(task);
+});
+it.each([
+  repairTask.replace("a".repeat(40), "b".repeat(40)),
+  `${repairTask}\n${historicalOld}`,
+  `${repairTask}\nOLD ${"b".repeat(40)}`,
+])("repair still denies mismatched operative OLD: %s", async task => {
+  const p = await repairProbe("ok", task);
+  expect(p.result.action).toBe("deny");
+  expect(p.body).toContain("Pre-edit comparison: FAIL");
+  expect(p.result.reason).toContain("OLD head does not match live PR head");
+});
 it.each(["missing-heading", "moved-head"])("repair %s posts mismatch and denies child start", async mode => {
   const p = await repairProbe(mode);
   expect(p.result.action).toBe("deny");

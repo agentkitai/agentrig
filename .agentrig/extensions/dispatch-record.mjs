@@ -119,7 +119,7 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
         if (rounds.length !== 1 || !/^Repair round: [1-3]\/3$/u.test(rounds[0])) errors.push("invalid Repair round receipt");
         const live = JSON.parse(await command(gh, ["pr", "view", String(pr.number), "--json", "number,headRefOid,url"]));
         if (live.number !== pr.number || !/^[a-f0-9]{40}$/.test(live.headRefOid) || typeof live.url !== "string") throw new Error("invalid live repair PR");
-        const olds = [...input.task.matchAll(/\bOLD\s+([a-f0-9]{40})\b/g)].map(match => match[1]);
+        const olds = [...lines.join("\n").matchAll(/\bOLD\s+([a-f0-9]{40})\b/g)].map(match => match[1]);
         if (!olds.length || olds.some(old => old !== live.headRefOid)) errors.push("OLD head does not match live PR head");
         pr.headRefOid = live.headRefOid;
         const headings = assignedFindings(lines);
