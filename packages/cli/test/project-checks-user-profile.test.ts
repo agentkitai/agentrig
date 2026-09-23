@@ -2,7 +2,10 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { resolveProjectChecks } from "../src/project-checks.js";
+import { Command } from "commander";
+import { loadRunConfig } from "../src/config.js";
+import { resolveChildEnvironment } from "../src/child-env.js";
+import { resolveProjectChecks, resolveTrainTestTimeout } from "../src/project-checks.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -56,4 +59,34 @@ it("retains explicit user configuration injection without reading the ambient ho
   await writeFile(userPath, "{");
   expect(await resolveProjectChecks(checkout, "injected", { profiles: { injected: {} } })).toEqual(projectChecks);
   await expect(resolveProjectChecks(checkout, "personal", {})).rejects.toThrow("unknown config profile");
+});
+
+// Exercise the real run resolver, not a second copy of its name-validation rule.
+it.each(["builtin", "user", "project", "both", "unsafe-home"])("agrees with run and train for recommended (%s)", async kind => {
+  const { checkout, userPath, projectPath } = await fixture(kind === "unsafe-home");
+  const checks = { bootstrap: "project setup", steps: [{ name: "test", command: "pnpm test", countsParser: "vitest", testTimeout: 15000 }] };
+  const replacement = { bootstrap: "project override", steps: [{ name: "test", command: "pnpm test", countsParser: "vitest", testTimeout: 23000 }] };
+  const userOverride = ["user", "both", "unsafe-home"].includes(kind);
+  const projectOverride = ["project", "both"].includes(kind);
+  await writeFile(userPath, JSON.stringify({ checks: userChecks, profiles: userOverride ? { recommended: { model: "user-model", checks: userChecks } } : {} }));
+  await writeFile(projectPath, JSON.stringify({ checks, profiles: projectOverride ? { recommended: { model: "project-model", checks: replacement } } : {} }));
+  const command = new Command("run");
+  command.setOptionValueWithSource("model", "baseline", "default");
+  const run = () => loadRunConfig(command, { profile: "recommended", trust: true, model: "baseline" }, { cwd: checkout, env: {}, interactive: false });
+  expect((await run()).model).toBe(projectOverride ? "project-model" : kind === "user" ? "user-model" : "baseline");
+  const selected = projectOverride ? replacement : checks;
+  const timeout = selected.steps[0]!.testTimeout;
+  expect(await resolveProjectChecks(checkout, "recommended")).toEqual({ ...selected, steps: [{ ...selected.steps[0], command: `pnpm test --testTimeout=${timeout}` }] });
+  expect(await resolveTrainTestTimeout(checkout, "recommended")).toBe(timeout);
+  expect((await resolveChildEnvironment({ cwd: checkout, profile: "recommended", env: {} })).AGENTRIG_CHILD_PROFILE).toBe("recommended");
+  await writeFile(projectPath, "{}");
+  expect(await run()).toHaveProperty("model", kind === "user" || kind === "both" ? "user-model" : "baseline");
+  expect(await resolveProjectChecks(checkout, "recommended")).toBeUndefined();
+  expect(await resolveTrainTestTimeout(checkout, "recommended")).toBeUndefined();
+});
+it("run, checks and train all reject an undeclared non-built-in profile", async () => {
+  const { checkout } = await fixture();
+  await expect(loadRunConfig(new Command("run"), { profile: "missing", trust: true }, { cwd: checkout, env: {}, interactive: false })).rejects.toThrow("unknown config profile");
+  await expect(resolveProjectChecks(checkout, "missing")).rejects.toThrow("unknown config profile");
+  await expect(resolveTrainTestTimeout(checkout, "missing")).rejects.toThrow("unknown config profile");
 });
