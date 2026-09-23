@@ -42,6 +42,21 @@ function assignedFindings(lines) {
   });
 }
 
+// Date.parse checks the time/zone but normalizes e.g. February 31. Validate
+// the written calendar date separately, without UTC conversion changing its day.
+function validRepairTimestamp(timestamp) {
+  const [year, month, day] = timestamp.slice(0, 10).split("-").map(Number);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1]
+    && Number.isFinite(Date.parse(timestamp));
+}
+
+function repairIntent(task) {
+  return /Repair round\b|Pre-dispatch read-back\b/iu.test(task)
+    || (/\bOLD\s+[a-f0-9]{40}\b/iu.test(task) && assignedFindings(operativeLines(task)).length > 0);
+}
+
 // Framework hook exceptions/timeouts fail open. Own all failures and finish five
 // seconds before that deadline. Never retry a write whose outcome is ambiguous.
 export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false } = {}) {
@@ -104,7 +119,10 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
         if (row && isResumeForSession(context.sessionId) && prs.length === 0) throw new Error("resumed row has no verified PR association; add the fresh row marker to the PR body or set explicit resume.pr");
       }
       if (!Array.isArray(prs)) throw new Error("invalid PR lookup response");
-      if (prs.length === 0) return { action: "continue" };
+      if (prs.length === 0) {
+        if (typeof context.tool.input?.task === "string" && repairIntent(context.tool.input.task)) throw new Error("repair intent requires a live PR and standalone Repair round / Pre-dispatch read-back receipts");
+        return { action: "continue" };
+      }
       if (prs.length !== 1) throw new Error("ambiguous PR for current branch");
       const pr = prs[0];
       if (!Number.isSafeInteger(pr.number) || pr.number <= 0 || (!row && pr.headRefName !== branch) || !/^[a-f0-9]{40}$/u.test(pr.headRefOid)) throw new Error("invalid PR identity/head");
@@ -114,11 +132,31 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       const errors = [], checked = [];
       const lines = operativeLines(input.task);
       const rounds = lines.filter(line => /^Repair round:/u.test(line));
-      const repair = rounds.length > 0;
+      // Intent is deliberately broader than parsing: inline/quoted examples must
+      // never turn an attempted repair into an unchecked ordinary dispatch.
+      const repair = repairIntent(input.task);
       if (repair) {
-        if (rounds.length !== 1 || !/^Repair round: [1-3]\/3$/u.test(rounds[0])) errors.push("invalid Repair round receipt");
-        const live = JSON.parse(await command(gh, ["pr", "view", String(pr.number), "--json", "number,headRefOid,url"]));
+        const round = rounds.length === 1 ? /^Repair round: ([1-9]\d*)\/([1-9]\d*)$/u.exec(rounds[0]) : null;
+        const readbacks = lines.filter(line => /^Pre-dispatch read-back:/u.test(line));
+        const readback = readbacks.length === 1 ? /^Pre-dispatch read-back: Repair round: ([1-9]\d*)\/([1-9]\d*); blockers ([^;]+); OLD ([a-f0-9]{40}); verified (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)$/u.exec(readbacks[0]) : null;
+        const number = Number(round?.[1]), cap = Number(round?.[2]);
+        if (!round || !readback || readback[1] !== round[1] || readback[2] !== round[2]
+          || !Number.isSafeInteger(number) || !Number.isSafeInteger(cap) || number > cap
+          || (number <= 3 ? cap !== 3 : cap !== number) || !readback[3].trim() || !validRepairTimestamp(readback[5])) {
+          errors.push("malformed repair intent: put Repair round: N/3 and Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <40-character SHA>; verified <ISO timestamp> on separate standalone lines (use N/N above 3 with a recorded human amendment)");
+        }
+        const live = JSON.parse(await command(gh, ["pr", "view", String(pr.number), "--json", "number,headRefOid,url,body"]));
         if (live.number !== pr.number || !/^[a-f0-9]{40}$/.test(live.headRefOid) || typeof live.url !== "string") throw new Error("invalid live repair PR");
+        if (number > 3) {
+          // The PR ledger records human authority, not the child task. Require
+          // an exact round-bound record; a bare larger denominator is no grant.
+          const prefix = `Human amendment: Repair round: ${number}/${cap}; authorization: `;
+          const amendments = typeof live.body === "string" ? operativeLines(live.body).filter(line => line.startsWith(prefix)) : [];
+          let authorization;
+          try { if (amendments.length === 1) authorization = JSON.parse(amendments[0].slice(prefix.length)); } catch { /* deny below */ }
+          if (typeof authorization !== "string" || !authorization.trim()) errors.push(`missing recorded human amendment on PR for Repair round: ${number}/${cap}; record ${prefix}<JSON-quoted verbatim human authorization> in the PR body`);
+          else checked.push(`checked human amendment: Repair round: ${number}/${cap}; authorization: ${JSON.stringify(authorization)}`);
+        }
         const olds = [...lines.join("\n").matchAll(/\bOLD\s+([a-f0-9]{40})\b/g)].map(match => match[1]);
         if (!olds.length || olds.some(old => old !== live.headRefOid)) errors.push("OLD head does not match live PR head");
         pr.headRefOid = live.headRefOid;
