@@ -57,6 +57,8 @@ export interface SpawnHookContext {
     hash: string;
     tools: readonly string[];
     modelRole: string;
+    /** Resolved named provider entry for an explicitly provider-bound role; absent for legacy routing. */
+    provider?: string;
     delegable: boolean;
   }>;
   readonly childId?: string;

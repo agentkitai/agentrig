@@ -406,6 +406,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
       const choice: SubagentChoice | undefined = entry === undefined ? undefined : { provider: entry };
       const roleSnapshot = role === undefined ? undefined : Object.freeze({
         name: role.name, origin: role.origin, hash: role.hash,
+        ...(role.provider === undefined ? {} : { provider: role.provider }),
         tools: Object.freeze([...role.tools]), modelRole: role["model-role"], delegable: role.delegable,
       });
       const spawnContext = Object.freeze({ task: input.task, parent: ctx.sessionId,
@@ -523,6 +524,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
         ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task, taskText: input.task,
           ...(role === undefined ? {} : { role: { name: role.name, hash: role.hash, tools: [...(allowlist ?? [])],
             modelRole: role["model-role"], delegable: role.delegable && (allowlist?.includes(SUBAGENT_TOOL) ?? false) && depth + 1 < maxDepth,
+            ...(role.provider === undefined ? {} : { provider: role.provider }),
             maxTurns: effectiveTurns } }) });
         spawned = true;
         const capture: SpawnCapture = Object.freeze({ parentSessionId: ctx.sessionId,
