@@ -44,6 +44,14 @@ cover the transport. PR #538's initial independent reviews and focused repair re
 resolved all blockers; final exact-head CI and authorized landing follow this receipt.
 This standalone issue has no assigned roadmap completion marker.
 
+## Pending review — issue #550, evaluation FIFO test deadline under load
+
+The real-FIFO regression allows a 10-second child-process deadline within its 15-second test
+budget, so concurrent-load Node startup no longer exhausts the hang guard. A blocking-open FIFO
+mutant still times out and fails the regression. Repair round: 0/3; independent conductor review
+and exact-head CI remain pending. Residuals: none. This standalone test-only issue has no assigned
+roadmap completion marker; LOW observations and wording follow-ups are advisories.
+
 ## Pending review — issue #541, local landing SHA quotation evidence
 
 Land now requires a successful recorded command plus exact stdout containing the claimed full SHA
