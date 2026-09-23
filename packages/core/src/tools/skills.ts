@@ -1,7 +1,8 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { parseSkillFrontmatter, resolveManifestNames } from "../manifests.js";
+import { resolveSkillBundle } from "./skill-bundles.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 
 /**
@@ -43,6 +44,12 @@ export function sanitizeLine(value: string, max: number): string {
 }
 
 export interface Skill {
+  /** Bundle-root-relative markdown references, resolved at discovery. */
+  includes?: readonly string[];
+  /** Absolute paths to validated regular bundled files; never executed by the loader. */
+  assets?: readonly string[];
+  /** Opt-in host invocation constraints, not permissions or approval evidence. */
+  flags?: readonly "fresh-session"[];
   /** Trusted MCP adapter only. Catalog metadata is external; loader never becomes user authority. */
   remote?: { toolName: string; permission: "read" | "net"; load(args: Record<string, string>, ctx: ToolContext): Promise<ToolResult<unknown>> };
   /** Validated manifest provenance label, not a runtime evidence/approval receipt. */
@@ -85,6 +92,9 @@ export function parseSkill(text: string, path: string): Skill {
     description: sanitizeLine(fm.description ?? firstLine(body) ?? "(no description)", MAX_DESCRIPTION),
     path,
     body: body.trim(),
+    ...(fm.includes === undefined ? {} : { includes: Object.freeze([...fm.includes]) }),
+    ...(fm.assets === undefined ? {} : { assets: Object.freeze(fm.assets.map(asset => resolve(dirname(path), asset))) }),
+    ...(fm.flags === undefined ? {} : { flags: Object.freeze([...fm.flags]) }),
     ...(trigger === "" ? {} : { trigger }),
     ...(fm.metadata?.["agentrig-generated"] === "true" ? { generated: true as const } : {}),
   };
@@ -151,12 +161,18 @@ export async function discoverSkills(opts: DiscoverOptions): Promise<Skill[]> {
         totalBytes += Buffer.byteLength(text);
         if (totalBytes > 8 * 1024 * 1024) { overBudget = true; break; }
         if (Buffer.byteLength(text) > maxBytes) continue;
-        rootCandidates.push({ ...parseSkill(text, path), precedence });
+        const parsed = parseSkill(text, path);
+        const skill = await resolveSkillBundle(parsed, maxBytes, Buffer.byteLength(text), bytes => {
+          totalBytes += bytes;
+          if (totalBytes > 8 * 1024 * 1024) { overBudget = true; throw new Error("bundle root scan budget exceeded"); }
+        });
+        rootCandidates.push({ ...skill, precedence });
       } catch (err) {
         // a directory with no SKILL.md is not a skill and not an error — `.git`, `node_modules`
         // and every other subdirectory would otherwise produce one report each
         if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
         opts.onError?.(new Error(`skill ${path}: ${err instanceof Error ? err.message : String(err)}`));
+        if (overBudget) break;
       }
     }
     if (overBudget) opts.onError?.(new Error(`skill root ${root}: exceeds 8 MiB scan budget; none loaded`));
@@ -240,7 +256,7 @@ function composeGeneration(id: number, local: readonly Skill[], remote: readonly
 
 /** Everything a consumer would serve differently after a refresh — not the object identity. */
 function fingerprint(skill: Skill): string {
-  return JSON.stringify([skill.description, skill.path, skill.body, skill.trigger ?? null, skill.generated === true]);
+  return JSON.stringify([skill.description, skill.path, skill.body, skill.trigger ?? null, skill.generated === true, skill.includes, skill.assets, skill.flags]);
 }
 
 /** The one-line-each catalogue injected into the system prompt. */

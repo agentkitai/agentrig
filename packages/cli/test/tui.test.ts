@@ -882,6 +882,26 @@ describe("TuiController", () => {
     expect(text(c)).toContain("/topic must start a fresh conversation; run /new, then invoke /topic again");
   });
 
+  it("fresh-session flag guards any skill without resetting history and permits /new", async () => {
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "first" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "fresh" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const c = makeControllerWith(provider);
+    c.setSkills([{ name: "release", description: "release", path: "/p/release.md", body: "instructions", flags: ["fresh-session"] }]);
+    await c.submit("earlier turn");
+    const firstSession = c.snapshot().sessionId;
+    await c.submit("/release authorized task");
+    expect(provider.requests).toHaveLength(1);
+    expect(c.snapshot().sessionId).toBe(firstSession);
+    expect(text(c)).toContain("/release must start a fresh conversation; run /new, then invoke /release again");
+    await c.submit("/new");
+    await c.submit("/release authorized task");
+    expect(provider.requests).toHaveLength(2);
+    expect(JSON.stringify(provider.requests[1]!.messages)).toContain("instructions");
+    expect(JSON.stringify(provider.requests[1]!.messages)).not.toContain("earlier turn");
+  });
+
   it("/skill-name continues the conversation, exactly like a task line", async () => {
     // a /skill that silently started a FRESH session would drop everything said so far
     const provider = new FakeProvider([

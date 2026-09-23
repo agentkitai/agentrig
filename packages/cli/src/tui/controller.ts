@@ -1106,10 +1106,11 @@ export class TuiController {
           this.print("a turn is already running — /abort first", "error");
           return true;
         }
-        // Topic carries merge authorization for a long train. Compaction preserves the first user
-        // message, so never append authorization to history where a summary could replace it.
-        if (skill.name.toLowerCase() === "topic" && this.state.sessionId !== null) {
-          this.print("/topic must start a fresh conversation; run /new, then invoke /topic again", "error");
+        // The generic opt-in flag refuses rather than silently discarding history. Keep the
+        // legacy topic guard until R19e migrates that skill; no existing skill opts in here.
+        if ((skill.name.toLowerCase() === "topic" || skill.flags?.includes("fresh-session")) && this.state.sessionId !== null) {
+          const name = skill.name.toLowerCase() === "topic" ? "topic" : skill.name;
+          this.print(`/${name} must start a fresh conversation; run /new, then invoke /${name} again`, "error");
           return true;
         }
         const composed = composeSkillInvocation(skill, cmd.args, cmd.invocation);

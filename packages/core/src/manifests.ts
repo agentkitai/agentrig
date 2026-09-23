@@ -50,6 +50,12 @@ export const GeneratedSkillMetadataV1 = z.object({
   "agentrig-trigger": TriggerHint.optional(),
 }).strict();
 
+/** Bundle references are portable, relative, normalized paths; never filesystem authority. */
+const BundlePath = z.string().min(1).max(256).regex(/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/)
+  .refine(path => path.split("/").every(part => part !== "." && part !== ".."), "invalid bundle path");
+const BundlePaths = z.array(BundlePath).max(32)
+  .refine(paths => new Set(paths).size === paths.length, "duplicate bundle path");
+
 /** Absent schema means the legacy v1 dialect, never latest. Metadata is explicitly versioned. */
 export const SkillFrontmatterV1 = z.object({
   schema: z.literal("1").optional(),
@@ -60,6 +66,9 @@ export const SkillFrontmatterV1 = z.object({
   compatibility: z.string().min(1).optional(),
   trigger: TriggerHint.optional(),
   metadata: GeneratedSkillMetadataV1.optional(),
+  includes: BundlePaths.refine(paths => paths.every(path => path.endsWith(".md")), "includes must be markdown files").optional(),
+  assets: BundlePaths.optional(),
+  flags: z.array(z.enum(["fresh-session"])).max(1).optional(),
 }).strict();
 
 export const ExtensionSurface = z.enum(["hooks", "tools", "commands"]);
@@ -173,6 +182,10 @@ export function parseSkillFrontmatter(text: string): { fields: z.infer<typeof Sk
     if (Object.hasOwn(fields, key)) throw new Error(`skill frontmatter: duplicate key ${key}`);
     if (key === "allowed-tools") throw new Error("AgentRig does not honour allowed-tools; remove it");
     let value = match[2]!.trim();
+    if (key === "includes" || key === "assets" || key === "flags") {
+      if (value.length > 16384) throw new Error(`skill ${key}: limit exceeded`);
+      fields[key] = JSON.parse(value); continue;
+    }
     if (key === "metadata") {
       if (value !== "") throw new Error("skill metadata requires a versioned nested string map");
       metadata = Object.create(null) as Record<string, string>;

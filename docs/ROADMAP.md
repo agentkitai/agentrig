@@ -1219,6 +1219,11 @@ product direction—is explicitly deferred. This definition marks no row complet
 
 Acceptance is row-specific in the [contract](plans/R19.md). The target has three
 layers: a workflow-agnostic harness, a ship workflow pack, and a train application.
+R19a mechanism inventory: spawn hooks/logs #549; provider-bound roles #559; final skill
+includes/assets/flags slice (`feat/r19a-skill-bundles`, this PR). Final-slice implementation
+is complete; independent conductor review and the final R19a done marker remain pending.
+No R19c skill migration or R19e topic cleanup is included.
+
 The sequence is strictly R19a → R19b → R19c → R19d → R19e → R19f. Rules effective
 now: wording or clarification follow-ups to an existing gate are advisories rather
 than automatic residual rows; this does not exempt LOW correctness findings from
