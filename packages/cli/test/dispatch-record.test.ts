@@ -343,3 +343,26 @@ it.each([
   expect(p.result.action).toBe('deny');
   expect(p.result.reason).toContain('standalone');
 });
+
+// X1: Date.parse normalizes impossible month days rather than rejecting them.
+it.each([
+  "2026-02-31T00:00:00Z", "2026-02-29T00:00:00.123Z",
+  "1900-02-29T12:00:00Z", "2026-04-31T00:00:00Z",
+  "2026-00-01T00:00:00Z", "2026-13-01T00:00:00Z",
+  "2026-01-00T00:00:00Z", "2026-01-32T00:00:00Z",
+])("repair rejects impossible calendar timestamp %s", async timestamp => {
+  const p = await repairProbe("ok", repairTask.replace(/verified [^\n]+/u, `verified ${timestamp}`));
+  expect(p.result.action).toBe("deny");
+  expect(p.result.reason).toContain("malformed repair intent");
+  expect(p.body).toContain("Pre-edit comparison: FAIL");
+  expect(p.body).not.toContain("Pre-edit comparison: PASS");
+});
+it.each([
+  "2024-02-29T00:00:00Z", "2000-02-29T12:34:56.789Z",
+  "0000-02-29T00:00:00Z", "0096-02-29T00:00:00Z",
+  "2026-04-30T23:59:59.999Z", "2026-12-31T24:00:00Z",
+])("repair preserves valid calendar timestamp %s", async timestamp => {
+  const p = await repairProbe("ok", repairTask.replace(/verified [^\n]+/u, `verified ${timestamp}`));
+  expect(p.result.action).toBe("continue");
+  expect(p.body).toContain("Pre-edit comparison: PASS");
+});

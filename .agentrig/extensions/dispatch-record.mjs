@@ -42,6 +42,16 @@ function assignedFindings(lines) {
   });
 }
 
+// Date.parse checks the time/zone but normalizes e.g. February 31. Validate
+// the written calendar date separately, without UTC conversion changing its day.
+function validRepairTimestamp(timestamp) {
+  const [year, month, day] = timestamp.slice(0, 10).split("-").map(Number);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1]
+    && Number.isFinite(Date.parse(timestamp));
+}
+
 function repairIntent(task) {
   return /Repair round\b|Pre-dispatch read-back\b/iu.test(task)
     || (/\bOLD\s+[a-f0-9]{40}\b/iu.test(task) && assignedFindings(operativeLines(task)).length > 0);
@@ -132,7 +142,7 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
         const number = Number(round?.[1]), cap = Number(round?.[2]);
         if (!round || !readback || readback[1] !== round[1] || readback[2] !== round[2]
           || !Number.isSafeInteger(number) || !Number.isSafeInteger(cap) || number > cap
-          || (number <= 3 ? cap !== 3 : cap !== number) || !readback[3].trim() || !Number.isFinite(Date.parse(readback[5]))) {
+          || (number <= 3 ? cap !== 3 : cap !== number) || !readback[3].trim() || !validRepairTimestamp(readback[5])) {
           errors.push("malformed repair intent: put Repair round: N/3 and Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <40-character SHA>; verified <ISO timestamp> on separate standalone lines (use N/N above 3 with a recorded human amendment)");
         }
         const live = JSON.parse(await command(gh, ["pr", "view", String(pr.number), "--json", "number,headRefOid,url,body"]));
