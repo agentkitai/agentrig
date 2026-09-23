@@ -53,3 +53,6 @@ export * from "./train.js";
 export * from "./provider-concurrency.js";
 
 export * from "./train-usage.js";
+
+export { querySpawnLog } from "./spawn-log.js";
+export type { SpawnLogQuery, SpawnLogEntry } from "./spawn-log.js";

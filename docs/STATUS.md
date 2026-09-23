@@ -1,3 +1,27 @@
+## R19a — partial implementation: spawn lifecycle + immutable spawn-log query
+The authorized first coherent slice adds generic extension `pre_spawn` / `post_spawn`
+hooks carrying exact submitted task, selected role provenance and parent session ID.
+Pre-spawn denials/errors/timeouts prevent child configuration/start and release the
+provisional shared-pool reservation; post-spawn notifications cannot undo a launched
+child. `querySpawnLog` reads only physical immutable parent events with optional
+child/role filters. Additive optional `subagent.spawn.taskText` preserves exact input
+without repurposing the historical `task` display label. Existing unhooked and unnamed
+callers remain supported; no shipping policy is introduced.
+
+PR #549 repair round 1 addresses only blocking C1/X1: the spawn dispatcher is
+restricted to the registered `subagent` tool (matching event-source authority), and
+complete spawn-hook result variants reject malformed/blank denial reasons before
+launch. Fail-first extension-forgery and malformed-result/capacity-release regressions
+plus named-mutant receipts are recorded in the PR handoff. Both initial reviews and
+focused Codex repair-delta review are complete; C1/X1 are resolved, with LOW observations
+retained as advisories. This first slice is reviewed; the remaining R19a scope stays pending.
+
+R19a remains **in progress**, not done. Remaining slices: named-provider-bound roles;
+validated deterministic skill includes/assets/flags (including invalid/cyclic inputs).
+R19b has not started. The conductor owns final row/band markers. Acceptance proof lives
+in `packages/core/test/spawn-hooks.test.ts`; exact-head declared-check and named-mutant
+receipts travel in the PR body. No instruction-contract/skill-text tests were changed.
+
 ## Dispatch record hook (#539) — implementation, pending independent review
 
 Trusted project pre_tool hook posts and byte-verifies every post-PR subagent task, head, time and parent session; failures deny within its 25-second deadline. Initial no-PR dispatch is untouched. Ship/topic delegate only dispatch-task posting to the hook; land matches immutable spawn provenance. Separate repair-ledger receipts remain mandatory. No roadmap completion claimed.
@@ -17,13 +41,13 @@ separate-session landing validation, and cleanup retention contracts are impleme
 repair round 1 addresses blocking launch-recipe identity and contradictory shared-policy
 wording (C1/C2); conductor delta review/landing pending (no roadmap completion marker).
 
-## Defined, not started — R19 Harness, Pack, Train
+## Defined; R19a first slice in progress — R19 Harness, Pack, Train
 
 Amit approved items 1–4 on 2026-09-23: "1-4 approved. 5 we talk about when 1-4 are
 done." The documentation-only [R19 contract](plans/R19.md) defines the target
 harness/ship-pack/train boundary and the strictly sequential R19a → R19b → R19c →
-R19d → R19e → R19f migration. No R19 implementation row has started or earned a
-completion marker. Post-R19 product direction remains explicitly deferred.
+R19d → R19e → R19f migration. R19a has started with the explicitly authorized spawn-hook/spawn-log slice above; no
+R19 row has earned a completion marker. Post-R19 product direction remains explicitly deferred.
 
 [#539](https://github.com/agentkitai/agentrig/issues/539) is parked until R19f, where
 dispatch publication and merge guarding become pack hooks. The one-time PR #538

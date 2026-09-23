@@ -1,3 +1,4 @@
+import type { SpawnHookContext } from "./hooks.js";
 import type { z } from "zod";
 import type { EventPayload, PermissionClass } from "./events.js";
 import type { ShellOperation } from "./shell-operation.js";
@@ -6,6 +7,8 @@ export interface ToolContext {
   cwd: string;
   sessionId: string;
   emit(payload: EventPayload): void;
+  /** Parent lifecycle dispatcher. pre_spawn may deny; post_spawn is observational. */
+  spawnHook?(point: "pre_spawn" | "post_spawn", spawn: SpawnHookContext): Promise<{ denied?: string }>;
   signal: AbortSignal;
   /**
    * Fires on the session's SECOND abort — the one that means "stop waiting for session_end hooks"
