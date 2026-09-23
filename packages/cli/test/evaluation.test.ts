@@ -325,6 +325,7 @@ describe("E2 actual provider and bundle integration", () => {
     const launcher = `
       import { writeSync } from "node:fs";
       await new Promise(resolve => setTimeout(resolve, 6000));
+      await import(${JSON.stringify(new URL("../dist/evaluation.js", import.meta.url).href)});
       writeSync(3, "ready\\n");
       process.argv.splice(1, 0, ${JSON.stringify(script)});
       await import(${JSON.stringify(new URL("../../../eval/report.mjs", import.meta.url).href)});
