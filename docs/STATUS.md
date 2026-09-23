@@ -1,5 +1,13 @@
 # Status
 
+## Implemented and reviewed — issue #531, train GitHub rate-limit retries
+
+CLI train host GitHub transport retries rate limits with a five-minute wait ceiling,
+including post-merge CI lookup. Deterministic recovery, metadata and exhaustion tests
+cover the transport. PR #538's initial independent reviews and focused repair review
+resolved all blockers; final exact-head CI and authorized landing follow this receipt.
+This standalone issue has no assigned roadmap completion marker.
+
 ## Pending review — issue #541, local landing SHA quotation evidence
 
 Land now requires a successful recorded command plus exact stdout containing the claimed full SHA
