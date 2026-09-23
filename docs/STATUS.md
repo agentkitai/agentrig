@@ -12,7 +12,9 @@ PR #549 repair round 1 addresses only blocking C1/X1: the spawn dispatcher is
 restricted to the registered `subagent` tool (matching event-source authority), and
 complete spawn-hook result variants reject malformed/blank denial reasons before
 launch. Fail-first extension-forgery and malformed-result/capacity-release regressions
-plus named-mutant receipts are recorded in the PR handoff. Independent review pending.
+plus named-mutant receipts are recorded in the PR handoff. Both initial reviews and
+focused Codex repair-delta review are complete; C1/X1 are resolved, with LOW observations
+retained as advisories. This first slice is reviewed; the remaining R19a scope stays pending.
 
 R19a remains **in progress**, not done. Remaining slices: named-provider-bound roles;
 validated deterministic skill includes/assets/flags (including invalid/cyclic inputs).
