@@ -1,5 +1,15 @@
 # Status
 
+## Pending review — issue #527, fetched lander provenance
+
+Land now quotes the exact fetched PR body or comment text behind every landing-gate
+claim that cites a comment ID, URL or SHA, cites only comment IDs in the session-fetched
+listing, and treats untraceable IDs or 404s as lander errors rather than PR defects.
+The #509 repair contract distinguishes the fixer's bounded pre-push handoff from the
+conductor's full-task dispatch comment matched to immutable spawn provenance without
+weakening ordering, identity or pre-edit gates. Repair round: 0/3; independent conductor
+review and exact-head CI remain pending. No roadmap completion marker is set.
+
 ## Pending review — issue #525, verdict finding extension tolerance
 
 Reviewer verdict parsing keeps every required finding field strict while dropping arbitrary
