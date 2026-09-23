@@ -1,5 +1,9 @@
 # Status
 
+Issue #531 builder handoff: CLI train host GitHub transport retries rate limits with
+a five-minute wait ceiling, including post-merge CI lookup. Deterministic recovery,
+metadata and exhaustion tests added; independent review and landing remain pending.
+
 ## Pending review — issue #527, fetched lander provenance
 
 Land now quotes the exact fetched PR body or comment text behind every landing-gate

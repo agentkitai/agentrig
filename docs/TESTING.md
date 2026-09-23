@@ -235,3 +235,13 @@ file exists in the override tree before reading. Missing or incomplete overrides
 without checkout fallback. Record start/end timestamps,
 exact commands, exits and test counts beside the declared check receipts in the PR.
 Remove only the owned proof copy after the pushed handoff is recorded.
+
+Train GitHub rate-limit regression (`packages/cli/test/train-github.test.ts`):
+RL1 exercises both host PR lookup and post-merge run-list fail-once recovery through
+`runTrain`, including the completed-row move. RL2/RL6 prove explicit exhausted-limit
+halts and cumulative bounded waits; RL3 preserves real red-CI halts; RL4 covers
+reset, Retry-After seconds/date, rate_limit probe and fallback; RL5 excludes ordinary
+403 authorization errors and non-gh commands. CLI host transport waits at most five
+minutes per gh call (not a child model retry): metadata wins, otherwise secondary
+backoff starts at 60 seconds. An exhausted ceiling is reported as a GitHub rate
+limit, never as a CI conclusion. Missing/malformed probe metadata uses backoff.
