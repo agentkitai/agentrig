@@ -14,6 +14,7 @@
 3. **Memory is an LLM Wiki.** Karpathy's pattern: immutable raw sources (sessions, docs) → an interlinked markdown wiki the agent owns → a schema doc that makes it a disciplined maintainer. Ingest / query / lint as the only operations. Inspectable, git-diffable, human-editable.
 4. **Supervisor is out-of-band and cheap by default.** Heuristic detectors run on every event at ~zero cost; an LLM reviewer is invoked only when the policy escalates. It never blocks the loop; it steers at turn boundaries.
 5. **Dreams never modify their input.** A dream produces a *new* store plus a change report. Default apply mode is review.
+6. **Target workflow boundary (R19; not yet implemented).** The generic harness must not know about PRs, reviewers, landers, trains or rows. Shipping policy belongs in a ship pack built on generic contribution points; queue lifecycle and pluggable row stages belong in a train application. The migration and compatibility limits are defined by the [R19 contract](plans/R19.md).
 
 ---
 
@@ -28,6 +29,8 @@ packages/
 ```
 
 Dependency direction: `cli → supervisor, memory → core`. `memory` and `supervisor` depend only on `core`'s event/type definitions (consider splitting those into `core/types` or a tiny `protocol` package if that dependency gets heavy).
+
+R19's target layout adds a ship pack (workflow extension) above generic core/CLI contribution points and a train application above pluggable stages supplied by packs. This is a migration target, not the current package tree or an implementation-complete marker; see the [R19 contract](plans/R19.md).
 
 Tooling: pnpm workspaces, ESM, Node 22+, TypeScript strict, vitest, zod (schemas → JSON Schema for tool specs), changesets for publishing.
 

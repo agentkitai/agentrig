@@ -10,6 +10,25 @@ Repair round 3 addresses E1: activation reads the host Row JSON’s explicit num
 
 # Status
 
+## Defined, not started — R19 Harness, Pack, Train
+
+Amit approved items 1–4 on 2026-09-23: "1-4 approved. 5 we talk about when 1-4 are
+done." The documentation-only [R19 contract](plans/R19.md) defines the target
+harness/ship-pack/train boundary and the strictly sequential R19a → R19b → R19c →
+R19d → R19e → R19f migration. No R19 implementation row has started or earned a
+completion marker. Post-R19 product direction remains explicitly deferred.
+
+[#539](https://github.com/agentkitai/agentrig/issues/539) is parked until R19f, where
+dispatch publication and merge guarding become pack hooks. The one-time PR #538
+posting-order waiver is historical and does not weaken that gate. [#519](https://github.com/agentkitai/agentrig/issues/519)
+is being re-planned around a builder checklist of recurring review-finding classes;
+its prior live-ablation design is not a current measurement or an active R19 row.
+For this documentation-only definition task, Amit separately directed that its LOW
+observations are advisories with no residual issues. That task-local disposition does
+not exempt future LOW findings, including correctness defects, from normal residual
+handling. The standing R19 rule applies only to wording or clarification follow-ups
+to an existing gate, which remain advisories rather than automatic residual rows.
+
 ## Implemented and reviewed — issue #531, train GitHub rate-limit retries
 
 CLI train host GitHub transport retries rate limits with a five-minute wait ceiling,
