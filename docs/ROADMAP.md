@@ -1193,6 +1193,40 @@ widen authority; recovery and queueing do not supply task or merge authorization
 
 ---
 
+### R19 — Harness, Pack, Train *(approved 2026-09-23)*
+
+*Evidence and limit: the approved proposal's fixed 2026-09-23 window reports that,
+of the last 80 merged PRs, 46 tightened ship-workflow gates, 14 concerned config/test
+infrastructure, 7 train/queue, 12 the harness itself and 1 memory. Its 2026-09-22
+halt-replay study records five hand-repaired dispatch-provenance halts (#388, #489,
+#501, #526, #538). These are source-proposal measurements, not current measurements
+or proof that this migration is implemented. Full inventory and limits are in the
+[band contract](plans/R19.md).*
+
+Amit approved items 1–4 on 2026-09-23, verbatim: "1-4 approved. 5 we talk about when
+1-4 are done." This authorizes the boundary and R19 M1–M6, waives the posting-order
+gate once for PR #538, parks #539 until M6, and re-plans #519. Item 5—the post-R19
+product direction—is explicitly deferred. This definition marks no row complete.
+
+| Row | Deliverable | Package target |
+|---|---|---|
+| R19a (M1) | **Generic mechanisms in core:** spawn hooks, roles with provider binding, skill includes/assets/flags, spawn-log API. No behaviour change. | core + generic CLI |
+| R19b (M2) | **CLI contribution points:** pack commands, pack config namespace (still reads top-level reviewers/checks, warns), public API. | generic CLI |
+| R19c (M3) | **Create the ship pack:** move skills, scripts, `SHIPPING-WORKFLOW` and workflow tests; collapse duplicated sections into includes; own required CI lane. | ship pack |
+| R19d (M4) | **Move the train out of core into its own package with pluggable row stages; the ship pack supplies prompt, receipt and landing verification; drop core exports.** | train + ship pack + core |
+| R19e (M5) | **Retire bolt-ons:** `builderProvider` → roles; remove the `topic` TUI case, the system-prompt line and hard-coded stall patterns. | core + CLI + ship pack |
+| R19f (M6) | **Re-express gates as pack mechanisms:** dispatch record as a spawn hook (#539), merge guard as a `pre_tool` hook; delete the prose that asked the model to do these by hand. | ship pack |
+
+Acceptance is row-specific in the [contract](plans/R19.md). The target has three
+layers: a workflow-agnostic harness, a ship workflow pack, and a train application.
+The sequence is strictly R19a → R19b → R19c → R19d → R19e → R19f. Rules effective
+now: wording/clarification follow-ups and LOW observations are advisories rather than
+automatic residual rows; new or stricter gates require Amit's row authorization; a
+rule broken twice becomes a mechanism rather than more skill text; and gate work has
+a per-band budget with most rows about the harness.
+
+---
+
 ## 4. What AgentRig deliberately does not copy
 
 Written down so future sessions don't "helpfully" build them (pi's lesson: renunciations are a
@@ -1274,8 +1308,11 @@ of AgentRig's vision and will be implemented. There is no demand/evidence activa
 Evidence still governs honest benefit claims and default enablement; generated skills remain
 opt-in until a separate comparison establishes benefit. E3 remains inconclusive, not rewritten.
 New live evaluation spending still needs an agreed budget, but does not block network-free
-implementation and verification. R18 is the next committed band, agreed on 2026-09-21;
-its [contract](plans/R18.md) and order 18 below extend this continuation. Optional polish remains at the literal end of this roadmap.
+implementation and verification. R18 is complete. R19 is the next committed band,
+approved on 2026-09-23 with the exact scope and deferral in its [contract](plans/R19.md);
+order 19 below extends this continuation. Optional polish remains at the literal end
+of this roadmap, and post-R19 product direction is not selected until approved items
+1–4 are done.
 
 The following is the default delivery order, chosen for impact and dependencies. Arrows are
 order within a group, not new milestone identifiers. Independent rows may be implemented in
@@ -1306,6 +1343,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 16 | R16a (done, PR #199 + repair #206) → R16b (done, PR #203 + repair #208) → R16c (done, PR #198) → R16d (done, PR #200) → R16e (done, PR #201) → R16f (done, PR #204) → R16g (done, PR #210) → R16h (done implementation, PR #211) | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
 | 17 | R17a (gate) + R17b → R17c → R17d → R17e → R17f → R17g | Feel and defaults after every capability row. R17a is the gate under which the band is built, not a row the train expands: its artifacts are R17b's first commit, so the defaults pass is the first PR and carries its own before numbers. Measurement locks the gain in; the follow-ups sweep is last because it does not change feel. |
 | 18 | R18a → R18b → (R18c ∥ R18d) → R18e | Unattended trains: R18b needs R18a session recovery; R18c and R18d are independent after R18b; R18e consumes R18c queue and R18d verdict schema. [Contract](plans/R18.md). |
+| 19 | R19a → R19b → R19c → R19d → R19e → R19f | Harness, Pack, Train: generic mechanisms precede CLI contribution points, then ship-pack extraction, train extraction, bolt-on retirement and mechanized gates. Every dependency is sequential; #539 remains parked until R19f. Post-R19 product direction is deferred. [Contract](plans/R19.md). |
 
 R6a has started independently after R5e merged: its memory-hardening dependencies are complete
 and procedure detection does not depend on MCP pinning or extension loading. This parallel start
@@ -1334,9 +1372,9 @@ Exit criteria for active work: appropriate build/typecheck/regression checks pas
 negative case fails without the fix; current guarantees and limitations are updated; and the
 relevant real surface is exercised where the row claims runtime behavior. A skipped OS test is
 a skip, not validation. Documentation-only changes need link and consistency checks rather
-than unrelated runtime tests. For the R18 band-definition PR, verify §3/§5/STATUS and
-[the band contract](plans/R18.md) agree and their links resolve; run instruction-contract
-tests if their pinned sentences change. This doc-only exit does not satisfy R18 runtime acceptance.
+than unrelated runtime tests. For the R19 band-definition PR, verify §3/§5/STATUS and
+[the band contract](plans/R19.md) agree and their links resolve; run instruction-contract
+tests if their pinned sentences change. This doc-only exit does not satisfy R19 runtime acceptance.
 
 Dogfooding remains a source of feedback, not the sole success criterion. Behavioral improvements
 must cite E's independent checks and report costs and failures. No requirement to invent a
