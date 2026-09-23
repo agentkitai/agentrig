@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt, listing?: Record<string, unknown>[]) {
+async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt, listing?: Record<string, unknown>[], repairTask?: string) {
   const root = await mkdtemp(join(tmpdir(), "dispatch-")); roots.push(root);
   await mkdir(join(root, "bin"));
   const script = `#!/usr/bin/env node
@@ -18,7 +18,7 @@ if(mode==='timeout'){setTimeout(()=>{},10000);return;}
 if(mode==='lookup-failure'){console.error('unavailable');process.exit(1);}
 if(a[0]==='pr' && a[1]==='view') {
   if(mode==='pinned-missing'){console.error('not found');process.exit(1);}
-  console.log(JSON.stringify({number:mode==='pinned-wrong'?8:7,state:mode==='pinned-closed'?'CLOSED':'OPEN',headRefName:'builder-branch',headRefOid:'a'.repeat(40),body:'old marker'}));process.exit(0);
+  console.log(JSON.stringify({number:mode==='pinned-wrong'?8:7,url:'https://github.com/agentkitai/agentrig/pull/7',state:mode==='pinned-closed'?'CLOSED':'OPEN',headRefName:'builder-branch',headRefOid:mode==='moved-head'?'b'.repeat(40):'a'.repeat(40),body:'old marker'}));process.exit(0);
 }
 if(a[0]==='pr' && a[1]==='list' && ${listing !== undefined}) { console.log(${JSON.stringify(JSON.stringify(listing ?? []))});process.exit(0); }
 if(a[0]==='pr' && ${activation}) {
@@ -29,13 +29,14 @@ if(a[0]==='pr' && ${activation}) {
   console.log(JSON.stringify(prs));process.exit(0);
 }
 if(a[0]==='pr'){console.log(JSON.stringify(mode==='no-pr'?[]:[{number:7,headRefName:mode==='row'?'builder-branch':'feature',headRefOid:'a'.repeat(40),body:mode==='row'?'agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099':''}]));process.exit(0);}
+if(a[0]==='api' && ['456','789'].includes(a[1].split('/').pop())) { if(mode==='source-failure'){console.error('not found');process.exit(1);} console.log(JSON.stringify({id:Number(a[1].split('/').pop()),html_url:'https://github.com/agentkitai/agentrig/pull/'+(mode==='wrong-source-pr'?'8':'7')+'#'+(a[1].includes('/issues/')?'issuecomment-':a[1].includes('/reviews/')?'pullrequestreview-':'discussion_r')+a[1].split('/').pop(),body:mode==='missing-heading'?'edited heading':'### X1: [HIGH] Exact blocker\\n### X2: [HIGH] Other blocker'}));process.exit(0); }
 if(a.includes('POST')){if(mode==='post-failure'){console.error('post failed');process.exit(1);}if(mode==='rate-limit'){console.error('HTTP 429\\nRetry-After: 60');process.exit(1);}let s='';process.stdin.on('data',x=>s+=x);process.stdin.on('end',()=>{fs.writeFileSync(root+'/body',JSON.parse(s).body);console.log(JSON.stringify({id:123}));});}
 else {if(mode==='read-failure'){console.error('read failed');process.exit(1);} console.log(JSON.stringify({body:mode==='mismatch'?'wrong':fs.readFileSync(root+'/body','utf8')}));}`;
   for (const command of ["gh", "git"]) { await writeFile(join(root, "bin", command), script); await chmod(join(root, "bin", command), 0o755); }
   // Explicit executable injection avoids process-global PATH races between test workers.
   const mod = await import(/* @vite-ignore */ pathToFileURL(resolve(".agentrig/extensions/dispatch-record.mjs")).href);
   const handler = mod.createDispatchHook({ gh: join(root, "bin/gh"), git: join(root, "bin/git"), ...(mode === "row" ? { rowForSession: () => "agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099" } : {}), ...(budgetMs === undefined ? {} : { budgetMs }) });
-  const task = 'Exact task\r\n```\nnon-ASCII: café 🔧\ntrailing newline\n';
+  const task = repairTask ?? 'Exact task\r\n```\nnon-ASCII: café 🔧\ntrailing newline\n';
   let result;
   if (activation) {
     const runner = `
@@ -172,3 +173,38 @@ it.each([
   expect(p.calls).toContain('"pr","list"');
   expect(p.calls).not.toContain("POST");
 });
+
+const repairTask = `Repair round: 1/3
+Pre-dispatch read-back: Repair round: 1/3; blockers X1; OLD ${"a".repeat(40)}; verified 2026-09-23T00:00:00Z
+### X1: [HIGH] Exact blocker
+Source: https://github.com/agentkitai/agentrig/pull/7#issuecomment-456`;
+const repairProbe = (mode: string, task = repairTask) => probe(mode, "subagent", undefined, undefined, false, hostPrompt, undefined, task);
+it("repair matching live source posts PASS before dispatch may start", async () => {
+  const p = await repairProbe("ok");
+  expect(p.result.action).toBe("continue");
+  expect(p.body).toContain("Pre-edit comparison: PASS");
+  expect(p.body).toContain("checked source: https://github.com/agentkitai/agentrig/pull/7#issuecomment-456");
+  expect(p.calls.indexOf('"pr","view"')).toBeLessThan(p.calls.indexOf('"POST"'));
+  expect(p.calls.indexOf('issues/comments/456')).toBeLessThan(p.calls.indexOf('"POST"'));
+});
+it.each(["missing-heading", "moved-head"])("repair %s posts mismatch and denies child start", async mode => {
+  const p = await repairProbe(mode);
+  expect(p.result.action).toBe("deny");
+  expect(p.body).toContain("Pre-edit comparison: FAIL");
+  expect(p.result.reason).toMatch(/heading|head/);
+});
+it.each(["issuecomment-456", "discussion_r456", "pullrequestreview-456"])("repair supports source anchor %s", async anchor => {
+  expect((await repairProbe("ok", repairTask.replace("issuecomment-456", anchor))).result.action).toBe("continue");
+});
+it.each([
+  repairTask.replace("issuecomment-456", "unknown-456"),
+  repairTask.replace("/pull/7#", "/pull/8#"),
+  repairTask.replace("Source: https://github.com/agentkitai/agentrig/pull/7#issuecomment-456", ""),
+  repairTask.replace(/OLD [a-f0-9]+/, "OLD invalid"),
+  repairTask + "\n### X2: [HIGH] Not in source\nSource: https://github.com/agentkitai/agentrig/pull/7#issuecomment-789",
+])("repair malformed or mismatched assignment denies", async task => {
+  expect((await repairProbe("ok", task)).result.action).toBe("deny");
+});
+it("repair source lookup failure denies", async () => { expect((await repairProbe("source-failure")).result.action).toBe("deny"); });
+
+it("repair rejects a forged source anchor belonging to another PR", async () => { expect((await repairProbe("wrong-source-pr")).result.action).toBe("deny"); });

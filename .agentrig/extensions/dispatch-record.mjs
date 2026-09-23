@@ -69,11 +69,41 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       const input = context.tool.input;
       if (!input || typeof input.task !== "string" || !input.task || !context.sessionId) throw new Error("missing task or parent session id");
       if (input.label !== undefined) throw new Error("omit subagent label: immutable spawn must preserve the complete task");
-      const body = `## AgentRig hook dispatch record\ndispatch time: ${new Date().toISOString()}\nhead SHA: ${pr.headRefOid}\nparent session id: ${context.sessionId}\ntask UTF-8 bytes: ${Buffer.byteLength(input.task)}\n\n${input.task}`;
+      const errors = [], checked = [];
+      const repair = /Repair round:/.test(input.task);
+      if (repair) {
+        if (!/Repair round: [1-3]\/3\b/.test(input.task)) errors.push("invalid Repair round receipt");
+        const live = JSON.parse(await command(gh, ["pr", "view", String(pr.number), "--json", "number,headRefOid,url"]));
+        if (live.number !== pr.number || !/^[a-f0-9]{40}$/.test(live.headRefOid) || typeof live.url !== "string") throw new Error("invalid live repair PR");
+        const olds = [...input.task.matchAll(/\bOLD\s+([a-f0-9]{40})\b/g)].map(match => match[1]);
+        if (!olds.length || olds.some(old => old !== live.headRefOid)) errors.push("OLD head does not match live PR head");
+        pr.headRefOid = live.headRefOid;
+        const headings = [...input.task.matchAll(/^(?:[ \t]*#{1,6}\s+)?(?:Finding:\s*)?([^\n]*\[(?:CRITICAL|HIGH|MEDIUM|LOW|BLOCKER|P[0-3])\][^\n]*)$/gm)];
+        if (!headings.length) errors.push("repair task has no exact finding headings");
+        for (let i = 0; i < headings.length; i++) {
+          const heading = headings[i][1].trim();
+          const block = input.task.slice(headings[i].index, headings[i + 1]?.index ?? input.task.length);
+          const urls = [...block.matchAll(/https:\/\/github\.com\/[^\s<>`\)]+/g)].map(match => match[0]);
+          if (!urls.length) errors.push(`missing source for heading: ${heading}`);
+          for (const url of urls) {
+            const match = /^(https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+)#(issuecomment-|discussion_r|pullrequestreview-)(\d+)$/.exec(url);
+            if (!match || match[1] !== live.url) { errors.push(`unsupported or wrong-PR source: ${url}`); continue; }
+            const endpoint = match[3] === "issuecomment-" ? "issues/comments" : match[3] === "discussion_r" ? "pulls/comments" : `pulls/${pr.number}/reviews`;
+            const source = JSON.parse(await command(gh, ["api", `repos/${match[2]}/${endpoint}/${match[4]}`]));
+            if (String(source.id) !== match[4] || typeof source.body !== "string" || source.html_url !== url) throw new Error(`invalid source response: ${url}`);
+            checked.push(`checked source: ${url}; comment ID: ${source.id}; heading: ${heading}`);
+            const lines = source.body.split(/\r?\n/).map(line => line.replace(/^#{1,6}\s+/, "").trim());
+            if (!lines.includes(heading)) errors.push(`missing verbatim heading in ${url}: ${heading}`);
+          }
+        }
+      }
+      const comparison = repair ? `Pre-edit comparison: ${errors.length ? "FAIL" : "PASS"}\nlive PR head: ${pr.headRefOid}\n${checked.join("\n")}\n${errors.map(error => `mismatch: ${error}`).join("\n")}\n\n` : "";
+      const body = `## AgentRig hook dispatch record\ndispatch time: ${new Date().toISOString()}\nhead SHA: ${pr.headRefOid}\nparent session id: ${context.sessionId}\ntask UTF-8 bytes: ${Buffer.byteLength(input.task)}\n\n${comparison}${input.task}`;
       const posted = JSON.parse(await command(gh, ["api", "repos/{owner}/{repo}/issues/" + pr.number + "/comments", "--method", "POST", "--input", "-"], JSON.stringify({ body })));
       if (!Number.isSafeInteger(posted.id) || posted.id <= 0) throw new Error("missing posted comment id");
       const readback = JSON.parse(await command(gh, ["api", "repos/{owner}/{repo}/issues/comments/" + posted.id]));
       if (typeof readback.body !== "string" || !Buffer.from(readback.body).equals(Buffer.from(body))) throw new Error("comment API read-back byte mismatch");
+      if (errors.length) throw new Error(errors.join("; "));
       return { action: "continue" };
     } catch (error) {
       return { action: "deny", reason: `dispatch record failed: ${error instanceof Error ? error.message : String(error)}` };
