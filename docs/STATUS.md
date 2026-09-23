@@ -1,8 +1,12 @@
 # Status
 
-Issue #531 builder handoff: CLI train host GitHub transport retries rate limits with
-a five-minute wait ceiling, including post-merge CI lookup. Deterministic recovery,
-metadata and exhaustion tests added; independent review and landing remain pending.
+## Implemented and reviewed — issue #531, train GitHub rate-limit retries
+
+CLI train host GitHub transport retries rate limits with a five-minute wait ceiling,
+including post-merge CI lookup. Deterministic recovery, metadata and exhaustion tests
+cover the transport. PR #538's initial independent reviews and focused repair review
+resolved all blockers; final exact-head CI and authorized landing follow this receipt.
+This standalone issue has no assigned roadmap completion marker.
 
 ## Pending review — issue #527, fetched lander provenance
 
