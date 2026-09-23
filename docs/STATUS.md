@@ -1,5 +1,14 @@
 # Status
 
+## Pending review — issue #541, local landing SHA quotation evidence
+
+Land now requires a successful recorded command plus exact stdout containing the claimed full SHA
+when a landing-gate SHA claim is sourced from local command output such as `git rev-parse` or a
+SHA-producing `git merge-base`. Local quotations cannot substitute for fetched head/CI API evidence
+or exact fetched body/comment provenance, and missing evidence preserves the halt gate. Fail-first,
+CRLF, and named mutation proofs accompany the PR. Repair round: 0/3; independent conductor review
+and exact-head CI remain pending. No roadmap completion marker is set.
+
 ## Pending review — issue #533, verdict blocking boolean wording
 
 The reviewer verdict prompt preserves the strict finding object shape while explicitly stating

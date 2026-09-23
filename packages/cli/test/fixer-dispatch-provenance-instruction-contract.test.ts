@@ -28,6 +28,8 @@ const landSentences = [
   "Read the PR body and match that line against the round, OLD and assigned blockers in the persisted fixer task; verify its timestamp precedes the dispatch.",
   "Before making a landing-gate claim that attributes a comment ID, comment URL or SHA to the PR body or a comment, fetch the live PR body and comments, then quote the exact fetched body or comment text containing that identifier.",
   "For a landing-gate claim sourced from a fetched GitHub API response, including a `headRefOid` or CI SHA, quote the exact response field and value from that fetched response.",
+  "For a landing-gate SHA claim sourced from local command output, including `git rev-parse` or a SHA-producing `git merge-base`, record the exact command, require exit 0, and quote the exact stdout containing the claimed full SHA.",
+  "A local-command quotation cannot establish a fetched `headRefOid` or CI SHA and does not replace the exact fetched body or comment quotation required for an attributed provenance claim; a failed command or stdout that does not contain the claimed full SHA halts.",
   "An API-response quotation does not replace the exact fetched body or comment quotation required for an attributed provenance claim.",
   "Only cite a comment ID present in the session-fetched comment listing; never supply one from memory or inference.",
   "Write the fetched live PR comment listing to a session-owned `comments.json` and retain it through the landing gate; only cite a comment ID that is present in that artifact.",
@@ -105,16 +107,20 @@ it.each([
   ["M-unfetched-attributed-claim", landSentences[3], landSentences[3].replace("fetch the live PR body and comments, then quote the exact fetched body or comment text", "inspect available context")],
   ["M-api-sha-requires-body-comment", landSentences[4], landSentences[4].replace("quote the exact response field and value from that fetched response", "quote matching PR body or comment text")],
   ["M-api-response-paraphrase", landSentences[4], landSentences[4].replace("exact response field and value", "API result summary")],
-  ["M-api-quote-waives-attributed-provenance", landSentences[5], landSentences[5].replace("does not replace", "replaces")],
-  ["M-lander-citation-may-use-recall", landSentences[6], landSentences[6].replace("never supply one from memory or inference", "supply one from memory when plausible")],
-  ["M-comments-json-omission", landSentences[7], landSentences[6]],
-  ["M-comments-json-body-unbound", landSentences[8], landSentences[8].replace("from that same `comments.json` artifact", "from any available source")],
-  ["M-pr-blamed-for-lander-introduced-id", landSentences[9], landSentences[9].replace("a lander error and never a PR defect", "a PR defect")],
-  ["M-pr-anchor-recast-as-lander-error", landSentences[10], landSentences[10].replace("remains subject to the existing halt gate above", "is a lander error and not a halt")],
-  ["M-fixer-handoff-full-task", landSentences[11], landSentences[11].replace("does not require the full dispatched task", "requires the full dispatched task")],
-  ["M-conductor-task-not-spawn-matched", landSentences[12], landSentences[12].replace("must match the immutable session-store `subagent.spawn` event", "may omit the immutable spawn")],
-  ["M-matched-pair-waives-gates", landSentences[14], landSentences[14].replace("but it does not waive", "and it waives")],
-  ["M-single-missing-source-halts", landSentences[15], landSentences[15].replace("neither", "either")],
+  ["M-local-sha-unrecorded-command", landSentences[5], landSentences[5].replace("record the exact command, require exit 0, and quote the exact stdout", "summarize the command result")],
+  ["M-local-sha-allows-failed-command", landSentences[5], landSentences[5].replace("require exit 0", "accept any exit")],
+  ["M-local-sha-waives-fetched-api", landSentences[6], landSentences[6].replace("cannot establish a fetched `headRefOid` or CI SHA", "establishes the fetched `headRefOid` and CI SHA")],
+  ["M-local-sha-missing-output-continues", landSentences[6], landSentences[6].replace("halts", "may continue")],
+  ["M-api-quote-waives-attributed-provenance", landSentences[7], landSentences[7].replace("does not replace", "replaces")],
+  ["M-lander-citation-may-use-recall", landSentences[8], landSentences[8].replace("never supply one from memory or inference", "supply one from memory when plausible")],
+  ["M-comments-json-omission", landSentences[9], landSentences[8]],
+  ["M-comments-json-body-unbound", landSentences[10], landSentences[10].replace("from that same `comments.json` artifact", "from any available source")],
+  ["M-pr-blamed-for-lander-introduced-id", landSentences[11], landSentences[11].replace("a lander error and never a PR defect", "a PR defect")],
+  ["M-pr-anchor-recast-as-lander-error", landSentences[12], landSentences[12].replace("remains subject to the existing halt gate above", "is a lander error and not a halt")],
+  ["M-fixer-handoff-full-task", landSentences[13], landSentences[13].replace("does not require the full dispatched task", "requires the full dispatched task")],
+  ["M-conductor-task-not-spawn-matched", landSentences[14], landSentences[14].replace("must match the immutable session-store `subagent.spawn` event", "may omit the immutable spawn")],
+  ["M-matched-pair-waives-gates", landSentences[16], landSentences[16].replace("but it does not waive", "and it waives")],
+  ["M-single-missing-source-halts", landSentences[17], landSentences[17].replace("neither", "either")],
 ] as const)("land rejects named mutant %s", (_mutant, original, weakening) => {
   const text = read(landPath);
   expect(weakening).not.toBe(original);
@@ -124,7 +130,7 @@ it.each([
 it("land rejects named mutant M-comments-json-contradiction", () => {
   const text = read(landPath);
   expectLandGate(text);
-  const mutant = text.replace(landSentences[7], `${landSentences[7]}\nThe fetched live PR comment listing need not be written to \`comments.json\`.`);
+  const mutant = text.replace(landSentences[9], `${landSentences[9]}\nThe fetched live PR comment listing need not be written to \`comments.json\`.`);
   expect(() => expectLandGate(mutant)).toThrow();
 });
 
