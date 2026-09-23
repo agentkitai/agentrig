@@ -8,6 +8,12 @@ child/role filters. Additive optional `subagent.spawn.taskText` preserves exact 
 without repurposing the historical `task` display label. Existing unhooked and unnamed
 callers remain supported; no shipping policy is introduced.
 
+PR #549 repair round 1 addresses only blocking C1/X1: the spawn dispatcher is
+restricted to the registered `subagent` tool (matching event-source authority), and
+complete spawn-hook result variants reject malformed/blank denial reasons before
+launch. Fail-first extension-forgery and malformed-result/capacity-release regressions
+plus named-mutant receipts are recorded in the PR handoff. Independent review pending.
+
 R19a remains **in progress**, not done. Remaining slices: named-provider-bound roles;
 validated deterministic skill includes/assets/flags (including invalid/cyclic inputs).
 R19b has not started. The conductor owns final row/band markers. Acceptance proof lives

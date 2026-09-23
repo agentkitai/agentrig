@@ -40,6 +40,13 @@ export type HookResult =
   | { action: "modify"; patch: unknown }
   | { action: "inject"; message: string };
 
+// Spawn hooks are a gate/notification seam, never a rewrite seam. Validate complete
+// runtime variants: JS extensions can return values outside the TypeScript union.
+const SpawnHookResult = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("continue") }).strict(),
+  z.object({ action: z.literal("deny"), reason: z.string().trim().min(1) }).strict(),
+]);
+
 /** Immutable, resolved spawn inputs; post_spawn additionally identifies the launched child. */
 export interface SpawnHookContext {
   readonly task: string;
@@ -263,6 +270,13 @@ export async function runHooks(
       continue;
     } finally {
       opts.signal?.removeEventListener("abort", onAbort);
+    }
+
+    if ((point === "pre_spawn" || point === "post_spawn") && !SpawnHookResult.safeParse(result).success) {
+      const reason = `hook ${name} returned invalid spawn result; ${opts.failClosed === true ? "blocking" : "ignoring"}`;
+      opts.onError(reason);
+      if (opts.failClosed === true) return { denied: reason, patches, injects };
+      continue;
     }
 
     if (result === null || typeof result !== "object" || !("action" in result)) {
