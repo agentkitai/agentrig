@@ -300,11 +300,20 @@ relaxation. Only independent CLI transport envelopes currently attest exact tran
 For exact API assertions the heading is the exact validated configured pin, not a claim of
 independent observed transport. Never synthesize a receipt from review prose or the pin.
 
-Retain the actual adapter-written `<PREFIX>.provenance.json` together with its output (bound to
-reviewed head, slot, configured model, assertedModel, verdict, and successful exit), and preserve
-its durable artifact location in the PR handoff. Posting uses
-`--provenance <PREFIX>.provenance.json`; land retrieves that same trusted adapter receipt, not a
+Retain the adapter-written durable `provenance.json` and adjacent `review.md`, bound to
+repository/PR/pass, reviewed head, slot, configured model, assertedModel, verdict, and successful
+exit. Preserve the adapter stdout manifest (receipt/output locators and receipt SHA-256) in the
+PR handoff. The scratch `<PREFIX>.provenance.json` is only a posting-compatible copy. Posting
+uses `--provenance <PREFIX>.provenance.json`; land retrieves the durable trusted receipt, not a
 reviewer-authored replacement, and passes its local path as `TRUSTED_ADAPTER_RECEIPT` to
 `--validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`. Validate the reassembled
 canonical body when split comments are used. Missing or mismatched provenance halts: recover
 the original adapter artifact or rerun the adapter, never fill transportModel from configuration.
+
+For every adapter launch, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
+`AGENTRIG_REVIEW_PR=NN` and `AGENTRIG_REVIEW_PASS=PASS`. The adapter stores durable
+output/receipt pairs under `$HOME/.agentrig/review-evidence/OWNER/REPO/NN/PASS/ATTEMPT/`,
+never under review scratch. Follow docs/SHIPPING-WORKFLOW.md **Durable review evidence
+(#547)**: save the stdout manifest in the PR, validate it with
+`node scripts/review-provenance.mjs` before scratch cleanup and again before landing,
+and never delete durable pairs during cleanup. Missing or tampered evidence refuses.

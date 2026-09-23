@@ -12,6 +12,11 @@ Repair round 4 (owner amendment on PR #545) corrects exactly RX1/RC2 and RC1: bo
 
 # Status
 
+Issue #547 implementation: adapter-owned durable review output/receipt pairs, digest-bound
+separate-session landing validation, and cleanup retention contracts are implemented;
+repair round 1 addresses blocking launch-recipe identity and contradictory shared-policy
+wording (C1/C2); conductor delta review/landing pending (no roadmap completion marker).
+
 ## Defined, not started — R19 Harness, Pack, Train
 
 Amit approved items 1–4 on 2026-09-23: "1-4 approved. 5 we talk about when 1-4 are

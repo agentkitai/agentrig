@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Skill-side process/provider adapters only. Scheduling, check gates and findings are skill policy.
+import { reviewIdentity, persistReview } from "./review-provenance.mjs";
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -91,6 +92,8 @@ export async function main(args) {
     // Configuration/auth preflight is not a reviewer launch and consumes no retry.
     throw new UsageError(error.message);
   }
+  let identity;
+  try { identity = reviewIdentity(); } catch (error) { throw new UsageError(error.message); }
   let prompt = readFileSync(promptPath, "utf8");
   if (!prompt.trim()) throw new Error("empty review prompt");
   for (const suffix of ["stdout", "stderr", "last", "md", "model.txt", "provenance.json", "verdict.json"]) if (existsSync(`${prefix}.${suffix}`)) throw new Error("output already exists; use a fresh attempt prefix");
@@ -125,6 +128,9 @@ export async function main(args) {
   writeFileSync(`${prefix}.md`, result.text);
   writeFileSync(`${prefix}.verdict.json`, JSON.stringify(verdict, null, 2) + "\n");
   writeFileSync(`${prefix}.model.txt`, result.model + "\n");
-  writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ ...(home === undefined ? {} : { resolvedHome: home.home, homeVariable: home.variable }), verdict, ignoredKeys, reviewedHead, slot, adapter: binding.adapter, model: result.model, assertedModel: verdict.assertedModel, transportModel, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
+  const provenance = { ...(home === undefined ? {} : { resolvedHome: home.home, homeVariable: home.variable }), verdict, ignoredKeys, reviewedHead, slot, adapter: binding.adapter, model: result.model, assertedModel: verdict.assertedModel, transportModel, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 };
+  const durable = persistReview(identity, provenance, result.text);
+  writeFileSync(`${prefix}.provenance.json`, JSON.stringify(provenance, null, 2) + "\n");
+  process.stdout.write(JSON.stringify(durable) + "\n");
 }
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = error instanceof UsageError ? 64 : 2; });

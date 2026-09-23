@@ -279,12 +279,16 @@ authorize family relaxation either. CLI transport envelopes remain independent e
 pin evidence. Preserve the honest `assertedModel` and `modelSource` in all verdicts.
 
 Headings carry the transport-proven pinned model (for API, the exact validated configured
-pin, without implying independently observed transport). Keep the actual adapter-written
-`<PREFIX>.provenance.json` as a durable artifact and record its location in the handoff.
-Posting supplies `--provenance <PREFIX>.provenance.json`. Land retrieves the same artifact
-and runs `node scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`
-on the reassembled canonical body. Never reconstruct a receipt from the configured pin
-or reviewer prose; missing or mismatched artifacts require recovery or an adapter rerun.
+pin, without implying independently observed transport). Retain the adapter-written
+durable `provenance.json` and adjacent `review.md` outside cleanup roots, and record
+the adapter manifest (receipt/output paths and receipt digest) in the PR handoff.
+The scratch `<PREFIX>.provenance.json` is only a posting-compatible copy.
+Posting may supply `--provenance <PREFIX>.provenance.json`. Land retrieves the durable receipt
+from the PR manifest, runs `node scripts/review-provenance.mjs` as specified below,
+then uses that receipt as `TRUSTED_ADAPTER_RECEIPT` with
+`node scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`
+on the reassembled canonical body. Never reconstruct a receipt from the configured
+pin or reviewer prose; missing or mismatched artifacts require recovery or an adapter rerun.
 
 
 ### Profile-scoped reviewer launch homes (#506)
@@ -296,7 +300,7 @@ absolute `CODEX_HOME` and `CLAUDE_CONFIG_DIR` paths (see
 children. A standalone adapter uses the same safe user-profile resolver:
 
 ```sh
-node scripts/reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix> --profile personal
+AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO AGENTRIG_REVIEW_PR=NN AGENTRIG_REVIEW_PASS=PASS node scripts/reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix> --profile personal
 ```
 
 The existing five-argument form still works with explicitly inherited homes or the
@@ -312,3 +316,37 @@ posted heading displays the JSON-quoted resolved home beside transport model. Pr
 receipt through repair/posting; a home path is provenance, not proof of account
 identity. API adapters have no CLI home. Historical receipts without a home retain
 their historical heading; new adapter receipts always carry the resolved home.
+
+### Durable review evidence (#547)
+
+Before every positional adapter launch, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
+`AGENTRIG_REVIEW_PR=NN` and `AGENTRIG_REVIEW_PASS=PASS` (a unique initial or focused
+pass name). Missing/invalid identity refuses launch. The adapter itself writes both
+`review.md` and `provenance.json` under
+`$HOME/.agentrig/review-evidence/OWNER/REPO/NN/PASS/ATTEMPT/`, using exclusive files
+and a unique attempt id. Its stdout JSON supplies `receipt`, `output`, and `sha256`
+(the receipt digest); the receipt binds the output digest and pass identity as well
+as the head/slot/model/adapter/verdict. Record this manifest verbatim in the PR
+handoff for every successful slot and pass, not just a prose model claim. OUT's
+`<PREFIX>.provenance.json` is only a posting-compatible scratch copy, not the durable
+artifact. The durable evidence directory is outside OUT, reviewer temporary roots,
+proof TMPDIR and worktrees: never include it in scratch cleanup. Retain superseded
+passes too. If HOME places it inside any cleanup root, halt before launch and fix
+that environment; do not relocate evidence into temporary storage.
+
+Before deleting scratch, validate each saved manifest with the command below and
+read back the PR handoff. Land, including a separate later session, retrieves the
+manifest from that handoff and runs this same gate BEFORE comment validation:
+
+```sh
+node scripts/review-provenance.mjs "$RECEIPT" "$RECEIPT_SHA256" "$REPOSITORY" "$PR" "$PASS" "$REVIEWED_HEAD" "$SLOT" "$MODEL" "$ADAPTER"
+```
+
+A missing receipt/output, digest mismatch, or identity/verdict binding mismatch
+halts. Use the original durable receipt as `TRUSTED_ADAPTER_RECEIPT` for the existing
+`review-finding-index.mjs --validate` gate on the live (reassembled if chunked)
+comment; the durable gate does not replace live-comment checks. Never regenerate
+provenance from prose/configuration. If landing on another host, transfer the exact
+receipt and adjacent `review.md`, retaining the PR-persisted digest and identity;
+if unavailable, recover original artifacts or rerun review. Scratch cleanup never
+deletes these durable artifacts and cannot be used to waive the land gate.

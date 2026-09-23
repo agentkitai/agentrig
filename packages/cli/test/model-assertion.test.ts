@@ -54,12 +54,17 @@ it.each(["gpt-5", "gpt-4.1", "claude-opus-5"])("adapter transport and receipt in
     writeFileSync(join(dir, "prompt"), "source bundle and checks green");
     const prefix = join(dir, "out");
     const runner = fileURLToPath(new URL("../../../scripts/reviewer-adapters.mjs", import.meta.url));
-    const result = spawnSync(process.execPath, [runner, join(dir, "config.json"), "Codex", join(dir, "prompt"), dir, prefix], { encoding: "utf8", env: { ...process.env, CODEX_HOME: join(dir, "codex-home"), PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } });
+    const result = spawnSync(process.execPath, [runner, join(dir, "config.json"), "Codex", join(dir, "prompt"), dir, prefix], { encoding: "utf8", env: { ...process.env, HOME: dir, AGENTRIG_CHILD_PROFILE: undefined, AGENTRIG_REVIEW_REPOSITORY: "owner/repo", AGENTRIG_REVIEW_PR: "547", AGENTRIG_REVIEW_PASS: "initial", CODEX_HOME: join(dir, "codex-home"), PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } });
     if (asserted !== "gpt-5") {
       expect(result.status).not.toBe(0);
       expect(existsSync(`${prefix}.provenance.json`)).toBe(false);
     } else {
       expect(result.status, result.stderr).toBe(0);
+      const manifest = JSON.parse(result.stdout);
+      const land = fileURLToPath(new URL("../../../scripts/review-provenance.mjs", import.meta.url));
+      const durable = spawnSync(process.execPath, [land, manifest.receipt, manifest.sha256, "owner/repo", "547", "initial", actualHead, "Codex", "gpt-5.5", "codex-cli"], { encoding: "utf8" });
+      expect(durable.status, durable.stderr).toBe(0);
+
       expect(JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"))).toMatchObject({ assertedModel: "gpt-5", transportModel: "gpt-5.5", model: "gpt-5.5", verdict: { assertedModel: "gpt-5" } });
       expect(readFileSync(`${prefix}.md`, "utf8")).toBe(text);
       expect(readFileSync(`${prefix}.model.txt`, "utf8")).toBe("gpt-5.5\n");
@@ -72,7 +77,7 @@ it.each(["gpt-5", "gpt-4.1", "claude-opus-5"])("adapter transport and receipt in
       chmodSync(join(dir, "gh"), 0o755);
       const post = fileURLToPath(new URL("../../../scripts/post-review-comment.mjs", import.meta.url));
       const postArgs = [post, "123", "Codex", `${prefix}.model.txt`, `${prefix}.md`, actualHead, actualHead, `${prefix}.comment.md`, "--config", join(dir, "config.json")];
-      const options = { encoding: "utf8" as const, env: { ...process.env, CODEX_HOME: join(dir, "codex-home"), PATH: `${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } };
+      const options = { encoding: "utf8" as const, env: { ...process.env, HOME: dir, AGENTRIG_CHILD_PROFILE: undefined, AGENTRIG_REVIEW_REPOSITORY: "owner/repo", AGENTRIG_REVIEW_PR: "547", AGENTRIG_REVIEW_PASS: "initial", CODEX_HOME: join(dir, "codex-home"), PATH: `${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } };
       expect(spawnSync(process.execPath, postArgs, options).status).not.toBe(0);
       const posted = spawnSync(process.execPath, [...postArgs, "--provenance", `${prefix}.provenance.json`], options);
       expect(posted.status, posted.stderr).toBe(0);
@@ -111,13 +116,18 @@ it.each(["gpt-5", "gpt-5.5"])("M-api-echo: real API adapter %s requires exact as
     writeFileSync(join(dir, "prompt"), "source bundle and checks green");
     const prefix = join(dir, "out");
     const runner = fileURLToPath(new URL("../../../scripts/reviewer-adapters.mjs", import.meta.url));
-    const result = spawnSync(process.execPath, ["--import", join(dir, "fetch.mjs"), runner, join(dir, "config.json"), "Codex", join(dir, "prompt"), dir, prefix], { encoding: "utf8", env: { ...process.env, GIT_TRACE2_EVENT: "0" } });
+    const result = spawnSync(process.execPath, ["--import", join(dir, "fetch.mjs"), runner, join(dir, "config.json"), "Codex", join(dir, "prompt"), dir, prefix], { encoding: "utf8", env: { ...process.env, HOME: dir, AGENTRIG_CHILD_PROFILE: undefined, AGENTRIG_REVIEW_REPOSITORY: "owner/repo", AGENTRIG_REVIEW_PR: "547", AGENTRIG_REVIEW_PASS: "initial", GIT_TRACE2_EVENT: "0" } });
     if (asserted === "gpt-5") {
       expect(result.status, result.stderr).toBe(2);
       expect(result.stderr).toContain("assertedModel mismatch");
       expect(existsSync(`${prefix}.provenance.json`)).toBe(false);
     } else {
       expect(result.status, result.stderr).toBe(0);
+      const manifest = JSON.parse(result.stdout);
+      const land = fileURLToPath(new URL("../../../scripts/review-provenance.mjs", import.meta.url));
+      const durable = spawnSync(process.execPath, [land, manifest.receipt, manifest.sha256, "owner/repo", "547", "initial", actualHead, "Codex", "gpt-5.5", "api:fixture"], { encoding: "utf8" });
+      expect(durable.status, durable.stderr).toBe(0);
+
       const receipt = JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"));
       expect(receipt.transportModel).toBeNull();
       expect(receiptTransport(receipt, { reviewedHead: actualHead, slot: "Codex", assertedModel: "gpt-5.5" }, receipt.verdict, "api:fixture")).toBeUndefined();
