@@ -7766,10 +7766,9 @@ with fail-first coverage and a killed mutant. LOW coverage observations remain a
 not residual issues. Conductor marks #502's scoped implementation complete; focused
 repair/finalization review, exact-head CI and post-merge CI remain enforced landing gates.
 
-### Pending conductor review — issue #529
+### Completed — issue #529
 
 Built-in `recommended` check/train profile validation now follows run's undeclared-built-in
 exception while retaining explicit user/project profiles and project-only commands. Paired tests
 exercise `loadRunConfig`, check resolution and train timeout resolution, including overrides,
-unknown rejection and repository-owned home exclusion. Completion remains pending independent
-conductor review; this is not a done marker.
+unknown rejection and repository-owned home exclusion. Independent conductor review is complete.
