@@ -392,6 +392,12 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    return the conflicting texts without changes; do not repair the receipt yourself.
    Only then call the fixer described below, carrying that persisted ledger and counter.
 
+The trusted project extension `.agentrig/extensions/dispatch-record.mjs` records every subagent dispatch after a PR exists, including the exact complete task, dispatch time, current PR head SHA and parent session id.
+The hook posts the dispatch comment and verifies its API read-back byte-for-byte before allowing the tool call; any lookup, post or read-back failure denies dispatch clearly.
+Before a PR exists the hook leaves the initial builder invocation untouched; conductors do not manually post or read back dispatch-task comments.
+Match the hook comment to the immutable session-store `subagent.spawn` event by exact task text and parent session id; obtain the child session ID from that event, never by inventing it.
+Invoke subagents without the optional `label` so immutable spawn retains the complete task. Keep the separate pre-dispatch PR-body receipt and repair ledger gates unchanged.
+
 - **Fix** with one subagent on the same PR branch, carrying verbatim blocker texts or review
   URLs/finding IDs, authorization, prior reviewed SHA and repair counter. Its brief says:
   "Follow dogfood. You are a topic child: run local proof, push, report OLD/NEW and current CI
