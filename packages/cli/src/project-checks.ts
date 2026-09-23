@@ -13,7 +13,8 @@ export async function resolveProjectChecks(projectRoot: string, profile?: string
   // Match run --profile name validation using the same safe-home boundary.
   // User config supplies names only; commands remain project-owned.
   user ??= await loadChildUserConfig(projectRoot);
-  resolveConfig({ defaults: {}, project, ...(user === undefined ? {} : { user }), ...(profile === undefined ? {} : { profile }) });
+  const activeProfile = profile === "recommended" && user?.profiles?.recommended === undefined && project.profiles?.recommended === undefined ? undefined : profile;
+  resolveConfig({ defaults: {}, project, ...(user === undefined ? {} : { user }), ...(activeProfile === undefined ? {} : { profile: activeProfile }) });
   const checks = (profile === undefined ? undefined : project.profiles?.[profile]?.checks) ?? project.checks;
   if (checks === undefined) return undefined;
   return { ...checks, steps: checks.steps.map(step => ({ ...step,

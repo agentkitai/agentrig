@@ -186,7 +186,7 @@ from `packages/cli/dist/project-checks.js` after building AgentRig (source:
 The explicit root may be any repository, including outside this monorepo. This only reads and
 validates project config and safely loads user config for profile-name validation only;
 it does not take commands from home config, infer commands, spawn a shell, or implement a workflow. A missing declaration returns undefined (stop/request declaration),
-not an empty success. A missing file returns undefined even with a selected profile; an existing file with an unknown profile rejects. User-only profiles are valid names under the same safe-home boundary as `run --profile`, but never supply check commands; without project checks the resolver returns `undefined`. Invalid config rejects. The returned object is declaration data,
+not an empty success. A missing file returns undefined even with a selected profile; an existing file with an unknown profile rejects. User-only profiles are valid names under the same safe-home boundary as `run --profile`, but never supply check commands; without project checks the resolver returns `undefined`. The built-in `recommended` name is accepted without an explicit profile, matching `run`; explicit user/project definitions retain precedence. Paired run/check/train coverage lives in `packages/cli/test/project-checks-user-profile.test.ts`. Invalid config rejects. The returned object is declaration data,
 not permission to execute it: display source/root, selected profile and commands and retain
 normal project trust, permission prompts and sandbox checks.
 
