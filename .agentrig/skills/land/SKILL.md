@@ -140,6 +140,8 @@ A missing, edited or mismatched heading/anchor blocks landing even when the loca
 matches; preserve conflicting texts and halt, never retroactively rewrite the assignment.
 Before making a landing-gate claim that attributes a comment ID, comment URL or SHA to the PR body or a comment, fetch the live PR body and comments, then quote the exact fetched body or comment text containing that identifier.
 For a landing-gate claim sourced from a fetched GitHub API response, including a `headRefOid` or CI SHA, quote the exact response field and value from that fetched response.
+For a landing-gate SHA claim sourced from local command output, including `git rev-parse` or a SHA-producing `git merge-base`, record the exact command, require exit 0, and quote the exact stdout containing the claimed full SHA.
+A local-command quotation cannot establish a fetched `headRefOid` or CI SHA and does not replace the exact fetched body or comment quotation required for an attributed provenance claim; a failed command or stdout that does not contain the claimed full SHA halts.
 An API-response quotation does not replace the exact fetched body or comment quotation required for an attributed provenance claim.
 Only cite a comment ID present in the session-fetched comment listing; never supply one from memory or inference.
 Write the fetched live PR comment listing to a session-owned `comments.json` and retain it through the landing gate; only cite a comment ID that is present in that artifact.
