@@ -278,12 +278,16 @@ authorize family relaxation either. CLI transport envelopes remain independent e
 pin evidence. Preserve the honest `assertedModel` and `modelSource` in all verdicts.
 
 Headings carry the transport-proven pinned model (for API, the exact validated configured
-pin, without implying independently observed transport). Keep the actual adapter-written
-`<PREFIX>.provenance.json` as a durable artifact and record its location in the handoff.
-Posting supplies `--provenance <PREFIX>.provenance.json`. Land retrieves the same artifact
-and runs `node scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`
-on the reassembled canonical body. Never reconstruct a receipt from the configured pin
-or reviewer prose; missing or mismatched artifacts require recovery or an adapter rerun.
+pin, without implying independently observed transport). Retain the adapter-written
+durable `provenance.json` and adjacent `review.md` outside cleanup roots, and record
+the adapter manifest (receipt/output paths and receipt digest) in the PR handoff.
+The scratch `<PREFIX>.provenance.json` is only a posting-compatible copy.
+Posting may supply `--provenance <PREFIX>.provenance.json`. Land retrieves the durable receipt
+from the PR manifest, runs `node scripts/review-provenance.mjs` as specified below,
+then uses that receipt as `TRUSTED_ADAPTER_RECEIPT` with
+`node scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`
+on the reassembled canonical body. Never reconstruct a receipt from the configured
+pin or reviewer prose; missing or mismatched artifacts require recovery or an adapter rerun.
 
 
 ### Profile-scoped reviewer launch homes (#506)
@@ -295,7 +299,7 @@ absolute `CODEX_HOME` and `CLAUDE_CONFIG_DIR` paths (see
 children. A standalone adapter uses the same safe user-profile resolver:
 
 ```sh
-node scripts/reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix> --profile personal
+AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO AGENTRIG_REVIEW_PR=NN AGENTRIG_REVIEW_PASS=PASS node scripts/reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix> --profile personal
 ```
 
 The existing five-argument form still works with explicitly inherited homes or the
@@ -314,7 +318,7 @@ their historical heading; new adapter receipts always carry the resolved home.
 
 ### Durable review evidence (#547)
 
-Before every adapter `--run`, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
+Before every positional adapter launch, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
 `AGENTRIG_REVIEW_PR=NN` and `AGENTRIG_REVIEW_PASS=PASS` (a unique initial or focused
 pass name). Missing/invalid identity refuses launch. The adapter itself writes both
 `review.md` and `provenance.json` under

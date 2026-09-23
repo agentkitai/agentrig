@@ -2,7 +2,8 @@
 
 Issue #547 implementation: adapter-owned durable review output/receipt pairs, digest-bound
 separate-session landing validation, and cleanup retention contracts are implemented;
-conductor review/landing pending (no roadmap completion marker).
+repair round 1 addresses blocking launch-recipe identity and contradictory shared-policy
+wording (C1/C2); conductor delta review/landing pending (no roadmap completion marker).
 
 ## Defined, not started — R19 Harness, Pack, Train
 

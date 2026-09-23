@@ -166,7 +166,7 @@ Pass named receipts with head/commands/exits/counts/times as inputs. Reviewers j
 reviewers do NOT run checks. Optional reviewer-owned probes may support findings.
 Zero slots: record `External review: none declared`, skip review worktrees and jobs, and follow
 builder → declared checks → exact-head CI → land. One slot: only it runs and it also owns focused
-material-delta review. Two slots launch in parallel in separate reviewer-owned worktrees you prepare; both launch independently. Beside the launch, use this positional contract exactly once: `node scripts/reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix>`. An adapter usage error (exit 64 before vendor launch, with no `<absolute-output-prefix>.stdout`) is a conductor error and does not consume the slot's single reviewer retry. Hosted CI
+material-delta review. Two slots launch in parallel in separate reviewer-owned worktrees you prepare; both launch independently. Beside the launch, use this positional contract exactly once: `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO AGENTRIG_REVIEW_PR=NN AGENTRIG_REVIEW_PASS=PASS node scripts/reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix>`. An adapter usage error (exit 64 before vendor launch, with no `<absolute-output-prefix>.stdout`) is a conductor error and does not consume the slot's single reviewer retry. Hosted CI
 monitoring starts immediately and overlaps reviews; green hosted CI is required only at landing.
 Never pass builder context. API reviewers receive the relevant source/diff bundle and receipts.
 
@@ -298,7 +298,7 @@ the original adapter artifact or rerun the adapter, never fill transportModel fr
 
 ### Durable review evidence (#547)
 
-Before every adapter `--run`, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
+Before every positional adapter launch, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
 `AGENTRIG_REVIEW_PR=NN` and `AGENTRIG_REVIEW_PASS=PASS` (a unique initial or focused
 pass name). Missing/invalid identity refuses launch. The adapter itself writes both
 `review.md` and `provenance.json` under

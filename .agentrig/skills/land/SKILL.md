@@ -204,7 +204,7 @@ the original adapter artifact or rerun the adapter, never fill transportModel fr
 
 ### Durable review evidence (#547)
 
-Before every adapter `--run`, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
+Before every positional adapter launch, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
 `AGENTRIG_REVIEW_PR=NN` and `AGENTRIG_REVIEW_PASS=PASS` (a unique initial or focused
 pass name). Missing/invalid identity refuses launch. The adapter itself writes both
 `review.md` and `provenance.json` under

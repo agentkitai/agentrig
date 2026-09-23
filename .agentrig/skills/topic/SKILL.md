@@ -285,7 +285,7 @@ For each recorded row, in order:
      it asks for file:line, severity, failure scenario, fix and exact reviewed SHA. Do not supply
      builder reasoning, findings or claimed evidence. Preserve inherited environment constraints.
      ```sh
-     TMPDIR=<SLOT_TMP> node <REPO>/scripts/reviewer-adapters.mjs <WT>/.agentrig/config.json '<SLOT>' <OUT>/prompt.txt <WT> <PREFIX>
+     AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO AGENTRIG_REVIEW_PR=NN AGENTRIG_REVIEW_PASS=PASS TMPDIR=<SLOT_TMP> node <REPO>/scripts/reviewer-adapters.mjs <WT>/.agentrig/config.json '<SLOT>' <OUT>/prompt.txt <WT> <PREFIX>
      ```
      Use unique absolute PREFIX per attempt. Adapter provenance must assert the slot's pinned model.
      Record job ids and UTC start times immediately and restate them on every polling turn.
@@ -518,7 +518,7 @@ the original adapter artifact or rerun the adapter, never fill transportModel fr
 
 ### Durable review evidence (#547)
 
-Before every adapter `--run`, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
+Before every positional adapter launch, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
 `AGENTRIG_REVIEW_PR=NN` and `AGENTRIG_REVIEW_PASS=PASS` (a unique initial or focused
 pass name). Missing/invalid identity refuses launch. The adapter itself writes both
 `review.md` and `provenance.json` under
