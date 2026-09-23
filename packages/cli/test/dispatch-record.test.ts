@@ -18,7 +18,7 @@ if(mode==='timeout'){setTimeout(()=>{},10000);return;}
 if(mode==='lookup-failure'){console.error('unavailable');process.exit(1);}
 if(a[0]==='pr' && a[1]==='view') {
   if(mode==='pinned-missing'){console.error('not found');process.exit(1);}
-  console.log(JSON.stringify({number:mode==='pinned-wrong'?8:7,url:'https://github.com/agentkitai/agentrig/pull/7',state:mode==='pinned-closed'?'CLOSED':'OPEN',headRefName:'builder-branch',headRefOid:mode==='moved-head'?'b'.repeat(40):'a'.repeat(40),body:'old marker'}));process.exit(0);
+  console.log(JSON.stringify({number:mode==='pinned-wrong'?8:7,url:'https://github.com/agentkitai/agentrig/pull/7',state:mode==='pinned-closed'?'CLOSED':'OPEN',headRefName:'builder-branch',headRefOid:mode==='moved-head'?'b'.repeat(40):'a'.repeat(40),body:mode.startsWith('authorization:')?'Human amendment: Repair round: 4/4; authorization: '+mode.slice(14):mode==='amended'?'Human amendment: Repair round: 4/4; authorization: \"I authorize one additional repair round (4).\"':mode==='wrong-amendment'?'Human amendment: Repair round: 5/5; authorization: \"I authorize round 5.\"':'old marker'}));process.exit(0);
 }
 if(a[0]==='pr' && a[1]==='list' && ${listing !== undefined}) { console.log(${JSON.stringify(JSON.stringify(listing ?? []))});process.exit(0); }
 if(a[0]==='pr' && ${activation}) {
@@ -273,15 +273,13 @@ it('direct zero-headings repair denies and records FAIL', async () => {
   expect(p.body).toContain('repair task has no exact finding headings');
 });
 it.each([
-  'Review whether the Repair round: string causes false positives.',
-  'Review this example:\n```text\nRepair round: 1/3\n```',
+    'Review this example:\n```text\nRepair round: 1/3\n```',
   'Review quoted history:\n> Repair round: 1/3',
   'Review `Repair round: 1/3` handling.',
-])('non-repair dispatch stays ordinary: %s', async task => {
+])('receipt intent in examples fails closed with formatting guidance: %s', async task => {
   const p = await realisticProbe(task, verdictSource(canonical));
-  expect(p.result.action).toBe('continue');
-  expect(p.body).not.toContain('Pre-edit comparison:');
-  expect(p.calls).not.toContain('"view"');
+  expect(p.result.action).toBe('deny');
+  expect(p.result.reason).toContain('standalone');
 });
 it('malformed operative receipt still denies', async () => {
   expect((await realisticProbe(`${receipt.replace('Repair round: 1/3', 'Repair round: 9/3')}\nFinding: ${canonical[0]}\nSource: ${sourceUrl}`, verdictSource(canonical))).result.action).toBe('deny');
@@ -297,4 +295,51 @@ it('two source-first reviewer groups do not assign the next group URL backwards'
     expect(p.body).toContain(`checked source: ${expected}; comment ID: ${i < 2 ? '456' : '789'}; heading: ${canonical[i]}`);
     expect(p.body).not.toContain(`checked source: ${wrong}; comment ID: ${i < 2 ? '789' : '456'}; heading: ${canonical[i]}`);
   }
+});
+
+it.each([
+  repairTask.replace('Repair round: 1/3\n', 'Follow dogfood as fixer. Repair round: 1/3.\n'),
+  repairTask.replace('Repair round: 1/3\n', ''),
+  repairTask.replace('Pre-dispatch read-back:', 'Inline Pre-dispatch read-back:'),
+  repairTask.replace('Repair round: 1/3', 'Repair round: nonsense'),
+])('malformed receipt intent is denied with standalone guidance: %s', async task => {
+  const p = await repairProbe('ok', task);
+  expect(p.result.action).toBe('deny');
+  expect(p.result.reason).toContain('standalone');
+});
+it('standalone issue receipt passes live pre-edit comparison', async () => {
+  expect((await repairProbe('ok')).body).toContain('Pre-edit comparison: PASS');
+});
+it('owner-amended 4/4 passes only with that round recorded on the live PR', async () => {
+  const task = repairTask.replaceAll('1/3', '4/4');
+  const p = await repairProbe('amended', task);
+  expect(p.result.action).toBe('continue');
+  expect(p.body).toContain('Pre-edit comparison: PASS');
+  expect(p.body).toContain('checked human amendment: Repair round: 4/4');
+});
+it.each(['ok', 'wrong-amendment'])('owner-amended 4/4 without matching live amendment denies: %s', async mode => {
+  const p = await repairProbe(mode, repairTask.replaceAll('1/3', '4/4'));
+  expect(p.result.action).toBe('deny');
+  expect(p.result.reason).toContain('human amendment');
+});
+it('read-back round cannot disagree with standalone round', async () => {
+  expect((await repairProbe('ok', repairTask.replace('read-back: Repair round: 1/3', 'read-back: Repair round: 2/3'))).result.action).toBe('deny');
+});
+
+it('repair intent without a live PR cannot take initial-builder bypass', async () => {
+  const p = await probe('no-pr', 'subagent', undefined, undefined, false, '', undefined, repairTask);
+  expect(p.result.action).toBe('deny');
+  expect(p.result.reason).toContain('standalone');
+});
+it.each(['', 'not JSON', '""'])('empty or malformed human amendment cannot authorize 4/4: %s', async authorization => {
+  const p = await repairProbe('authorization:' + authorization, repairTask.replaceAll('1/3', '4/4'));
+  expect(p.result.action).toBe('deny');
+});
+it.each([
+  repairTask.replaceAll('Repair round:', 'Repair round').replaceAll('Pre-dispatch read-back:', 'Pre-dispatch read-back'),
+  `OLD ${'a'.repeat(40)}\nFinding: [HIGH] exact heading\nSource: https://github.com/o/r/pull/7#issuecomment-456`,
+])('damaged markers or OLD plus finding still express repair intent: %s', async task => {
+  const p = await repairProbe('ok', task);
+  expect(p.result.action).toBe('deny');
+  expect(p.result.reason).toContain('standalone');
 });

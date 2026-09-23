@@ -163,7 +163,7 @@ it("rejects M554-land-handwritten replacing hook PASS acceptance", () => {
 });
 
 const headingIdentitySentences = [
-  "Repair classification uses an operative standalone `Repair round: N/3` line, not inline mentions, blockquotes or fenced examples; malformed operative round lines fail closed.",
+  "Repair intent is detected anywhere in the task by `Repair round` or `Pre-dispatch read-back` (including inline prose, quoted history and examples), or by `OLD <SHA>` together with finding headings.",
   "Finding identity comes from the source comment’s canonical structured verdict headings when present (decoded JSON strings), otherwise exact legacy source lines; Markdown, Unicode and heading whitespace remain exact.",
   "Tasks may use `Finding: <exact heading>`, `<ID> heading: <exact heading>` (including severity-tagless headings), or a raw heading followed by `Source: <comment URL>`.",
   "A source URL may follow a finding or precede a labeled group.",
