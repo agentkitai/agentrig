@@ -230,3 +230,42 @@ it("discovery bounds the catalogue and refuses file links without consuming thei
     await symlink(outside, join(dir, "linked.md")); expect(await discoverAgentRoles(cwd)).toEqual([]);
   }
 });
+
+it("parses and snapshots a named provider binding without loosening entry names", () => {
+  const parsed = parseAgentRoleFrontmatter('---\ntools: []\nprovider: specialist\n---\nbody');
+  expect(parsed.fields).toMatchObject({ provider: "specialist", "model-role": "subagents" });
+  expect(snapshotAgentRoles([role("reader", [], { provider: "specialist" })])[0]).toHaveProperty("provider", "specialist");
+  for (const value of ['""', 'Bad', 'two words', '../escape', '"' + 'a'.repeat(129) + '"']) {
+    expect(() => parseAgentRoleFrontmatter(`---\ntools: []\nprovider: ${value}\n---\nbody`)).toThrow();
+  }
+});
+
+it.each([undefined, "specialist", "other"])("binds the role to a named entry, never a caller override (%s)", async requested => {
+  const cwd = await root(), store = new SessionStore({ root: join(cwd, "logs") });
+  const choices: unknown[] = [];
+  const tool = subagentTool({ roles: [role("reader", [], { provider: "specialist", "model-role": "main" })],
+    modelRoles: { main: "other" }, providerChoices: { names: ["specialist", "other"], default: "other", main: "other" },
+    createAgent, childConfig: choice => { choices.push(choice); return { provider: provider([]), tools: [],
+      permissions: new RulePolicy([], "allow"), systemPrompt: "child", store, repoMap: false }; } });
+  const events = await collect(createAgent({ provider: provider([call("subagent", { task: "bound", agent: "reader", ...(requested ? { provider: requested } : {}) })]),
+    tools: [tool], permissions: new RulePolicy([], "allow"), systemPrompt: "parent", store, repoMap: false }).run("delegate", { cwd }));
+  if (requested !== undefined) {
+    expect(choices).toEqual([]);
+    expect(events.find(e => e.type === "tool.result" && !e.ok)).toMatchObject({ display: expect.stringContaining("agent role and provider cannot both be selected") });
+  } else {
+    expect(choices).toEqual([{ provider: "specialist" }]);
+    expect(events.find(e => e.type === "subagent.spawn")).toMatchObject({ role: { name: "reader" } });
+  }
+});
+
+it.each([undefined, { names: ["other"], default: "other", main: "other" }])("refuses unresolved bound entries before configuring children (%j)", async providerChoices => {
+  const cwd = await root(), store = new SessionStore({ root: join(cwd, "logs") });
+  const childConfig = vi.fn(() => { throw Error("must not configure"); });
+  const tool = subagentTool({ roles: [role("reader", [], { provider: "missing" })], modelRoles: { subagents: "other" },
+    ...(providerChoices ? { providerChoices } : {}), createAgent, childConfig });
+  const events = await collect(createAgent({ provider: provider([call("subagent", { task: "bound", agent: "reader" })]), tools: [tool],
+    permissions: new RulePolicy([], "allow"), systemPrompt: "parent", store, repoMap: false }).run("delegate", { cwd }));
+  expect(childConfig).not.toHaveBeenCalled();
+  expect(events.find(e => e.type === "tool.result" && !e.ok)).toMatchObject({ display: expect.stringContaining("unavailable provider entry missing") });
+  expect(events.some(e => e.type === "subagent.spawn")).toBe(false);
+});

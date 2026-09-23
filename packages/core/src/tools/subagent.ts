@@ -397,7 +397,10 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
         // Not SandboxDeniedError: no implicit escape retry for host Git metadata preparation.
         throw new Error("isolated worktree preparation is unavailable inside an enforcing parent sandbox; common Git metadata is not exposed");
       }
-      const roleEntry = role === undefined ? undefined : opts.modelRoles?.[role["model-role"]];
+      const roleEntry = role === undefined ? undefined : role.provider ?? opts.modelRoles?.[role["model-role"]];
+      if (role?.provider !== undefined && !opts.providerChoices?.names.includes(role.provider)) {
+        return refuse(`Agent role ${role.name} requires unavailable provider entry ${role.provider}. Configure that entry or update the role provider binding.`);
+      }
       if (role !== undefined && roleEntry === undefined && role["model-role"] !== "subagents") return refuse("agent role model-role is unavailable");
       const entry = role === undefined ? input.provider : roleEntry;
       const choice: SubagentChoice | undefined = entry === undefined ? undefined : { provider: entry };

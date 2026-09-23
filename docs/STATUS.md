@@ -21,10 +21,16 @@ plus named-mutant receipts are recorded in the PR handoff. Both initial reviews 
 focused Codex repair-delta review are complete; C1/X1 are resolved, with LOW observations
 retained as advisories. This first slice is reviewed; the remaining R19a scope stays pending.
 
-R19a remains **in progress**, not done. Remaining slices: named-provider-bound roles;
-validated deterministic skill includes/assets/flags (including invalid/cyclic inputs).
+R19a remains **in progress**, not done. Provider-bound role slice (review pending):
+optional validated `provider` references named host entries and overrides `model-role`;
+unavailable entries refuse before hooks/configuration/start. Unbound routing, caller
+role/provider exclusivity and all existing role restrictions stay unchanged. Flat
+`default` entries are exposed for bound-role CLI wiring. No new event types or R19b work.
+Remaining slice: validated deterministic skill includes/assets/flags (including
+invalid/cyclic inputs). Conductor owns final R19a completion after reviews.
 R19b has not started. The conductor owns final row/band markers. Acceptance proof lives
-in `packages/core/test/spawn-hooks.test.ts`; exact-head declared-check and named-mutant
+in `packages/core/test/spawn-hooks.test.ts`, `packages/core/test/agent-roles.test.ts`
+and `packages/cli/test/subagent-wiring.test.ts`; exact-head declared-check and named-mutant
 receipts travel in the PR body. No instruction-contract/skill-text tests were changed.
 
 ## Dispatch record hook (#539) — implementation, pending independent review

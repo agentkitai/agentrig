@@ -290,3 +290,14 @@ describe("which provider a child runs on (R3.5a)", () => {
     expect(wiring().providerChoices).toBeUndefined();
   });
 });
+
+it("advertises available entries for provider-bound roles even with flat configuration", () => {
+  const bound = { name: "reader", provider: "default", "model-role": "subagents" as const,
+    tools: [], delegable: false, body: "Read", origin: "/roles/reader.md", hash: "1".repeat(64) };
+  const o = wiring({ agentRoles: [bound] });
+  expect(o.providerChoices?.names).toContain("default");
+  expect(o.childConfig({ provider: bound.provider }).provider).toBe(provider);
+  expect(o.childConfig().provider).toBe(second);
+  const { provider: _binding, ...unbound } = bound;
+  expect(wiring({ agentRoles: [unbound] }).providerChoices).toBeUndefined();
+});

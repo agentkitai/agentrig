@@ -10,6 +10,8 @@ export const AgentRoleToolNames = z.array(z.string().regex(/^[A-Za-z0-9_.:-]{1,1
 export const AgentRoleFrontmatterV1 = z.object({
   schema: z.literal("1").optional(),
   tools: AgentRoleToolNames,
+  /** Named entry overrides model-role routing; never accepts a model ID or credentials. */
+  provider: z.string().max(128).regex(/^[a-z][a-z0-9-]*$/).optional(),
   "model-role": z.enum(["main", "supervisor", "memory", "subagents"]).default("subagents"),
   delegable: z.boolean().default(false),
   "max-turns": z.number().int().min(1).max(1000).optional(),
