@@ -1,4 +1,46 @@
 import { spawn } from "node:child_process";
+import { hasVerdictBlock } from "../../scripts/review-verdict.mjs";
+import { findingHeadings } from "../../scripts/review-finding-index.mjs";
+
+// Protocol fields are operative lines, not occurrences in quoted history or examples.
+// Keep every remaining byte: heading whitespace/Markdown is identity, not decoration.
+function operativeLines(task) {
+  let fence;
+  return task.split(/\r?\n/u).map(line => {
+    const marker = /^ {0,3}(`{3,}|~{3,})/u.exec(line)?.[1];
+    if (fence) {
+      if (marker?.[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+      return "";
+    }
+    if (marker) { fence = marker; return ""; }
+    return /^\s*>/u.test(line) ? "" : line;
+  });
+}
+
+function assignedFindings(lines) {
+  const legacy = new Set(findingHeadings(lines.join("\n")));
+  const sources = lines.map(line => [...line.matchAll(/https:\/\/github\.com\/[^\s<>`\)]+/gu)].map(match => match[0].replace(/:$/u, "")));
+  const headings = [];
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    const explicit = /^(?:[A-Z]\d+ heading: |Finding: )(.*)$/u.exec(line);
+    // Existing ship tasks also paste a raw heading followed by Source: URL.
+    // No severity grammar applies to that heading, including schema headings.
+    const beforeSource = /^Source: https:\/\/github\.com\//u.test(lines[index + 1] ?? "")
+      && line.length && !sources[index].length && !/^(?:Repair round:|Pre-dispatch read-back:)/u.test(line);
+    const heading = explicit ? explicit[1] : legacy.has(line) || beforeSource ? line : undefined;
+    if (heading !== undefined && heading.trim()) headings.push({ heading, index });
+  }
+  return headings.map((entry, i) => {
+    // A named source-first group starts a new association, not a trailing source
+    // for the last heading of the previous reviewer.
+    const following = sources.slice(entry.index, headings[i + 1]?.index ?? lines.length)
+      .flatMap((urls, offset) => /^.+ source https:\/\//iu.test(lines[entry.index + offset]) ? [] : urls);
+    // Source-first groups (e.g. Claude source URL; C1 heading: ...; C2 heading: ...).
+    const preceding = sources.slice(0, entry.index).findLast(urls => urls.length) ?? [];
+    return { ...entry, urls: following.length ? following : preceding };
+  });
+}
 
 // Framework hook exceptions/timeouts fail open. Own all failures and finish five
 // seconds before that deadline. Never retry a write whose outcome is ambiguous.
@@ -69,11 +111,42 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       const input = context.tool.input;
       if (!input || typeof input.task !== "string" || !input.task || !context.sessionId) throw new Error("missing task or parent session id");
       if (input.label !== undefined) throw new Error("omit subagent label: immutable spawn must preserve the complete task");
-      const body = `## AgentRig hook dispatch record\ndispatch time: ${new Date().toISOString()}\nhead SHA: ${pr.headRefOid}\nparent session id: ${context.sessionId}\ntask UTF-8 bytes: ${Buffer.byteLength(input.task)}\n\n${input.task}`;
+      const errors = [], checked = [];
+      const lines = operativeLines(input.task);
+      const rounds = lines.filter(line => /^Repair round:/u.test(line));
+      const repair = rounds.length > 0;
+      if (repair) {
+        if (rounds.length !== 1 || !/^Repair round: [1-3]\/3$/u.test(rounds[0])) errors.push("invalid Repair round receipt");
+        const live = JSON.parse(await command(gh, ["pr", "view", String(pr.number), "--json", "number,headRefOid,url"]));
+        if (live.number !== pr.number || !/^[a-f0-9]{40}$/.test(live.headRefOid) || typeof live.url !== "string") throw new Error("invalid live repair PR");
+        const olds = [...lines.join("\n").matchAll(/\bOLD\s+([a-f0-9]{40})\b/g)].map(match => match[1]);
+        if (!olds.length || olds.some(old => old !== live.headRefOid)) errors.push("OLD head does not match live PR head");
+        pr.headRefOid = live.headRefOid;
+        const headings = assignedFindings(lines);
+        if (!headings.length) errors.push("repair task has no exact finding headings");
+        for (const { heading, urls } of headings) {
+          if (!urls.length) errors.push(`missing source for heading: ${heading}`);
+          for (const url of urls) {
+            const match = /^(https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+)#(issuecomment-|discussion_r|pullrequestreview-)(\d+)$/.exec(url);
+            if (!match || match[1] !== live.url) { errors.push(`unsupported or wrong-PR source: ${url}`); continue; }
+            const endpoint = match[3] === "issuecomment-" ? "issues/comments" : match[3] === "discussion_r" ? "pulls/comments" : `pulls/${pr.number}/reviews`;
+            const source = JSON.parse(await command(gh, ["api", `repos/${match[2]}/${endpoint}/${match[4]}`]));
+            if (String(source.id) !== match[4] || typeof source.body !== "string" || source.html_url !== url) throw new Error(`invalid source response: ${url}`);
+            checked.push(`checked source: ${url}; comment ID: ${source.id}; heading: ${heading}`);
+            const canonical = hasVerdictBlock(source.body)
+              ? findingHeadings(source.body)
+              : source.body.split(/\r?\n/u);
+            if (!canonical.includes(heading)) errors.push(`missing verbatim heading in ${url}: ${heading}`);
+          }
+        }
+      }
+      const comparison = repair ? `Pre-edit comparison: ${errors.length ? "FAIL" : "PASS"}\nlive PR head: ${pr.headRefOid}\n${checked.join("\n")}\n${errors.map(error => `mismatch: ${error}`).join("\n")}\n\n` : "";
+      const body = `## AgentRig hook dispatch record\ndispatch time: ${new Date().toISOString()}\nhead SHA: ${pr.headRefOid}\nparent session id: ${context.sessionId}\ntask UTF-8 bytes: ${Buffer.byteLength(input.task)}\n\n${comparison}${input.task}`;
       const posted = JSON.parse(await command(gh, ["api", "repos/{owner}/{repo}/issues/" + pr.number + "/comments", "--method", "POST", "--input", "-"], JSON.stringify({ body })));
       if (!Number.isSafeInteger(posted.id) || posted.id <= 0) throw new Error("missing posted comment id");
       const readback = JSON.parse(await command(gh, ["api", "repos/{owner}/{repo}/issues/comments/" + posted.id]));
       if (typeof readback.body !== "string" || !Buffer.from(readback.body).equals(Buffer.from(body))) throw new Error("comment API read-back byte mismatch");
+      if (errors.length) throw new Error(errors.join("; "));
       return { action: "continue" };
     } catch (error) {
       return { action: "deny", reason: `dispatch record failed: ${error instanceof Error ? error.message : String(error)}` };

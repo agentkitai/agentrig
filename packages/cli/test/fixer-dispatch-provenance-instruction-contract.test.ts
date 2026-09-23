@@ -10,7 +10,7 @@ const statusPath = "docs/STATUS.md";
 
 const dogfoodSentences = [
   "For a fixer, the durable pre-push GitHub PR handoff comment must quote verbatim the dispatched `Repair round: N/3` line, the dispatched `Pre-dispatch read-back` receipt, and every assigned finding's exact heading and source comment URL/anchor.",
-  "It must also record the dispatch time and the fixer's pre-edit live-review-versus-ledger comparison result, including each checked comment ID and the PR head.",
+  "The dispatch hook records the pre-edit live-review-versus-dispatch comparison, including each checked comment ID and the live PR head; fixers do not write a second comparison.",
   "Post and read back this handoff before every fixer push; a later handoff does not satisfy the pre-push gate.",
 ] as const;
 
@@ -36,17 +36,17 @@ const landSentences = [
   "For every cited comment ID, quote the exact corresponding fetched `body` field from that same `comments.json` artifact.",
   "A comment ID the lander introduces that is absent from that listing, or a 404 for such an ID that cannot be traced to the fetched data, is a lander error and never a PR defect.",
   "A PR-supplied finding source URL or anchor that is absent, edited or mismatched remains subject to the existing halt gate above; never recast it as a lander-introduced citation error.",
-  "The fixer's durable pre-push handoff requires the dispatched round, persisted read-back receipt, each exact finding source, dispatch time and pre-edit comparison; it does not require the full dispatched task.",
+  "The fixer's durable pre-push handoff requires the dispatched round, persisted read-back receipt, each exact finding source, dispatch time and hook-recorded pre-edit comparison; it does not require the full dispatched task.",
   "The full dispatched task belongs in the hook's durable dispatch-time PR comment, which must match the immutable session-store `subagent.spawn` event by exact task text and parent session id; obtain the child session ID from that event.",
   "A missing durable fixer pre-push handoff alone is not a halt when that matched hook-comment-plus-spawn provenance exists.",
-  "That matched pair is sufficient dispatch provenance, but it does not waive receipt-before-dispatch ordering, round/OLD/blocker identity, exact heading/source identity, or the fixer's durable pre-edit comparison with comment ID and head.",
+  "That matched pair is sufficient dispatch provenance, but it does not waive receipt-before-dispatch ordering, round/OLD/blocker identity, exact heading/source identity, or the hook-recorded pre-edit comparison with comment ID and head.",
   "If neither the durable fixer pre-push handoff nor that matched hook-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.",
 ] as const;
 
 const policySentences = [
   "Require successful edit and read-back of that receipt before dispatch and quote it in the dispatched fixer task; the fixer separately quotes it in the pre-push handoff when that record survives.",
   "Land checks the same persisted receipt against the accepted dispatch-provenance source and requires its timestamp before dispatch; private notes or retroactive receipt creation do not satisfy the gate.",
-  "The fixer must post and read back a durable pre-push GitHub PR handoff comment quoting verbatim its dispatched `Repair round: N/3` line, dispatched `Pre-dispatch read-back` receipt, every assigned exact finding heading and source comment URL/anchor, dispatch time, and pre-edit live-review-versus-ledger comparison result with each checked comment ID and PR head.",
+  "The fixer must post and read back a durable pre-push GitHub PR handoff comment quoting verbatim its dispatched `Repair round: N/3` line, dispatched `Pre-dispatch read-back` receipt, every assigned exact finding heading and source comment URL/anchor, dispatch time, and a reference to the hook-recorded pre-edit comparison with each checked comment ID and PR head.",
   "The trusted project extension `.agentrig/extensions/dispatch-record.mjs` records every subagent dispatch after a PR exists, including the exact complete task, dispatch time, current PR head SHA and parent session id.",
   "The hook posts the dispatch comment and verifies its API read-back byte-for-byte before allowing the tool call; any lookup, post or read-back failure denies dispatch clearly.",
   "Before a PR exists the hook leaves the initial builder invocation untouched; conductors do not manually post or read back dispatch-task comments.",
@@ -147,3 +147,33 @@ it("topic delegates dispatch records to the hook without replacing ledger receip
   for (const sentence of shipSentences.slice(0, 4)) expect(text).toContain(sentence);
   expect(text).toContain("Keep the separate pre-dispatch PR-body receipt and repair ledger gates unchanged.");
 });
+
+const hookComparisonGate = (policy: string, land: string): void => {
+  expect(policy).toContain("Before starting a fixer, the dispatch hook fetches the live PR head and each cited source");
+  expect(policy).toContain("posts `Pre-edit comparison: PASS` (or FAIL with mismatches)");
+  expect(policy).toContain("FAIL denies dispatch");
+  expect(policy).toContain("This hook-recorded comparison replaces the handwritten fixer comparison");
+  expect(land).toContain("`Pre-edit comparison: PASS` in the dispatch comment before the child starts");
+};
+it("land accepts the hook-recorded comparison instead of a handwritten fixer receipt", () => {
+  hookComparisonGate(read(policyPath), read(landPath));
+});
+it("rejects M554-land-handwritten replacing hook PASS acceptance", () => {
+  expect(() => hookComparisonGate(read(policyPath), read(landPath).replace("`Pre-edit comparison: PASS` in the dispatch comment before the child starts", "a handwritten fixer comparison"))).toThrow();
+});
+
+const headingIdentitySentences = [
+  "Repair classification uses an operative standalone `Repair round: N/3` line, not inline mentions, blockquotes or fenced examples; malformed operative round lines fail closed.",
+  "Finding identity comes from the source comment’s canonical structured verdict headings when present (decoded JSON strings), otherwise exact legacy source lines; Markdown, Unicode and heading whitespace remain exact.",
+  "Tasks may use `Finding: <exact heading>`, `<ID> heading: <exact heading>` (including severity-tagless headings), or a raw heading followed by `Source: <comment URL>`.",
+  "A source URL may follow a finding or precede a labeled group.",
+  "Never strip heading bytes or use surrounding prose to override structured verdict identity.",
+] as const;
+for (const path of [shipPath, policyPath]) {
+  it(`exact heading and operative repair contract: ${path}`, () => expectSentences(read(path), headingIdentitySentences));
+  for (const sentence of headingIdentitySentences) {
+    it(`rejects heading/repair contract deletion: ${path}: ${sentence.slice(0, 40)}`, () => {
+      expect(() => expectSentences(read(path).replace(sentence, "REMOVED"), headingIdentitySentences)).toThrow();
+    });
+  }
+}

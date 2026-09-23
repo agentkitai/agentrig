@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt, listing?: Record<string, unknown>[]) {
+async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt, listing?: Record<string, unknown>[], repairTask?: string, sourceBody?: string) {
   const root = await mkdtemp(join(tmpdir(), "dispatch-")); roots.push(root);
   await mkdir(join(root, "bin"));
   const script = `#!/usr/bin/env node
@@ -18,7 +18,7 @@ if(mode==='timeout'){setTimeout(()=>{},10000);return;}
 if(mode==='lookup-failure'){console.error('unavailable');process.exit(1);}
 if(a[0]==='pr' && a[1]==='view') {
   if(mode==='pinned-missing'){console.error('not found');process.exit(1);}
-  console.log(JSON.stringify({number:mode==='pinned-wrong'?8:7,state:mode==='pinned-closed'?'CLOSED':'OPEN',headRefName:'builder-branch',headRefOid:'a'.repeat(40),body:'old marker'}));process.exit(0);
+  console.log(JSON.stringify({number:mode==='pinned-wrong'?8:7,url:'https://github.com/agentkitai/agentrig/pull/7',state:mode==='pinned-closed'?'CLOSED':'OPEN',headRefName:'builder-branch',headRefOid:mode==='moved-head'?'b'.repeat(40):'a'.repeat(40),body:'old marker'}));process.exit(0);
 }
 if(a[0]==='pr' && a[1]==='list' && ${listing !== undefined}) { console.log(${JSON.stringify(JSON.stringify(listing ?? []))});process.exit(0); }
 if(a[0]==='pr' && ${activation}) {
@@ -29,13 +29,14 @@ if(a[0]==='pr' && ${activation}) {
   console.log(JSON.stringify(prs));process.exit(0);
 }
 if(a[0]==='pr'){console.log(JSON.stringify(mode==='no-pr'?[]:[{number:7,headRefName:mode==='row'?'builder-branch':'feature',headRefOid:'a'.repeat(40),body:mode==='row'?'agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099':''}]));process.exit(0);}
+if(a[0]==='api' && ['456','789'].includes(a[1].split('/').pop())) { if(mode==='source-failure'){console.error('not found');process.exit(1);} console.log(JSON.stringify({id:Number(a[1].split('/').pop()),html_url:'https://github.com/agentkitai/agentrig/pull/'+(mode==='wrong-source-pr'?'8':'7')+'#'+(a[1].includes('/issues/')?'issuecomment-':a[1].includes('/reviews/')?'pullrequestreview-':'discussion_r')+a[1].split('/').pop(),body:${sourceBody === undefined ? "undefined" : JSON.stringify(sourceBody)} ?? (mode==='missing-heading'?'edited heading':'### X1: [HIGH] Exact blocker\\n### X2: [HIGH] Other blocker')}));process.exit(0); }
 if(a.includes('POST')){if(mode==='post-failure'){console.error('post failed');process.exit(1);}if(mode==='rate-limit'){console.error('HTTP 429\\nRetry-After: 60');process.exit(1);}let s='';process.stdin.on('data',x=>s+=x);process.stdin.on('end',()=>{fs.writeFileSync(root+'/body',JSON.parse(s).body);console.log(JSON.stringify({id:123}));});}
 else {if(mode==='read-failure'){console.error('read failed');process.exit(1);} console.log(JSON.stringify({body:mode==='mismatch'?'wrong':fs.readFileSync(root+'/body','utf8')}));}`;
   for (const command of ["gh", "git"]) { await writeFile(join(root, "bin", command), script); await chmod(join(root, "bin", command), 0o755); }
   // Explicit executable injection avoids process-global PATH races between test workers.
   const mod = await import(/* @vite-ignore */ pathToFileURL(resolve(".agentrig/extensions/dispatch-record.mjs")).href);
   const handler = mod.createDispatchHook({ gh: join(root, "bin/gh"), git: join(root, "bin/git"), ...(mode === "row" ? { rowForSession: () => "agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099" } : {}), ...(budgetMs === undefined ? {} : { budgetMs }) });
-  const task = 'Exact task\r\n```\nnon-ASCII: café 🔧\ntrailing newline\n';
+  const task = repairTask ?? 'Exact task\r\n```\nnon-ASCII: café 🔧\ntrailing newline\n';
   let result;
   if (activation) {
     const runner = `
@@ -171,4 +172,129 @@ it.each([
   expect(p.result.reason).toContain("invalid PR lookup entry");
   expect(p.calls).toContain('"pr","list"');
   expect(p.calls).not.toContain("POST");
+});
+
+const repairTask = `Repair round: 1/3
+Pre-dispatch read-back: Repair round: 1/3; blockers X1; OLD ${"a".repeat(40)}; verified 2026-09-23T00:00:00Z
+### X1: [HIGH] Exact blocker
+Source: https://github.com/agentkitai/agentrig/pull/7#issuecomment-456`;
+const repairProbe = (mode: string, task = repairTask) => probe(mode, "subagent", undefined, undefined, false, hostPrompt, undefined, task);
+it("repair matching live source posts PASS before dispatch may start", async () => {
+  const p = await repairProbe("ok");
+  expect(p.result.action).toBe("continue");
+  expect(p.body).toContain("Pre-edit comparison: PASS");
+  expect(p.body).toContain("checked source: https://github.com/agentkitai/agentrig/pull/7#issuecomment-456");
+  expect(p.calls.indexOf('"pr","view"')).toBeLessThan(p.calls.indexOf('"POST"'));
+  expect(p.calls.indexOf('issues/comments/456')).toBeLessThan(p.calls.indexOf('"POST"'));
+});
+const historicalOld = `Pre-dispatch read-back: Repair round: 1/3; blockers X1; OLD ${"b".repeat(40)}; verified 2026-09-22T00:00:00Z`;
+it.each([
+  `> ${historicalOld}`,
+  `  > > ${historicalOld}`,
+  `\`\`\`text\n${historicalOld}\n\`\`\``,
+  `~~~text\n${historicalOld}\n~~~`,
+])("repair ignores historical OLD in excluded receipt lines: %s", async history => {
+  const task = `${history}\n${repairTask}\n${history}`;
+  const p = await repairProbe("ok", task);
+  expect(p.result.action).toBe("continue");
+  expect(p.body).toContain("Pre-edit comparison: PASS");
+  expect(p.body).toContain(task);
+});
+it.each([
+  repairTask.replace("a".repeat(40), "b".repeat(40)),
+  `${repairTask}\n${historicalOld}`,
+  `${repairTask}\nOLD ${"b".repeat(40)}`,
+])("repair still denies mismatched operative OLD: %s", async task => {
+  const p = await repairProbe("ok", task);
+  expect(p.result.action).toBe("deny");
+  expect(p.body).toContain("Pre-edit comparison: FAIL");
+  expect(p.result.reason).toContain("OLD head does not match live PR head");
+});
+it.each(["missing-heading", "moved-head"])("repair %s posts mismatch and denies child start", async mode => {
+  const p = await repairProbe(mode);
+  expect(p.result.action).toBe("deny");
+  expect(p.body).toContain("Pre-edit comparison: FAIL");
+  expect(p.result.reason).toMatch(/heading|head/);
+});
+it.each(["issuecomment-456", "discussion_r456", "pullrequestreview-456"])("repair supports source anchor %s", async anchor => {
+  expect((await repairProbe("ok", repairTask.replace("issuecomment-456", anchor))).result.action).toBe("continue");
+});
+it.each([
+  repairTask.replace("issuecomment-456", "unknown-456"),
+  repairTask.replace("/pull/7#", "/pull/8#"),
+  repairTask.replace("Source: https://github.com/agentkitai/agentrig/pull/7#issuecomment-456", ""),
+  repairTask.replace(/OLD [a-f0-9]+/, "OLD invalid"),
+  repairTask + "\n### X2: [HIGH] Not in source\nSource: https://github.com/agentkitai/agentrig/pull/7#issuecomment-789",
+])("repair malformed or mismatched assignment denies", async task => {
+  expect((await repairProbe("ok", task)).result.action).toBe("deny");
+});
+it("repair source lookup failure denies", async () => { expect((await repairProbe("source-failure")).result.action).toBe("deny"); });
+
+it("repair rejects a forged source anchor belonging to another PR", async () => { expect((await repairProbe("wrong-source-pr")).result.action).toBe("deny"); });
+
+const sourceUrl = "https://github.com/agentkitai/agentrig/pull/7#issuecomment-456";
+const canonical = ['Severity-tagless finding headings deny every repair dispatch',
+  'Verbatim lookup misses the canonical JSON verdict heading',
+  '### F1 — HIGH: Heading comparison is lossy and rejects supported heading forms',
+  '### F2 — MEDIUM: Any Repair round substring turns unrelated dispatches into fixer dispatches',
+  '  A "quoted" heading with \\ path and café 🔧  '];
+function verdictSource(headings: string[]) {
+  return 'Review prose with different wording.\n<!-- agentrig-verdict:v1 -->\n' + JSON.stringify({
+    version: 1, reviewedHead: 'a'.repeat(40), assertedModel: 'review-model', modelSource: 'adapter', slot: 'claude', verdict: 'FAIL',
+    findings: headings.map(heading => ({ heading, severity: 'HIGH', blocking: true, location: 'file.ts:1', scenario: 'Realistic repair finding' })),
+  }, null, 2) + '\n<!-- /agentrig-verdict -->';
+}
+const realisticProbe = (task: string, body: string) => probe('ok', 'subagent', undefined, undefined, false, hostPrompt, undefined, task, body);
+const receipt = repairTask.split('\n').slice(0, 2).join('\n');
+it.each(canonical)('canonical JSON heading survives exact dispatch: %s', async heading => {
+  const p = await realisticProbe(`${receipt}\nC1 heading: ${heading}\nSource: ${sourceUrl}`, verdictSource([heading]));
+  expect(p.result.action).toBe('continue');
+  expect(p.body).toContain(`heading: ${heading}`);
+  expect(p.body).toContain('Pre-edit comparison: PASS');
+});
+it('source-first grouped ledger labels are supported', async () => {
+  const p = await realisticProbe(`${receipt}\nClaude source ${sourceUrl}:\nC1 heading: ${canonical[0]}\nC2 heading: ${canonical[1]}`, verdictSource(canonical.slice(0, 2)));
+  expect(p.result.action).toBe('continue');
+  expect(p.body).toContain(`heading: ${canonical[0]}`);
+  expect(p.body).toContain(`heading: ${canonical[1]}`);
+});
+it.each(['HIGH: colon', 'F1 [HIGH] space', 'F1: [HIGH] colon', '### F1 — HIGH: dash', 'severity-free title'])('standalone heading followed by source works: %s', async heading => {
+  expect((await realisticProbe(`${receipt}\n${heading}\nSource: ${sourceUrl}`, verdictSource([heading]))).result.action).toBe('continue');
+});
+it.each(['### [HIGH] Title', '  [HIGH] Title  '])('rejects lossy comparison even with matching surrounding prose: %s', async heading => {
+  const submitted = heading.replace(/^### /, '').trim();
+  const p = await realisticProbe(`${receipt}\nFinding: ${submitted}\nSource: ${sourceUrl}`, `${submitted}\n${verdictSource([heading])}`);
+  expect(p.result.action).toBe('deny');
+  expect(p.body).toContain('Pre-edit comparison: FAIL');
+});
+it('direct zero-headings repair denies and records FAIL', async () => {
+  const p = await realisticProbe(`${receipt}\nSource: ${sourceUrl}`, verdictSource(canonical));
+  expect(p.result.action).toBe('deny');
+  expect(p.body).toContain('repair task has no exact finding headings');
+});
+it.each([
+  'Review whether the Repair round: string causes false positives.',
+  'Review this example:\n```text\nRepair round: 1/3\n```',
+  'Review quoted history:\n> Repair round: 1/3',
+  'Review `Repair round: 1/3` handling.',
+])('non-repair dispatch stays ordinary: %s', async task => {
+  const p = await realisticProbe(task, verdictSource(canonical));
+  expect(p.result.action).toBe('continue');
+  expect(p.body).not.toContain('Pre-edit comparison:');
+  expect(p.calls).not.toContain('"view"');
+});
+it('malformed operative receipt still denies', async () => {
+  expect((await realisticProbe(`${receipt.replace('Repair round: 1/3', 'Repair round: 9/3')}\nFinding: ${canonical[0]}\nSource: ${sourceUrl}`, verdictSource(canonical))).result.action).toBe('deny');
+});
+
+it('two source-first reviewer groups do not assign the next group URL backwards', async () => {
+  const codexUrl = sourceUrl.replace('456', '789');
+  const p = await realisticProbe(`${receipt}\nClaude source ${sourceUrl}:\nC1 heading: ${canonical[0]}\nC2 heading: ${canonical[1]}\nCodex source ${codexUrl}:\nX1 heading: ${canonical[2]}\nX2 heading: ${canonical[3]}`, verdictSource(canonical.slice(0, 4)));
+  expect(p.result.action).toBe('continue');
+  for (let i = 0; i < 4; i++) {
+    const expected = i < 2 ? sourceUrl : codexUrl;
+    const wrong = i < 2 ? codexUrl : sourceUrl;
+    expect(p.body).toContain(`checked source: ${expected}; comment ID: ${i < 2 ? '456' : '789'}; heading: ${canonical[i]}`);
+    expect(p.body).not.toContain(`checked source: ${wrong}; comment ID: ${i < 2 ? '789' : '456'}; heading: ${canonical[i]}`);
+  }
 });

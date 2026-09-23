@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionStore, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 import { buildProgram } from "../src/program.ts";
@@ -150,6 +150,8 @@ ctx.hooks.on("pre_model",()=>{calls++;return {action:"continue"}})}`);
 it("trusted headless project discovers and loads the dispatch hook without prompting", async () => {
   const f = await fixture();
   const directory = join(f.cwd, ".agentrig/extensions");
+  // The project hook shares canonical verdict parsing with the shipping scripts.
+  await symlink(fileURLToPath(new URL("../../../scripts", import.meta.url)), join(f.cwd, "scripts"), process.platform === "win32" ? "junction" : "dir");
   await mkdir(directory, { recursive: true });
   for (const suffix of ["mjs", "json"]) await writeFile(join(directory, `dispatch-record.${suffix}`), await readFile(new URL(`../../../.agentrig/extensions/dispatch-record.${suffix}`, import.meta.url)));
   const notices: string[] = [];
