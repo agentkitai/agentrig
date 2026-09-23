@@ -1,6 +1,6 @@
 ## R19a — partial implementation: spawn lifecycle + immutable spawn-log query
 
-Issue #554: dispatch hook now records and API-verifies live-source pre-edit comparisons for repair dispatches, denying OLD/head or exact heading/source mismatches before child startup. Land accepts the hook PASS instead of a handwritten fixer receipt. Independent conductor review/landing pending; no roadmap completion marker changed. LOW observations and wording followups remain advisory under R19, not residual issues.
+Issue #554: dispatch hook now records and API-verifies live-source pre-edit comparisons for repair dispatches, denying OLD/head or exact heading/source mismatches before child startup. Land accepts the hook PASS instead of a handwritten fixer receipt. Independent conductor review/landing pending; no roadmap completion marker changed. LOW observations and wording followups remain advisory under R19, not residual issues. PR #555 repair round 1 addresses C1/C2/X1/X2: canonical JSON verdict headings are compared without byte normalization, severity-tagless and source-first labeled groups are accepted, and only operative receipt lines classify repair dispatches. Realistic verdict, negative exactness, quoted-example and direct zero-heading regressions cover these blockers; independent review remains pending.
 The authorized first coherent slice adds generic extension `pre_spawn` / `post_spawn`
 hooks carrying exact submitted task, selected role provenance and parent session ID.
 Pre-spawn denials/errors/timeouts prevent child configuration/start and release the

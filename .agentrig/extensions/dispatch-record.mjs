@@ -1,4 +1,46 @@
 import { spawn } from "node:child_process";
+import { hasVerdictBlock } from "../../scripts/review-verdict.mjs";
+import { findingHeadings } from "../../scripts/review-finding-index.mjs";
+
+// Protocol fields are operative lines, not occurrences in quoted history or examples.
+// Keep every remaining byte: heading whitespace/Markdown is identity, not decoration.
+function operativeLines(task) {
+  let fence;
+  return task.split(/\r?\n/u).map(line => {
+    const marker = /^ {0,3}(`{3,}|~{3,})/u.exec(line)?.[1];
+    if (fence) {
+      if (marker?.[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+      return "";
+    }
+    if (marker) { fence = marker; return ""; }
+    return /^\s*>/u.test(line) ? "" : line;
+  });
+}
+
+function assignedFindings(lines) {
+  const legacy = new Set(findingHeadings(lines.join("\n")));
+  const sources = lines.map(line => [...line.matchAll(/https:\/\/github\.com\/[^\s<>`\)]+/gu)].map(match => match[0].replace(/:$/u, "")));
+  const headings = [];
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    const explicit = /^(?:[A-Z]\d+ heading: |Finding: )(.*)$/u.exec(line);
+    // Existing ship tasks also paste a raw heading followed by Source: URL.
+    // No severity grammar applies to that heading, including schema headings.
+    const beforeSource = /^Source: https:\/\/github\.com\//u.test(lines[index + 1] ?? "")
+      && line.length && !sources[index].length && !/^(?:Repair round:|Pre-dispatch read-back:)/u.test(line);
+    const heading = explicit ? explicit[1] : legacy.has(line) || beforeSource ? line : undefined;
+    if (heading !== undefined && heading.trim()) headings.push({ heading, index });
+  }
+  return headings.map((entry, i) => {
+    // A named source-first group starts a new association, not a trailing source
+    // for the last heading of the previous reviewer.
+    const following = sources.slice(entry.index, headings[i + 1]?.index ?? lines.length)
+      .flatMap((urls, offset) => /^.+ source https:\/\//iu.test(lines[entry.index + offset]) ? [] : urls);
+    // Source-first groups (e.g. Claude source URL; C1 heading: ...; C2 heading: ...).
+    const preceding = sources.slice(0, entry.index).findLast(urls => urls.length) ?? [];
+    return { ...entry, urls: following.length ? following : preceding };
+  });
+}
 
 // Framework hook exceptions/timeouts fail open. Own all failures and finish five
 // seconds before that deadline. Never retry a write whose outcome is ambiguous.
@@ -70,20 +112,19 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       if (!input || typeof input.task !== "string" || !input.task || !context.sessionId) throw new Error("missing task or parent session id");
       if (input.label !== undefined) throw new Error("omit subagent label: immutable spawn must preserve the complete task");
       const errors = [], checked = [];
-      const repair = /Repair round:/.test(input.task);
+      const lines = operativeLines(input.task);
+      const rounds = lines.filter(line => /^Repair round:/u.test(line));
+      const repair = rounds.length > 0;
       if (repair) {
-        if (!/Repair round: [1-3]\/3\b/.test(input.task)) errors.push("invalid Repair round receipt");
+        if (rounds.length !== 1 || !/^Repair round: [1-3]\/3$/u.test(rounds[0])) errors.push("invalid Repair round receipt");
         const live = JSON.parse(await command(gh, ["pr", "view", String(pr.number), "--json", "number,headRefOid,url"]));
         if (live.number !== pr.number || !/^[a-f0-9]{40}$/.test(live.headRefOid) || typeof live.url !== "string") throw new Error("invalid live repair PR");
         const olds = [...input.task.matchAll(/\bOLD\s+([a-f0-9]{40})\b/g)].map(match => match[1]);
         if (!olds.length || olds.some(old => old !== live.headRefOid)) errors.push("OLD head does not match live PR head");
         pr.headRefOid = live.headRefOid;
-        const headings = [...input.task.matchAll(/^(?:[ \t]*#{1,6}\s+)?(?:Finding:\s*)?([^\n]*\[(?:CRITICAL|HIGH|MEDIUM|LOW|BLOCKER|P[0-3])\][^\n]*)$/gm)];
+        const headings = assignedFindings(lines);
         if (!headings.length) errors.push("repair task has no exact finding headings");
-        for (let i = 0; i < headings.length; i++) {
-          const heading = headings[i][1].trim();
-          const block = input.task.slice(headings[i].index, headings[i + 1]?.index ?? input.task.length);
-          const urls = [...block.matchAll(/https:\/\/github\.com\/[^\s<>`\)]+/g)].map(match => match[0]);
+        for (const { heading, urls } of headings) {
           if (!urls.length) errors.push(`missing source for heading: ${heading}`);
           for (const url of urls) {
             const match = /^(https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+)#(issuecomment-|discussion_r|pullrequestreview-)(\d+)$/.exec(url);
@@ -92,8 +133,10 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
             const source = JSON.parse(await command(gh, ["api", `repos/${match[2]}/${endpoint}/${match[4]}`]));
             if (String(source.id) !== match[4] || typeof source.body !== "string" || source.html_url !== url) throw new Error(`invalid source response: ${url}`);
             checked.push(`checked source: ${url}; comment ID: ${source.id}; heading: ${heading}`);
-            const lines = source.body.split(/\r?\n/).map(line => line.replace(/^#{1,6}\s+/, "").trim());
-            if (!lines.includes(heading)) errors.push(`missing verbatim heading in ${url}: ${heading}`);
+            const canonical = hasVerdictBlock(source.body)
+              ? findingHeadings(source.body)
+              : source.body.split(/\r?\n/u);
+            if (!canonical.includes(heading)) errors.push(`missing verbatim heading in ${url}: ${heading}`);
           }
         }
       }

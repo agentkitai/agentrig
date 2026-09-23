@@ -161,3 +161,19 @@ it("land accepts the hook-recorded comparison instead of a handwritten fixer rec
 it("rejects M554-land-handwritten replacing hook PASS acceptance", () => {
   expect(() => hookComparisonGate(read(policyPath), read(landPath).replace("`Pre-edit comparison: PASS` in the dispatch comment before the child starts", "a handwritten fixer comparison"))).toThrow();
 });
+
+const headingIdentitySentences = [
+  "Repair classification uses an operative standalone `Repair round: N/3` line, not inline mentions, blockquotes or fenced examples; malformed operative round lines fail closed.",
+  "Finding identity comes from the source comment’s canonical structured verdict headings when present (decoded JSON strings), otherwise exact legacy source lines; Markdown, Unicode and heading whitespace remain exact.",
+  "Tasks may use `Finding: <exact heading>`, `<ID> heading: <exact heading>` (including severity-tagless headings), or a raw heading followed by `Source: <comment URL>`.",
+  "A source URL may follow a finding or precede a labeled group.",
+  "Never strip heading bytes or use surrounding prose to override structured verdict identity.",
+] as const;
+for (const path of [shipPath, policyPath]) {
+  it(`exact heading and operative repair contract: ${path}`, () => expectSentences(read(path), headingIdentitySentences));
+  for (const sentence of headingIdentitySentences) {
+    it(`rejects heading/repair contract deletion: ${path}: ${sentence.slice(0, 40)}`, () => {
+      expect(() => expectSentences(read(path).replace(sentence, "REMOVED"), headingIdentitySentences)).toThrow();
+    });
+  }
+}
