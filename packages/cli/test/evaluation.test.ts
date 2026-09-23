@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createAgent, SessionStore, RulePolicy, HarnessEvent, type EventPayload, type ModelEvent, type ModelProvider } from "@agentkitai/agentrig-core";
 import { attach, TrajectoryReviewer } from "@agentkitai/agentrig-supervisor";
 import { buildEvaluationReport, EvaluationManifest, formatEvaluationReport, readEvaluationReport, writeEvaluationChecks, type EvaluationInput } from "../src/evaluation.js";
@@ -317,15 +317,47 @@ describe("E2 actual provider and bundle integration", () => {
     expect(await readFile(outside, "utf8")).toBe(JSON.stringify(b.input.checks));
   });
 
-  it.skipIf(process.platform === "win32")("rejects a real FIFO input without waiting for a writer", async () => {
+  it.skipIf(process.platform === "win32")("rejects a real FIFO after slow child startup without waiting for a writer", async () => {
     const b = await bundle(); const fifo = join(b.path, "checks.fifo");
     execFileSync("mkfifo", [fifo]); b.input.manifest.checks = "checks.fifo";
     await writeFile(b.manifest, JSON.stringify(b.input.manifest));
     const script = fileURLToPath(new URL("../../../eval/report.mjs", import.meta.url));
-    const result = spawnSync(process.execPath, [script, b.manifest], { encoding: "utf8", timeout: 10_000 });
-    expect(result.error).toBeUndefined(); expect(result.status).toBe(2);
-    expect(JSON.parse(result.stdout).reason).toContain("regular files");
-  });
+    const launcher = `
+      import { writeSync } from "node:fs";
+      await new Promise(resolve => setTimeout(resolve, 6000));
+      await import(${JSON.stringify(new URL("../dist/evaluation.js", import.meta.url).href)});
+      writeSync(3, "ready\\n");
+      process.argv.splice(1, 0, ${JSON.stringify(script)});
+      await import(${JSON.stringify(new URL("../../../eval/report.mjs", import.meta.url).href)});
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", launcher, b.manifest], {
+      stdio: ["ignore", "pipe", "pipe", "pipe"],
+    });
+    let stdout = "", stderr = "", ready = false, failure: string | undefined;
+    child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
+    child.stdout.on("data", chunk => { stdout += chunk; });
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    const result = await new Promise<{ status: number | null }>((resolve, reject) => {
+      const stop = (message: string) => { failure = message; child.kill("SIGKILL"); };
+      const startupTimer = setTimeout(() => stop("child startup exceeded 10 seconds"), 10_000);
+      let writerTimer: NodeJS.Timeout | undefined;
+      child.stdio[3]!.once("data", chunk => {
+        ready = chunk.toString() === "ready\n";
+        clearTimeout(startupTimer);
+        if (!ready) return stop(`invalid child-ready marker: ${JSON.stringify(chunk.toString())}`);
+        writerTimer = setTimeout(() => stop("FIFO rejection exceeded 2 seconds after child startup"), 2_000);
+      });
+      child.once("error", reject);
+      child.once("close", status => {
+        clearTimeout(startupTimer); if (writerTimer) clearTimeout(writerTimer);
+        if (failure) reject(new Error(`${failure}; stdout=${stdout}; stderr=${stderr}`));
+        else if (!ready) reject(new Error(`child exited before ready; stdout=${stdout}; stderr=${stderr}`));
+        else resolve({ status });
+      });
+    });
+    expect(result.status).toBe(2);
+    expect(JSON.parse(stdout).reason).toContain("regular files");
+  }, 15_000);
 });
 
 it("aborted request and its stream retries are unknown; recovery retry has no invented usage", () => {
