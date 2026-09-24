@@ -209,11 +209,12 @@ export const ChildEnvSchema = z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*
     if (["CODEX_HOME", "CLAUDE_CONFIG_DIR"].includes(key) && !isAbsolute(value)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: "reviewer home must be an absolute path" });
   }
 });
-const ConfigDeclarationSchema = ConfigValuesSchema.extend({ checks: ProjectChecksSchema.optional() });
+const ConfigDeclarationSchema = ConfigValuesSchema.extend({ packs: z.record(z.unknown()).optional(), checks: ProjectChecksSchema.optional() });
 const ConfigFileSchema = ConfigDeclarationSchema.extend({
   profiles: z.record(ConfigDeclarationSchema.extend({ childEnv: ChildEnvSchema.optional() })).optional(),
   reviewers: ReviewersSchema.optional(),
-}).superRefine((data, ctx) => {
+});
+const validateConfig = (schema: typeof ConfigFileSchema) => schema.superRefine((data, ctx) => {
   for (const [slot, binding] of Object.entries(data.reviewers ?? {})) {
     if (!binding.adapter.startsWith("api:")) continue;
     const entry = data.providers?.[binding.adapter.slice(4)];
@@ -221,6 +222,36 @@ const ConfigFileSchema = ConfigDeclarationSchema.extend({
   }
 });
 export type ConfigFile = z.output<typeof ConfigFileSchema>;
+
+/** Schemas are explicit trusted-host registrations, never paths loaded from config. */
+export interface PackConfigRegistration { name: string; configSchema?: z.AnyZodObject | undefined }
+export interface ConfigReadOptions {
+  packs?: readonly PackConfigRegistration[];
+  onWarning?: (message: string) => void;
+}
+/** Structural check: the published bundle and host may have distinct Zod instances. */
+export function isStrictPackConfigSchema(value: unknown): value is z.AnyZodObject {
+  const schema = value as z.AnyZodObject | undefined;
+  return schema?._def?.typeName === z.ZodFirstPartyTypeKind.ZodObject && schema._def.unknownKeys === "strict"
+    && schema._def.catchall?._def.typeName === z.ZodFirstPartyTypeKind.ZodNever
+    && typeof schema.safeParse === "function" && typeof schema.optional === "function";
+}
+function packSchema(options: ConfigReadOptions, profile: boolean): z.AnyZodObject {
+  const shape: z.ZodRawShape = {
+    ship: (profile ? z.object({ checks: ProjectChecksSchema.optional() })
+      : z.object({ checks: ProjectChecksSchema.optional(), reviewers: ReviewersSchema.optional() })).strict().optional(),
+  };
+  const names = new Set<string>();
+  for (const pack of options.packs ?? []) {
+    if (!/^[a-z][a-z0-9-]{0,31}$/.test(pack.name) || names.has(pack.name)) throw new Error("invalid or duplicate pack config namespace");
+    names.add(pack.name);
+    if (pack.configSchema === undefined) continue;
+    if (pack.name === "ship") throw new Error("pack config namespace ship is reserved for compatibility");
+    if (!isStrictPackConfigSchema(pack.configSchema)) throw new Error(`pack ${pack.name} configSchema must be a strict Zod object`);
+    shape[pack.name] = pack.configSchema.optional();
+  }
+  return z.object(shape).strict();
+}
 
 const CONFIG_KEYS = new Set(Object.keys(ConfigValuesSchema.shape));
 /** Revalidate resolved launch values for read-only diagnostics, excluding runtime-only flags. */
@@ -277,7 +308,7 @@ function safeIssueMessage(issue: z.ZodIssue | undefined): string {
 }
 
 /** Parse one config without echoing its contents in an error (credentials may be present by mistake). */
-export function parseConfigText(path: string, text: string): ConfigFile {
+export function parseConfigText(path: string, text: string, options: ConfigReadOptions = {}): ConfigFile {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -299,16 +330,47 @@ export function parseConfigText(path: string, text: string): ConfigFile {
       Object.hasOwn(raw.reviewers, "__proto__")) {
     throw new Error(`invalid config ${path} at reviewers.__proto__: invalid reviewer slot name`);
   }
-  const parsed = ConfigFileSchema.safeParse(raw);
+  const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+  if (isRecord(raw) && isRecord(raw.packs) && isRecord(raw.packs.ship)
+      && isRecord(raw.packs.ship.reviewers) && Object.hasOwn(raw.packs.ship.reviewers, "__proto__")) {
+    throw new Error(`invalid config ${path} at packs.ship.reviewers.__proto__: invalid reviewer slot name`);
+  }
+  const schema = ConfigFileSchema.extend({ packs: packSchema(options, false).optional(),
+    profiles: z.record(ConfigDeclarationSchema.extend({ childEnv: ChildEnvSchema.optional(), packs: packSchema(options, true).optional() })).optional(),
+  });
+  const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new Error(`invalid config ${path} at ${issueField(issue)}: ${safeIssueMessage(issue)}`);
   }
-  return parsed.data;
+  // Validate legacy declarations before a winning namespace can replace them.
+  const legacy = validateConfig(ConfigFileSchema).safeParse(parsed.data);
+  if (!legacy.success) {
+    const issue = legacy.error.issues[0];
+    throw new Error(`invalid config ${path} at ${issueField(issue)}: ${safeIssueMessage(issue)}`);
+  }
+  const config = parsed.data as ConfigFile;
+  const warn = options.onWarning ?? console.warn;
+  const migrate = (declaration: { packs?: Record<string, unknown> | undefined; checks?: z.output<typeof ProjectChecksSchema> | undefined; reviewers?: ConfigFile["reviewers"] }, prefix: string) => {
+    for (const key of ["checks", "reviewers"] as const) {
+      if (declaration[key] !== undefined) warn(`Deprecated config key ${prefix}${key}; use ${prefix}packs.ship.${key} instead.`);
+    }
+    const ship = declaration.packs?.ship as { checks?: z.output<typeof ProjectChecksSchema>; reviewers?: ConfigFile["reviewers"] } | undefined;
+    if (ship?.checks !== undefined) declaration.checks = ship.checks;
+    if (ship?.reviewers !== undefined) declaration.reviewers = ship.reviewers;
+  };
+  migrate(config, "");
+  for (const [name, declaration] of Object.entries(config.profiles ?? {})) migrate(declaration, `profiles.${name}.`);
+  const validated = validateConfig(ConfigFileSchema).safeParse(config);
+  if (!validated.success) {
+    const issue = validated.error.issues[0];
+    throw new Error(`invalid config ${path} at ${issueField(issue)}: ${safeIssueMessage(issue)}`);
+  }
+  return validated.data;
 }
 
 /** Read and validate one config boundary. Missing files are the only errors ignored. */
-export async function readConfigFile(path: string): Promise<ConfigFile | undefined> {
+export async function readConfigFile(path: string, options: ConfigReadOptions = {}): Promise<ConfigFile | undefined> {
   let text: string;
   try {
     text = await readFile(path, "utf8");
@@ -316,7 +378,7 @@ export async function readConfigFile(path: string): Promise<ConfigFile | undefin
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw new Error(`could not read config ${path}: ${err instanceof Error ? err.message : String(err)}`);
   }
-  return parseConfigText(path, text);
+  return parseConfigText(path, text, options);
 }
 
 export interface ResolveConfigInput<T extends Record<string, unknown>> {
@@ -332,6 +394,7 @@ function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   if (file === undefined) return {};
   const { profiles: _profiles, checks: _checks, reviewers: _reviewers, ...values } = file;
   delete (values as Record<string, unknown>).childEnv;
+  delete (values as Record<string, unknown>).packs;
   return values;
 }
 
@@ -379,7 +442,9 @@ export function explicitCliValues(cmd: Command, values: Record<string, unknown>)
   return explicit as Partial<ConfigValues>;
 }
 
-export interface LoadRunConfigOptions {
+export interface LoadRunConfigOptions extends ConfigReadOptions {
+  /** Parsed namespaces are separate from core run options. */
+  onPackConfig?: (config: Record<string, unknown>) => void;
   cwd?: string;
   home?: string;
   env?: NodeJS.ProcessEnv;
@@ -405,7 +470,7 @@ export async function loadRunConfig(
   // Validate trusted user state before opening a prompt. Otherwise a rejected user-config read can
   // strand readline and persist consent for a run that already aborted.
   const user = boundary.userStateSafe
-    ? await readConfigFile(join(home, ".agentrig", "config.json"))
+    ? await readConfigFile(join(home, ".agentrig", "config.json"), options)
     : undefined;
   const profile = typeof defaults.profile === "string" ? defaults.profile : undefined;
   const cli = explicitCliValues(cmd, defaults);
@@ -421,7 +486,7 @@ export async function loadRunConfig(
     ...(options.notice === undefined ? {} : { notice: options.notice }),
   }, boundary);
   const project = trust.trusted
-    ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json"))
+    ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json"), options)
     : undefined;
   const selected = (file: ConfigFile | undefined): ConfigValues | undefined =>
     profile === undefined ? undefined : file?.profiles?.[profile];
@@ -447,6 +512,7 @@ export async function loadRunConfig(
     cli,
     ...(profile === undefined || (profile === "recommended" && user?.profiles?.recommended === undefined && project?.profiles?.recommended === undefined) ? {} : { profile }),
   });
+  options.onPackConfig?.({ ...user?.packs, ...user?.profiles?.[profile ?? ""]?.packs, ...project?.packs, ...project?.profiles?.[profile ?? ""]?.packs });
   // Keep tsc available even without a root project (including monorepos and JSONC
   // solutions). Existing execution/reporting yields honest unavailable/incomplete
   // diagnostics, rather than silently dropping the acceptance signal.

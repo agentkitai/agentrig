@@ -9,7 +9,8 @@ export { buildRoleProvider, buildProviders, resolveProviderEntries } from "./pro
 export type { ProviderOptions, ProviderHooks, ProviderSet } from "./provider.js";
 export { resolveChildEnvironment } from "./child-env.js";
 export { resolveProjectChecks } from "./project-checks.js";
-export type { ConfigFile, ProjectChecks, Role, ProviderEntry, Roles } from "./config.js";
+export { parseConfigText, readConfigFile } from "./config.js";
+export type { ConfigReadOptions, PackConfigRegistration, ConfigFile, ProjectChecks, Role, ProviderEntry, Roles } from "./config.js";
 
 // The package root is also the executable. Importing it must never parse host argv.
 // Resolve symlinks so package-manager bin links retain normal CLI behavior.

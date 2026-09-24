@@ -1105,9 +1105,32 @@ The public root also exports these existing helpers without changing their seman
 - Types: `ProgramDependencies`, `CliPack`, `CliPackCommand`, `ProviderOptions`,
   `ProviderHooks`, `ProviderSet`, `ConfigFile`, `ProjectChecks`, `Role`, `ProviderEntry`, `Roles`.
 
-**Remaining R19b:** strict namespaced pack config registration, file/process boundary
-validation of that config, and legacy `reviewers`/`checks` migration warnings. None is
-claimed by this slice; legacy config behavior remains unchanged. R19c/d moves are excluded.
+**R19b config slice:** A trusted host can add `configSchema: z.object({...}).strict()`
+to a `CliPack`. Config files use `packs.<pack-name>`; undeclared namespaces, wrong
+value types and unknown keys fail in `parseConfigText`/`readConfigFile` before
+handler dispatch. Nested objects follow the pack's declared schema (pack authors
+must use strict nested objects where unknown nested keys should be rejected).
+Config never imports pack code or grants trust. The optional schema is absent for
+command-only packs, which cannot receive a config namespace. Core runtime
+extensions remain independent and unchanged.
+
+The public config readers accept `ConfigReadOptions` (`packs`, optional
+`onWarning`); `resolveProjectChecks` accepts the same options as its fourth argument; `buildProgram` wires its explicit packs into user/project reads and
+child-environment preAction validation. Handlers receive their parsed namespace
+as `context.config`; config-bearing namespaces expose `--trust` for one-invocation
+project trust. Command-only packs retain their previous dispatch behavior. Values replace whole namespaces in precedence order: user
+base < user profile < trusted project base < trusted project profile. No implicit
+field-wise merging or project-trust bypass occurs. Pack config does not select a
+provider or change child environment authority.
+
+The reserved compatibility namespace `packs.ship` accepts `reviewers` and `checks`;
+profiles accept `packs.ship.checks` (reviewers remain base-only, as before).
+Existing top-level `reviewers`/`checks` still load through the same validators and
+consumers, with a deprecation warning pointing to the full namespace path.
+When both forms occur in one declaration, the namespace wins; invalid legacy
+values still fail validation. Files need not be rewritten. Ship schema registration
+is owned by the compatibility bridge until extraction, not replaceable by a host
+pack. R19c/d skills/scripts/train extraction is explicitly excluded.
 
 ## 6. Build order
 

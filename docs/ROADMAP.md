@@ -1211,7 +1211,7 @@ product direction—is explicitly deferred. This definition marks no row complet
 | Row | Deliverable | Package target |
 |---|---|---|
 | R19a (M1) — **done** (#549, #559, #562) | **Generic mechanisms in core:** spawn hooks, roles with provider binding, skill includes/assets/flags, spawn-log API. No behaviour change. | core + generic CLI |
-| R19b (M2) | **CLI contribution points:** pack commands, pack config namespace (still reads top-level reviewers/checks, warns), public API. | generic CLI |
+| R19b (M2) **done (#563, #564)** | **CLI contribution points:** pack commands, pack config namespace (still reads top-level reviewers/checks, warns), public API. | generic CLI |
 | R19c (M3) | **Create the ship pack:** move skills, scripts, `SHIPPING-WORKFLOW` and workflow tests; collapse duplicated sections into includes; own required CI lane. | ship pack |
 | R19d (M4) | **Move the train out of core into its own package with pluggable row stages; the ship pack supplies prompt, receipt and landing verification; drop core exports.** | train + ship pack + core |
 | R19e (M5) | **Retire bolt-ons:** `builderProvider` → roles; remove the `topic` TUI case, the system-prompt line and hard-coded stall patterns. | core + CLI + ship pack |

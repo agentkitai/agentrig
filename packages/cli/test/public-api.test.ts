@@ -34,7 +34,7 @@ it("public role, child-environment and project-check helpers work without privat
       const checks = await resolveProjectChecks(${JSON.stringify(project)});
       console.log(JSON.stringify({ provider: built.id, lang: env.LANG, checks }));
     `);
-    expect(result.stderr).toBe(""); expect(result.status).toBe(0);
+    expect(result.stderr).toContain("Deprecated config key checks; use packs.ship.checks instead."); expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ provider: "openai-compatible", lang: "fixture", checks: { bootstrap: "never executed", steps: [] } });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
@@ -47,5 +47,23 @@ it("direct and symlinked executable invocation retain help behavior", async () =
       const result = spawnSync(process.execPath, [path, "--help"], { encoding: "utf8", timeout: 15000 });
       expect(result.status).toBe(0); expect(result.stdout).toContain("Usage: agentrig");
     }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+it("published host registers its own strict Zod schema and receives parsed namespace config", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cli-pack-schema-"));
+  try {
+    const home = join(root, "home"), project = join(root, "project");
+    await mkdir(join(home, ".agentrig"), { recursive: true }); await mkdir(project);
+    await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ packs: { fixture: { greeting: "public" } } }));
+    const result = host(`
+      import { z } from 'zod';
+      import { buildProgram, parseConfigText } from '@agentkitai/agentrig-cli';
+      const pack = { name: 'fixture', summary: 'Fixture', configSchema: z.object({ greeting: z.string() }).strict(),
+        commands: [{ name: 'echo', summary: 'Echo', run: (_args, { config, print }) => print(config.greeting) }] };
+      parseConfigText('fixture', '{"packs":{"fixture":{"greeting":"ok"}}}', { packs: [pack] });
+      const program = buildProgram({ packs: [pack], config: { home: ${JSON.stringify(home)}, cwd: ${JSON.stringify(project)}, env: {}, notice: () => {} } });
+      await program.parseAsync(['fixture', 'echo'], { from: 'user' });
+    `);
+    expect(result.status).toBe(0); expect(result.stdout).toBe("public\n");
   } finally { await rm(root, { recursive: true, force: true }); }
 });

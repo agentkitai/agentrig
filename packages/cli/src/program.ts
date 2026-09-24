@@ -161,6 +161,7 @@ export interface ProgramDependencies {
 }
 
 export function buildProgram(dependencies: ProgramDependencies = {}): Command {
+  dependencies = { ...dependencies, config: { ...dependencies.config, packs: dependencies.packs ?? [] } };
   const executeRun = dependencies.run ?? runCommand;
   const executeTui = dependencies.tui ?? startTui;
   const program = new Command();
@@ -854,6 +855,6 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
 
-  registerCliPacks(program, dependencies.packs ?? []);
+  registerCliPacks(program, dependencies.packs ?? [], dependencies.config);
   return program;
 }
