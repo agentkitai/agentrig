@@ -1,12 +1,13 @@
-## Mechanical PR ledger integrity — #571, implementation awaiting independent review
+## Mechanical PR ledger integrity — #571 complete (#573)
 
 Scoped ship-pack maintenance adds append-only PR-body mutation checks with fetched
 source URL validation, lossless JSON repair finding identities, and automatic
 adapter-manifest attachment/land consumption. Existing landing provenance and
 ledger-completeness gates remain required. Fail-first, named mutation, declared
-check and LF/CRLF ship-pack receipts travel in the PR. No R19 slice is marked done;
-conductor finalization follows independent review. R19 LOW observations and wording
-followups remain advisory, not residual issues.
+check and LF/CRLF ship-pack receipts travel in the PR. The initial independent pair
+and focused repair review are recorded in #573; all blocking findings are resolved.
+This completes the scoped #571 maintenance task, not an entire R19 slice. R19 LOW
+observations and wording followups remain advisory, not residual issues.
 
 Repair round 1 for #573 scopes URL fetching to appended references while retaining
 whole-body prefix immutability. Newly appended findings refetch and exactly validate
