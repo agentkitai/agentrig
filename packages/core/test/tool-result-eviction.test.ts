@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { evictToolResults, outputArtifactMarker, type Message } from "@agentkitai/agentrig-core";
 
 function conversation(payloads: string[]): Message[] {
@@ -128,7 +128,8 @@ it("stops between results in the same message and keeps explicit protected turns
   const messages = conversation(["a".repeat(12000), "b".repeat(12000)]);
   const combined: Message[] = [messages[0]!,
     { role: "assistant", content: [...messages[1]!.content, ...messages[3]!.content] },
-    { role: "user", content: [...messages[2]!.content, ...messages[4]!.content] }];
+    { role: "user", content: [...messages[2]!.content, ...messages[4]!.content] },
+    { role: "assistant", content: [{ type: "text", text: "next turn" }] }];
   expect([...evictToolResults(combined, {}, pressure(10000)).evictedToolUseIds]).toEqual(["call-1"]);
   expect(evictToolResults(messages, { thresholdFraction: 0.1, keepLastTurns: 1 }, pressure(1000)).count).toBe(1);
   expect(evictToolResults(messages, { enabled: false }, pressure(1000)).count).toBe(0);
@@ -136,4 +137,39 @@ it("stops between results in the same message and keeps explicit protected turns
 
 it.each([0, -1, 1.01, NaN, Infinity])("rejects invalid eviction fraction %s", thresholdFraction => {
   expect(() => evictToolResults([], { thresholdFraction }, pressure(1000))).toThrow("thresholdFraction");
+});
+
+
+it.each([undefined, 0, 1, 2])("protects fresh results in an 8k window (keep=%s)", keepLastTurns => {
+  const messages = conversation(["old".repeat(10000), "fresh".repeat(6000)]);
+  const view = evictToolResults(messages, { thresholdFraction: 0.5, keepLastTurns }, pressure(8000));
+  expect(result(view.messages, "call-2")).toEqual(result(messages, "call-2"));
+  expect([...view.evictedToolUseIds]).toEqual(keepLastTurns === 2 ? [] : ["call-1"]);
+  expect(view.estimatedTokens).toBeGreaterThan(4000);
+});
+
+it.each(["x", "😀", "\n\""])("bounds 400-result estimation and conservatively accounts for %j", unit => {
+  const messages = conversation(Array.from({ length: 400 }, () => unit.repeat(30000)));
+  const estimator = vi.fn(pressure(8000).estimateTokens);
+  const view = evictToolResults(messages, {}, { contextWindow: 8000, estimateTokens: estimator });
+  expect(estimator).toHaveBeenCalledTimes(1);
+  expect(view.count).toBe(399);
+  const actual = pressure(8000).estimateTokens(view.messages);
+  expect(view.estimatedTokens).toBeGreaterThanOrEqual(actual);
+  expect(view.estimatedTokens! - actual).toBeLessThanOrEqual(1);
+  expect(result(view.messages, "call-400")).toEqual(result(messages, "call-400"));
+});
+
+it("estimates once even when 400 candidates are below the size floor", () => {
+  const messages = conversation(Array.from({ length: 400 }, () => "x".repeat(8000)));
+  const estimator = vi.fn(pressure(8000).estimateTokens);
+  expect(evictToolResults(messages, {}, { contextWindow: 8000, estimateTokens: estimator }).count).toBe(0);
+  expect(estimator).toHaveBeenCalledTimes(1);
+});
+
+it("starts at equality and stops strictly below the threshold", () => {
+  const messages = conversation(["x".repeat(12000), "fresh"]);
+  const tokens = pressure(1).estimateTokens(messages);
+  expect(evictToolResults(messages, {}, pressure(tokens * 2)).count).toBe(1);
+  expect(evictToolResults(messages, {}, pressure((tokens + 1) * 2)).count).toBe(0);
 });

@@ -5,7 +5,7 @@ import { outputHandleFromDisplay } from "./tools/read-output.js";
 export interface ToolResultEvictionOptions {
   /** Defaults to true. */
   enabled?: boolean;
-  /** Protected recent turns: explicit use selects legacy policy (default 5); window policy defaults to 0. */
+  /** Protected recent turns: explicit use selects legacy policy (default 5); window policy always protects at least 1. */
   keepLastTurns?: number;
   /** Evict only tool-result payloads larger than this many serialized JSON UTF-8 bytes (default 8 KiB). */
   minBytes?: number;
@@ -16,7 +16,8 @@ export interface ToolResultEvictionOptions {
 
 export interface ToolResultEvictionPressure {
   contextWindow: number;
-  /** Estimate complete outbound input, including system text and tool schemas. */
+  /** Estimate complete outbound input in characters / 4, including system text and tool schemas.
+   * Called once per pass; savings use serialized UTF-16 characters, not UTF-8 bytes. */
   estimateTokens(messages: readonly Message[]): number;
 }
 
@@ -24,6 +25,8 @@ export interface ToolResultEviction {
   messages: Message[];
   count: number;
   bytesSaved: number;
+  /** Conservative post-eviction estimate, available when pressure was supplied. */
+  estimatedTokens?: number;
   /** Stable identities of result blocks replaced in this outbound view. */
   evictedToolUseIds: ReadonlySet<string>;
 }
@@ -103,12 +106,16 @@ export function evictToolResults(
     throw new Error("contextWindow must be positive and finite");
   }
   const threshold = windowMode ? pressure.contextWindow * fraction : Infinity;
-  const underThreshold = (view: readonly Message[]): boolean => windowMode && pressure.estimateTokens(view) < threshold;
-  const keepLastTurns = options.keepLastTurns ?? (windowMode ? 0 : DEFAULT_TOOL_RESULT_EVICTION.keepLastTurns);
+  const requestedKeep = options.keepLastTurns ?? (windowMode ? 1 : DEFAULT_TOOL_RESULT_EVICTION.keepLastTurns);
+  const keepLastTurns = windowMode ? Math.max(1, requestedKeep) : requestedKeep;
   const minBytes = options.minBytes ?? DEFAULT_TOOL_RESULT_EVICTION.minBytes;
-  if (!Number.isInteger(keepLastTurns) || keepLastTurns < 0) throw new Error("keepLastTurns must be a non-negative integer");
+  if (!Number.isInteger(requestedKeep) || requestedKeep < 0) throw new Error("keepLastTurns must be a non-negative integer");
   if (!Number.isInteger(minBytes) || minBytes < 0) throw new Error("minBytes must be a non-negative integer");
-  if (!enabled || underThreshold(messages)) return { messages: messages as Message[], count: 0, bytesSaved: 0, evictedToolUseIds: new Set() };
+  const initialTokens = pressure?.estimateTokens(messages);
+  let charactersSaved = 0;
+  const estimate = () => initialTokens === undefined ? {} : { estimatedTokens: Math.max(0, initialTokens - Math.floor(charactersSaved / 4)) };
+  const underThreshold = () => windowMode && estimate().estimatedTokens! < threshold;
+  if (!enabled || underThreshold()) return { messages: messages as Message[], count: 0, bytesSaved: 0, evictedToolUseIds: new Set(), ...estimate() };
 
   const assistantTurns = messages.reduce(
     (count, message) => count + (message.role === "assistant" ? 1 : 0),
@@ -120,7 +127,7 @@ export function evictToolResults(
   let bytesSaved = 0;
   const evictedToolUseIds = new Set<string>();
   let outbound: Message[] | undefined;
-  for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+  scan: for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
     const message = messages[messageIndex]!;
     if (message.role === "assistant") {
       assistantTurn += 1;
@@ -132,7 +139,7 @@ export function evictToolResults(
     for (let blockIndex = 0; blockIndex < message.content.length; blockIndex += 1) {
       const block = message.content[blockIndex]!;
       if (block.type !== "tool_result") continue;
-      if (underThreshold(outbound ?? messages)) break;
+      if (underThreshold()) break scan;
       // Flattening tagged child blocks into a string would silently discard provenance.
       // Keep this payload intact until R13b defines an explicit aggregation policy.
       const hasLabel = (child: ContentBlock): boolean => child.trust !== undefined || child.context !== undefined ||
@@ -152,9 +159,11 @@ export function evictToolResults(
       outbound[messageIndex] = { ...message, content };
       count += 1;
       bytesSaved += saved;
+      // Rounding total savings down keeps the estimate conservative by at most one token.
+      charactersSaved += JSON.stringify(block.content).length - JSON.stringify(stub).length;
       evictedToolUseIds.add(block.toolUseId);
     }
   }
 
-  return { messages: outbound ?? (messages as Message[]), count, bytesSaved, evictedToolUseIds };
+  return { messages: outbound ?? (messages as Message[]), count, bytesSaved, evictedToolUseIds, ...estimate() };
 }

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   builtinTools,
   contentHash,
@@ -1336,6 +1336,54 @@ describe("tool-result eviction in the loop", () => {
   ];
 
   const requestBytes = (request: ModelRequest): number => Buffer.byteLength(JSON.stringify(request.messages));
+
+  it("serializes 400 fresh results once in the no-usage fallback and preserves them in an 8k window", async () => {
+    const provider = new FakeProvider([
+      [...Array.from({ length: 400 }, (_, n): ModelEvent => ({ type: "tool_use", id: `fresh-${n}`, name: "read_file", input: { path: "large-a.ts" } })), stop("tool_use")],
+      [stop("end_turn")],
+    ]);
+    provider.capabilities.contextWindow = 8000;
+    const tool = fixtureReadTool();
+    tool.description = "schema contribution ".repeat(1000);
+    const systemPrompt = "system contribution ".repeat(1000);
+    const stringify = JSON.stringify;
+    let fullSerializations = 0;
+    let fallbackTokens = 0;
+    const spy = vi.spyOn(JSON, "stringify").mockImplementation((value, replacer, space) => {
+      // Only count calls: retaining every serialized result would make the probe itself quadratic.
+      spy.mockClear();
+      if (Array.isArray(value) && value.some(message => message?.role === "user" &&
+        Array.isArray(message.content) && message.content.filter((block: { type: string }) => block.type === "tool_result").length === 400)) {
+        fullSerializations += 1;
+      }
+      return stringify(value, replacer as never, space);
+    });
+    try {
+      const session = createAgent(makeConfig(provider, {
+        tools: [tool], systemPrompt,
+        compaction: { shouldCompact: ({ tokens }) => {
+          fallbackTokens = tokens;
+          expect(fullSerializations).toBe(1);
+          return false;
+        }, compact: async messages => messages },
+      })).run("read files");
+      const events = await collect(session);
+      await session.done;
+      expect(events.filter(event => event.type === "context.evicted")).toHaveLength(0);
+      expect(fallbackTokens).toBeGreaterThan(0);
+      const request = provider.requests[1]!;
+      expect(resultContent(request.messages, "fresh-399")).toBe(payloads["large-a.ts"]);
+      const strip = (block: Message["content"][number]) => {
+        const { context: _context, ...rest } = block;
+        return rest;
+      };
+      const expected = Math.ceil((request.system.length + stringify(request.messages.map(message =>
+        ({ ...message, content: message.content.map(strip) }))).length) / 4) + Math.ceil(stringify(request.tools).length / 4);
+      expect(fallbackTokens).toBe(expected);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 
   it("keeps long below-half sessions intact and passes the same window to compaction", async () => {
     const provider = new FakeProvider([

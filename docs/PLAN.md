@@ -415,8 +415,10 @@ Configure it via SDK `AgentConfig.toolResultEviction` or trusted CLI config/prof
 `toolResultEviction`; the CLI forwards the policy to main and child agents.
 At/above that threshold, replace the oldest eligible large results first, stopping
 as soon as the estimated view is below it. Default minimum payload is **8 KiB**
-(serialized JSON UTF-8 bytes); default protected turns in window mode is **0**.
-Small, unmatched or provenance-tagged results remain intact; if these or non-tool
+(serialized JSON UTF-8 bytes); window mode always protects at least the **most recent
+assistant turn**, including with an explicit `keepLastTurns: 0`. Larger recency
+overrides remain effective.
+Small, unmatched or provenance-tagged results remain intact; if these, fresh results or non-tool
 context alone exceed the threshold, eviction cannot guarantee fitting the window
 and normal compaction still applies. Session logs/history are never rewritten.
 
@@ -425,7 +427,13 @@ Compatibility overrides: `enabled: false` disables eviction; explicitly setting
 policy (legacy defaults **5 turns / 8 KiB**). Set `thresholdFraction` explicitly to
 combine those size/recency overrides with window pressure instead. Direct SDK
 `evictToolResults` calls without a pressure estimator retain the legacy policy.
-Compaction's zero-usage fallback estimates this same evicted view; its trigger stays
+Each pass calls the complete-input estimator at most once and tracks savings in
+serialized UTF-16 characters (not UTF-8 bytes), rounding cumulative token savings
+down. This conservative estimate differs from a fresh characters/4 estimate by at
+most one token; it can retain pressure for that extra token. System and schema
+contributions remain included. Both scan loops stop below threshold.
+Compaction's zero-usage fallback reuses the estimate returned by its post-tool
+eviction pass instead of serializing the view again; its trigger stays
 70% of the resolved provider window and reported usage still takes precedence.
 
 ### 2.7 Hooks
