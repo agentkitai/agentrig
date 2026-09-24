@@ -1,4 +1,26 @@
-## R19c — first slice: ship pack skeleton and scripts (partial)
+## R19c — second slice: ship skills, policy and shared includes (partial)
+
+Following first-slice PR #565, `packs/ship` now inventories all six workflow
+skills and SHIPPING-WORKFLOW. Flat skill entries use the existing R19a includes
+contract from #562: 25 shared fragments collapse repeated initial-review heading,
+declared-checks, trusted-provenance and scratch-cleanup text, with role-specific
+parts preserving exact internal whitespace and authored ordering. No flags,
+assets, core behavior, role policy or effective resolved instructions change.
+
+`.agentrig/skills/*/SKILL.md` and `docs/SHIPPING-WORKFLOW.md` remain unchanged
+compatibility copies for the running train. Existing instruction-contract tests
+are unchanged. A normal-core-lane regression compares real discovery and skill
+loading to those copies byte-for-byte under both LF and CRLF and checks pack
+inventory, policy-copy equality and shared-fragment reuse. Fail-first and named
+mutation proof plus exact-head declared-check receipts travel in this slice PR.
+
+**R19c is not done.** Remaining slices: installed packaging/host activation and
+roles as needed; instruction/script-test ownership migration; required separate
+pack test lane and CI job. This slice adds neither that lane/job nor R19d train
+policy. LOW observations and wording followups stay advisory under the R19
+gate-growth rule; no extra acceptance gate is added.
+
+## R19c — first slice: ship pack skeleton and scripts (#565, historical partial)
 
 Source skeleton at `packs/ship` inventories all five review scripts and the
 `dispatch-record` extension. Old `scripts/*.mjs` and `.agentrig/extensions` paths

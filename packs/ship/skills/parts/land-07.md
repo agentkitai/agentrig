@@ -1,0 +1,1 @@
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch every source comment live and compare exact bytes before accepting the ledger, even when no fixer is dispatched.
