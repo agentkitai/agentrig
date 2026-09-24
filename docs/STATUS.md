@@ -1,4 +1,4 @@
-## R19b final config slice — implemented, pending independent review
+## R19b done — CLI contributions/public API #563, namespaced pack config #564
 
 First slice #563 delivered trusted-host CLI commands and an import-safe public CLI
 API (role providers, trusted child environments, project checks). The final slice
@@ -11,13 +11,16 @@ are unchanged. PLAN §5.1 defines namespace/profile precedence and public reader
 Fail-first fixture/legacy tests, named mutants, declared-check receipts and session
 provenance travel in the final slice PR. Local proof: original fixture/legacy baseline
 5 failed / 3 passed; catchall strictness regression 1 failed / 11 passed before repair;
-all six named mutants killed. Final full checks: build, test (303 files passed / 1 skipped; 5,933 tests passed,
-6 skipped), and typecheck passed; instruction-contract/skill-text CRLF check N/A
-(no such tests or skills changed). No core extension behavior or R19c skills/
-scripts / R19d train moves. Conductor owns final R19b ROADMAP/STATUS marker edits
-after independent review, citing #563 and the final config slice together. LOW
-observations/wording followups remain advisory under R19 gate-growth rules; real
-acceptance failures block. Independent review follows; no merge by builder.
+all six named mutants killed. Independent reviews identified legacy-binding validation
+precedence and pack metadata leakage into evaluation settings; repair round 1 fixed both,
+with six fail-first failures and two additional killed mutants. Conductor full checks:
+build, test (303 files passed / 1 skipped; 5,940 tests passed / 6 skipped), and typecheck
+passed. Both initial reviews and the focused Claude Code repair-delta review are recorded
+in #564; C1/A1 are resolved with no remaining blockers. Instruction-contract/skill-text
+CRLF check N/A (no such tests or skills changed). **R19b is done across #563 and #564.**
+No core extension behavior or R19c skills/scripts / R19d train moves. LOW observations
+and wording followups remain advisory under R19 gate-growth rules; real acceptance
+failures block. Exact-head and landing receipts travel in #564.
 
 ## R19a done — spawn hooks/logs #549, provider-bound roles #559, skill includes/assets/flags #562
 
@@ -64,7 +67,7 @@ role/provider exclusivity and all existing role restrictions stay unchanged. Fla
 `default` entries are exposed for bound-role CLI wiring. No new event types or R19b work.
 Final slice implementation: validated deterministic skill includes/assets/flags (including
 invalid/cyclic inputs), recorded above. Conductor owns final R19a completion after reviews.
-R19b is implemented across #563 and the final config slice, pending conductor review. The conductor owns final row/band markers. Acceptance proof lives
+R19b is done across #563 and #564 after independent review and repair-delta verification. Acceptance proof lives
 in `packages/core/test/spawn-hooks.test.ts`, `packages/core/test/agent-roles.test.ts`
 and `packages/cli/test/subagent-wiring.test.ts`; exact-head declared-check and named-mutant
 receipts travel in the PR body. No instruction-contract/skill-text tests were changed.
