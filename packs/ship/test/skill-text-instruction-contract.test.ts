@@ -111,7 +111,7 @@ function bypassesLoader(text: string): boolean {
 
 it("every repository skill instruction reader uses the shared skill-text loader", () => {
   const violations: string[] = [];
-  for (const dir of ["../../../packages/core/test/", "../../../packages/cli/test/"]) {
+  for (const dir of ["../../../packages/core/test/", "../../../packages/cli/test/", "../../../packs/ship/test/"]) {
     const base = new URL(dir, import.meta.url);
     for (const file of readdirSync(base, { recursive: true })) {
       if (!file.endsWith(".ts")) continue;

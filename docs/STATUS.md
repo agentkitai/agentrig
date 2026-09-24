@@ -1,4 +1,34 @@
-## R19c — second slice: ship skills, policy and shared includes (partial)
+## R19c done — #565 scripts, #566 skills/policy, #567 pack-owned checks and source of truth
+
+Completes the source-pack migration begun by #565 (scripts/skeleton) and #566
+(bundled skills/policy): workflow instruction-contract/script tests and their
+review fixture now belong to `packs/ship/test`. Generic config/runtime assertions
+from mixed fixtures remain in product. Separate every-PR `ship-pack` CI runs
+pack tests, compatibility drift verification, and a complete CRLF fixture replay.
+
+`packs/ship` is canonical for skills and policy; `pnpm ship:sync` generates the
+legacy `.agentrig/skills` and `docs/SHIPPING-WORKFLOW.md` paths, and `ship:check`
+rejects drift without rewriting. Hosts retain their working discovery paths; no
+double activation or installed-package loader is needed. Product test discovery
+excludes the moved tests. Counts and final declared-check receipts travel in the PR.
+R19c is complete across #565, #566 and #567; no R19d/train move. Both initial
+reviews and the focused repair review are recorded in #567. F1 (remaining
+product-owned shipping instruction assertions) was independently closed by the
+focused Claude Code review. Final unique counts are 4,287 product + 1,701 pack =
+5,988 (baseline 5,985); CRLF pack replay and declared checks are green. LOW
+observations/wording and future-guard suggestions remain advisories under R19,
+not residual gates. Exact-head CI and landing receipts travel in #567. The operator
+will make the every-PR `ship-pack` job required in branch protection after landing.
+
+F1 repair round 1 (independently verified and closed): moved the remaining
+shipping-convergence guidance fixture and split the topic/land/review/ship/arbiter/
+dogfood policy case from core skill loading into the pack lane. The topic-aware
+product audit also moved the historical shipping-policy link case from the mixed
+workspace-config fixture. Assertions and unique test totals are conserved; generic
+loading/catalogue and workspace config checks stay product-owned. Migration
+inventory includes all three sources. No new text gate or F2–F4 advisory repair.
+
+## R19c — second slice (#566, historical partial): ship skills, policy and shared includes (partial)
 
 Following first-slice PR #565, `packs/ship` now inventories all six workflow
 skills and SHIPPING-WORKFLOW. Flat skill entries use the existing R19a includes
@@ -14,11 +44,11 @@ loading to those copies byte-for-byte under both LF and CRLF and checks pack
 inventory, policy-copy equality and shared-fragment reuse. Fail-first and named
 mutation proof plus exact-head declared-check receipts travel in this slice PR.
 
-**R19c is not done.** Remaining slices: installed packaging/host activation and
-roles as needed; instruction/script-test ownership migration; required separate
-pack test lane and CI job. This slice adds neither that lane/job nor R19d train
-policy. LOW observations and wording followups stay advisory under the R19
-gate-growth rule; no extra acceptance gate is added.
+**Historical remaining work:** the final slice above supplies test ownership,
+required pack CI and source-of-truth verification. Existing hosts consume generated
+compatibility outputs, so no additional activation is needed for this source-pack
+task. Installed packaging and R19d train policy are not introduced. LOW observations
+and wording followups remain advisory under R19's gate-growth rule.
 
 ## R19c — first slice: ship pack skeleton and scripts (#565, historical partial)
 
@@ -40,10 +70,9 @@ detection or swallowing CLI errors. Fail-first coverage spans every moved/legacy
 script. F4 is fixed pending independent delta review, not closed; F2/F3
 advisories are unchanged.
 
-**R19c is not done.** Remaining slices: installed packaging/host wiring as needed;
-skills/roles, SHIPPING-WORKFLOW and shared includes; instruction/script-test
-ownership; required pack CI lane. Skills, instruction-contract tests, shipping docs
-and includes stay put in this slice. No additional gate or R19d–f scope is added.
+**Historical remaining work:** #566 supplies skills, policy and shared includes;
+the final slice above supplies test ownership, required pack CI and compatibility
+verification. Existing host paths remain supported. No R19d–f scope is added.
 
 ## R19b done — CLI contributions/public API #563, namespaced pack config #564
 

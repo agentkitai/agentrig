@@ -1,0 +1,44 @@
+{
+  "moved": [
+    "packages/cli/test/builder-worktree-instruction-contract.test.ts",
+    "packages/cli/test/conductor-resume-instruction-contract.test.ts",
+    "packages/cli/test/dispatch-record.test.ts",
+    "packages/cli/test/dogfood-reference-instruction-contract.test.ts",
+    "packages/cli/test/fixer-dispatch-provenance-instruction-contract.test.ts",
+    "packages/cli/test/initial-review-trio-instruction-contract.test.ts",
+    "packages/cli/test/model-assertion.test.ts",
+    "packages/cli/test/post-review-comment.test.ts",
+    "packages/cli/test/review-cleanup-sweep-instruction-contract.test.ts",
+    "packages/cli/test/review-durable-provenance-instruction-contract.test.ts",
+    "packages/cli/test/review-finding-index.test.ts",
+    "packages/cli/test/review-gate-contracts-instruction-contract.test.ts",
+    "packages/cli/test/review-residual-policy-instruction-contract.test.ts",
+    "packages/cli/test/review-residuals.test.ts",
+    "packages/cli/test/reviewer-adapters.test.ts",
+    "packages/cli/test/reviewer-residuals-instruction-contract.test.ts",
+    "packages/cli/test/reviewer-usage-policy-instruction-contract.test.ts",
+    "packages/cli/test/reviewer-verdict-instruction.test.ts",
+    "packages/cli/test/sha-claim-instruction-contract.test.ts",
+    "packages/cli/test/ship-pack.test.ts",
+    "packages/cli/test/shipping-instruction-contract.test.ts",
+    "packages/cli/test/structured-verdict.test.ts",
+    "packages/cli/test/verdict-mutants.test.ts",
+    "packages/cli/test/verdict-repair.test.ts",
+    "packages/core/test/review-launch-guidance.test.ts",
+    "packages/core/test/ship-pack-skills.test.ts",
+    "packages/core/test/shipping-authorization-guidance.test.ts",
+    "packages/core/test/shipping-convergence-guidance.test.ts",
+    "packages/core/test/skill-text-instruction-contract.test.ts",
+    "packages/core/test/skill-text.test.ts"
+  ],
+  "split": [
+    "packages/cli/test/reviewer-slots.test.ts",
+    "packages/cli/test/project-checks.test.ts",
+    "packages/cli/test/declared-budget-contract.test.ts",
+    "packages/core/test/skills.test.ts",
+    "packages/cli/test/workspace-vitest-root.test.ts"
+  ],
+  "fixtures": [
+    "packages/cli/test/preserved-review-455.ts"
+  ]
+}
