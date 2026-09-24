@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ReviewEvidenceManifest } from "./ledger-schema.mjs";
 import { parseVerdict, receiptTransport } from "./review-verdict.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
@@ -48,8 +49,38 @@ export function validateReview(receiptPath, digest, expected) {
   const transportModel = receiptTransport(receipt, binding, verdict, expected.adapter);
   return { output, receipt, transportModel };
 }
+export const EVIDENCE_OPEN = "<!-- agentrig-review-evidence:v1 -->";
+export const EVIDENCE_CLOSE = "<!-- /agentrig-review-evidence -->";
+export function validateManifest(manifest, expected) {
+  manifest = ReviewEvidenceManifest.parse(manifest);
+  if (resolve(manifest.output) !== resolve(dirname(manifest.receipt), "review.md")) throw new Error("durable output locator mismatch");
+  return validateReview(manifest.receipt, manifest.sha256, expected);
+}
+export function evidenceBlock(manifest) {
+  return `${EVIDENCE_OPEN}\n${JSON.stringify(manifest)}\n${EVIDENCE_CLOSE}\n`;
+}
+export function validatePostedReview(body, expected) {
+  const lines = body.split(/\r?\n/u);
+  const opens = lines.flatMap((line, i) => line === EVIDENCE_OPEN ? [i] : []);
+  const closes = lines.flatMap((line, i) => line === EVIDENCE_CLOSE ? [i] : []);
+  if (opens.length !== 1 || closes.length !== 1 || closes[0] <= opens[0]) throw new Error("expected exactly one attached durable evidence manifest");
+  const manifest = JSON.parse(lines.slice(opens[0] + 1, closes[0]).join("\n"));
+  const result = validateManifest(manifest, expected);
+  // A valid receipt for a different review must not authorize edited live findings.
+  const live = parseVerdict(body, { ...expected, assertedModel: expected.model, transportModel: result.transportModel });
+  const durable = parseVerdict(result.output, { ...expected, assertedModel: expected.model, transportModel: result.transportModel });
+  if (JSON.stringify(live) !== JSON.stringify(durable)) throw new Error("posted verdict differs from durable output");
+  return { ...result, manifest };
+}
 export function runCli() {
   try {
+    if (process.argv[2] === "--comment") {
+      const [path, repository, pr, pass, reviewedHead, slot, model, adapter, ...extra] = process.argv.slice(3);
+      if (extra.length) throw new Error("unexpected provenance arguments");
+      const result = validatePostedReview(readFileSync(path, "utf8"), { repository, pr, pass, reviewedHead, slot, model, adapter });
+      process.stdout.write(JSON.stringify(result) + "\n");
+      return;
+    }
     const [path, digest, repository, pr, pass, reviewedHead, slot, model, adapter, ...extra] = process.argv.slice(2);
     if (extra.length) throw new Error("unexpected provenance arguments");
     const result = validateReview(path, digest, { repository, pr, pass, reviewedHead, slot, model, adapter });

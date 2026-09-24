@@ -129,6 +129,7 @@ export async function main(args) {
   const provenance = { ...(home === undefined ? {} : { resolvedHome: home.home, homeVariable: home.variable }), verdict, ignoredKeys, reviewedHead, slot, adapter: binding.adapter, model: result.model, assertedModel: verdict.assertedModel, transportModel, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 };
   const durable = persistReview(identity, provenance, result.text);
   writeFileSync(`${prefix}.provenance.json`, JSON.stringify(provenance, null, 2) + "\n");
+  writeFileSync(`${prefix}.durable.json`, JSON.stringify(durable) + "\n");
   process.stdout.write(JSON.stringify(durable) + "\n");
 }
 export function runCli() { return main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = error instanceof UsageError ? 64 : 2; }); }

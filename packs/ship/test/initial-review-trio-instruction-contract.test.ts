@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readSkillText } from "../../../test/skill-text.js";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
@@ -48,7 +49,7 @@ it.each(["topic", "ship", "land", "dogfood"])("R379 %s requires all chunks and k
   expect(() => check(text.replace(completeness, "") + `\n${completeness}`)).toThrow();
 });
 
-import { chmodSync, mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, chmodSync, mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -70,8 +71,15 @@ it.each(["valid", "stale", "overlong", "heading", "missing-checks", "missing-pro
     writeFileSync(`${prefix}.md`, block);
     if (mode !== "missing-checks") writeFileSync(join(dir, "checks.md"), "green checks");
     if (mode !== "missing-provenance") writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ exit:0, reviewedHead:head, slot:"Custom", adapter:"api:peer", model:"pin", transportModel:"pin", assertedModel:"pin", verdict:{version:1, reviewedHead:head, assertedModel:"pin", modelSource:"fixture", slot:"Custom", verdict:"PASS", findings:[]} }));
+    if (mode === "valid" || mode === "helper-failure") {
+      mkdirSync(join(dir, "durable"));
+      const hash = (s: string) => createHash("sha256").update(s).digest("hex");
+      const durable = JSON.stringify({...JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8")), schema:1,repository:"o/r",pr:"414",pass:"initial",outputSha256:hash(block)});
+      writeFileSync(join(dir,"durable/provenance.json"),durable); writeFileSync(join(dir,"durable/review.md"),block);
+      writeFileSync(`${prefix}.durable.json`, JSON.stringify({receipt:join(dir,"durable/provenance.json"),output:join(dir,"durable/review.md"),sha256:hash(durable)}));
+    }
     const command = gate.replaceAll("<ADAPTER>", "api:peer").replaceAll("<REPO>", repo).replaceAll("<OUT>", dir).replaceAll("<PREFIX>", prefix).replaceAll("<WT>/.agentrig/config.json", join(dir, "config.json")).replaceAll("'<SLOT>'", "'Custom'").replaceAll("'HEAD'", `'${head}'`).replaceAll("<MODEL>", "pin").replaceAll('"HEAD"', `"${head}"`).replaceAll('"MAIN"', `"${main}"`).replace(".mjs NN ", ".mjs 414 ");
-    const run = spawnSync("/bin/sh", ["-c", `${command}\nprintf gate-complete`], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const run = spawnSync("/bin/sh", ["-c", `${command}\nprintf gate-complete`], { encoding: "utf8", env: { ...process.env, AGENTRIG_REVIEW_REPOSITORY:"o/r", AGENTRIG_REVIEW_PR:"414", AGENTRIG_REVIEW_PASS:"initial", PATH: `${dir}:${process.env.PATH}` } });
     expect(run.status, run.stderr).toBe(mode === "valid" ? 0 : 2);
     expect(run.stdout.includes("gate-complete")).toBe(mode === "valid");
     expect(existsSync(join(dir, "posted"))).toBe(mode === "valid" || mode === "helper-failure");
