@@ -13,6 +13,14 @@ double activation or installed-package loader is needed. Product test discovery
 excludes the moved tests. Counts and final declared-check receipts travel in the PR.
 No R19d/train move. Final ROADMAP done marker remains conductor-owned after review.
 
+F1 repair round 1 (pending independent delta verification): moved the remaining
+shipping-convergence guidance fixture and split the topic/land/review/ship/arbiter/
+dogfood policy case from core skill loading into the pack lane. The topic-aware
+product audit also moved the historical shipping-policy link case from the mixed
+workspace-config fixture. Assertions and unique test totals are conserved; generic
+loading/catalogue and workspace config checks stay product-owned. Migration
+inventory includes all three sources. No new text gate or F2–F4 advisory repair.
+
 ## R19c — second slice (#566, historical partial): ship skills, policy and shared includes (partial)
 
 Following first-slice PR #565, `packs/ship` now inventories all six workflow

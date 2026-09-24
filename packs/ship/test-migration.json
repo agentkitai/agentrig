@@ -27,13 +27,16 @@
     "packages/core/test/review-launch-guidance.test.ts",
     "packages/core/test/ship-pack-skills.test.ts",
     "packages/core/test/shipping-authorization-guidance.test.ts",
+    "packages/core/test/shipping-convergence-guidance.test.ts",
     "packages/core/test/skill-text-instruction-contract.test.ts",
     "packages/core/test/skill-text.test.ts"
   ],
   "split": [
     "packages/cli/test/reviewer-slots.test.ts",
     "packages/cli/test/project-checks.test.ts",
-    "packages/cli/test/declared-budget-contract.test.ts"
+    "packages/cli/test/declared-budget-contract.test.ts",
+    "packages/core/test/skills.test.ts",
+    "packages/cli/test/workspace-vitest-root.test.ts"
   ],
   "fixtures": [
     "packages/cli/test/preserved-review-455.ts"
