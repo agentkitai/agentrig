@@ -14,6 +14,10 @@ Rows require an inspected API-linked open issue; absent linkage is unverifiable.
 train host workflow changes. R19 LOW observations and wording followups remain advisories,
 not residual issues. Fail-first, named mutants and declared receipts travel in the PR.
 
+F1 repair adds an isolated successful-command rejection regression: citation, proof and
+observed child-session event all agree on exit 0. Deleting only the nonzero-exit guard
+must fail this test; production behavior is unchanged. F2/F3/F4 remain unassigned advisories.
+
 ## Eviction follow-ups — #579 / #580 implementation awaiting independent review
 
 Current roadmap row: user-directed eviction follow-ups (#579 / #580); next remains

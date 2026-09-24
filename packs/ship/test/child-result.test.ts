@@ -82,6 +82,12 @@ it("matches environment citation against the child's own observed session event"
   for (const delta of [{ sessionEvents: [] }, { childSessionId: "other" }, { sessionEvents: [{ ...event, sessionId: "other" }] }, { sessionEvents: [{ ...event, seq: 13 }] }, { environment: { ...environment, exitCode: 0 } }, { sessionEvents: [{ ...event, display: "success" }] }, { sessionEvents: [{ ...event, commandOutcome: { command: "other", exitCode: 1 } }] }, { sessionEvents: [{ ...event, commandOutcome: { command: "pnpm build", exitCode: 0 } }] }, { result: claim("environment", "unfinished execution") }])
     expect(assessChildResult({ ...input, ...delta }).action).toBe("retry");
 });
+it("rejects a correctly cited successful command from the child's own session", () => {
+  const proof = { ...environment, exitCode: 0, output: "build completed" };
+  const successEvent = { ...event, display: proof.output, commandOutcome: { command: proof.command, exitCode: proof.exitCode } };
+  const input = { ...context, result: claim("environment", JSON.stringify(proof)), childSessionId: proof.sessionId, environment: proof, sessionEvents: [successEvent] };
+  expect(assessChildResult(input)).toMatchObject({ action: "retry", attempt: 2 });
+});
 it("checks named dependency against independently fetched repository API state", () => {
   const input = { ...context, result: claim("dependency", dependencySummary), dependency, dependencyApi: api };
   expect(assessChildResult(input).action).toBe("blocked");
