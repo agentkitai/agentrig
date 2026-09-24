@@ -786,7 +786,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     error => extras.onHookError?.(error.message));
   // Core injects read_output per session, after this initial tool catalogue.
   const builderCompatibility = shipBuilderCompatibility(opts.builderProvider,
-    [...tools.map(tool => tool.name), "read_output"], discoveredRoles.map(role => role.name));
+    [...tools.map(tool => tool.name), "read_output"], discoveredRoles);
   if (builderCompatibility.warning) (extras.onNotice ?? console.error)(builderCompatibility.warning);
   if (opts.subagents === true) {
     const agentRoles = [...discoveredRoles, ...builderCompatibility.roles];

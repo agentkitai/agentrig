@@ -41,18 +41,19 @@ export function createTrainHost(host: TrainHost) {
 }
 
 /** Compatibility only: new callers use provider-bound .agentrig/agents roles directly. */
-export function shipBuilderCompatibility(provider: string | undefined, toolNames: string[], occupiedRoles: readonly string[] = []) {
+export function shipBuilderCompatibility(provider: string | undefined, toolNames: string[], existingRoles: readonly { name: string }[] = []) {
   if (provider === undefined) return { roles: [] };
   const inheritedTools = [...new Set(toolNames.filter(name => name !== "subagent"))];
   // Core's role schema remains bounded. Legacy explicit-provider children inherit
   // the complete runtime tool catalogue without manufacturing invalid manifests.
-  const bound = inheritedTools.length > 64 ? "64 tools per role" : occupiedRoles.length > 30 ? "32 roles per catalogue" : undefined;
-  if (bound) return {
+  const bound = inheritedTools.length > 64 ? "64 tools per role" : existingRoles.length > 30 ? "32 roles per catalogue" : undefined;
+  const fallback = (bound: string) => ({
     roles: [],
     warning: `builderProvider / --builder-provider is deprecated; replace it with a provider-bound role in .agentrig/agents/<role>.md. Using explicit-provider fallback: compatibility roles would exceed ${bound}; no tools or project roles were dropped.`,
     systemPrompt: `Legacy builderProvider compatibility: role synthesis would exceed ${bound}. For ship builder and fixer children use subagent with explicit provider: ${JSON.stringify(provider)} and no agent field. Project roles remain unchanged; this fallback has no synthetic role binding.`,
-  };
-  const occupied = new Set(occupiedRoles);
+  });
+  if (bound) return fallback(bound);
+  const occupied = new Set(existingRoles.map(role => role.name));
   const roles = ["builder", "fixer"].map(kind => {
     const body = `Act as the ship ${kind}. Follow the assigned task and skill; do not expand its scope.`;
     const fields = { tools: inheritedTools, provider,
@@ -64,6 +65,11 @@ export function shipBuilderCompatibility(provider: string | undefined, toolNames
     return { name, body, ...fields, schema: "1" as const, origin: `ship:compat/${name}`,
       hash: createHash("sha256").update(JSON.stringify({ name, body, fields })).digest("hex") };
   });
+  // Match core's UTF-8 JSON snapshot bound, including metadata and escaping.
+  // Never truncate existing roles or relax core's admission limits.
+  if (Buffer.byteLength(JSON.stringify([...existingRoles, ...roles]), "utf8") > 1_048_576) {
+    return fallback("1,048,576-byte serialized catalogue bound");
+  }
   return { roles,
     warning: `builderProvider / --builder-provider is deprecated; replace it with a provider-bound role in .agentrig/agents/<role>.md (provider: ${provider}) and call subagent with agent: <role>.`,
     // Preserve the old marker for conductors already running the earlier ship instructions.

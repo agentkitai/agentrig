@@ -11,6 +11,9 @@ is synchronized as a supported compatibility entrypoint. Repair round 1 preserve
 `read_output` recovery, allocates collision-free role names, and diagnoses explicit-provider
 fallback at the 64-tool/32-role bounds without truncation or weaker role validation. That
 fallback deliberately has provider routing rather than synthetic role provenance. These
+Round-2 F4 additionally measures the combined UTF-8 serialized catalogue before synthesis;
+exceeding core’s unchanged 1,048,576-byte bound uses the same diagnosed explicit-provider
+fallback (no truncation), with aggregate boundary and real-discovery/runtime regression proof.
 F1–F4 repairs await independent verification; this is not a review-resolution claim.
 
 Remaining R19e acceptance: generic fresh-session skill flag replacing TUI's topic

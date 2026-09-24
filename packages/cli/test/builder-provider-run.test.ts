@@ -82,7 +82,8 @@ it.each([
   { agent: undefined, count: 31, wide: false },
   { agent: undefined, count: 32, wide: false },
   { agent: undefined, count: 0, wide: true },
-])("legacy CLI preserves runtime capabilities $agent/$count/$wide", async ({ agent, count, wide }) => {
+  { agent: undefined, count: 30, wide: false, aggregate: true },
+])("legacy CLI preserves runtime capabilities $agent/$count/$wide", async ({ agent, count, wide, aggregate }) => {
   const { cwd, home, logs } = await fixture();
   await writeFile(join(cwd, "large.txt"), "x".repeat(40000) + "RECOVERY_CANARY");
   if (count) {
@@ -91,6 +92,21 @@ it.each([
       const name = count === 2 && i === 0 ? "legacy-ship-builder" : count === 2 && i === 1 ? "legacy-ship-fixer" : `role-${i}`;
       await writeFile(join(cwd, `.agentrig/agents/${name}.md`), '---\ntools: ["read_file"]\n---\nPROJECT ROLE CANARY');
     }
+  }
+  if (aggregate) {
+    // Real discovery producer: JSON escaping expands these valid on-disk bodies.
+    const directory = join(cwd, ".agentrig/agents");
+    for (let i = 0; i < count; i++) await writeFile(join(directory, `role-${i}.md`),
+      '---\ntools: ["read_file"]\n---\n' + '"'.repeat(17000));
+    const before = await core.discoverAgentRoles(cwd);
+    let remaining = 1_048_576 - Buffer.byteLength(JSON.stringify(before));
+    for (let i = 0; remaining > 0; i++) {
+      const extra = Math.min(10000, remaining); remaining -= extra;
+      await writeFile(join(directory, `role-${i}.md`), '---\ntools: ["read_file"]\n---\n' + '"'.repeat(17000) + "x".repeat(extra));
+    }
+    const valid = await core.discoverAgentRoles(cwd);
+    expect(valid).toHaveLength(30);
+    expect(Buffer.byteLength(JSON.stringify(valid))).toBe(1_048_576);
   }
   if (wide) {
     const builtins = core.builtinTools;
