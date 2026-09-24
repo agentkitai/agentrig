@@ -35,7 +35,7 @@ it("keeps the audited action runtime pins and Windows fixture phase ordering", a
     else {
       const windows = workflow.slice(workflow.indexOf("  windows-sandbox-none:"));
       expect(windows.indexOf("packages-runtime.test.ts --maxWorkers=1")).toBeLessThan(windows.indexOf("packages.test.ts --maxWorkers=1"));
-      expect(windows.indexOf("packages.test.ts --maxWorkers=1")).toBeLessThan(windows.indexOf("--config vitest.windows.config.ts"));
+      expect(windows.indexOf("packages.test.ts --maxWorkers=1")).toBeLessThan(windows.indexOf("run: pnpm test:windows"));
     }
   }
 });

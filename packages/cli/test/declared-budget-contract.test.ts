@@ -4,8 +4,6 @@ import ts from "typescript";
 
 // These are latency allowances for expensive fixture work, not weaker assertions.
 const cases = [
-  ["../../core/test/skill-text-instruction-contract.test.ts", "every repository skill instruction reader uses the shared skill-text loader", 30_000],
-  ["reviewer-adapters.test.ts", "%s launch template, raw provenance and stale-artifact refusal", 30_000],
   ["packages-runtime.test.ts", "accepts actual npm pack --ignore-scripts output with identical selected content", 60_000],
   ["evalset.test.ts", "vendors exact upstream bytes and runs all upstream cases separately", 30_000],
   ["evalset.test.ts", "A4 rejects summed/zero accounting and ungrounded answers", 30_000],

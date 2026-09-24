@@ -15,7 +15,7 @@ it("source ship manifest and compatibility config register the reserved ship nam
   expect(config.packs.ship).toEqual({ checks: config.checks, reviewers: config.reviewers });
   // @ts-expect-error source pack module
   const { shipPack } = await import("../../../packs/ship/index.mjs");
-  const { buildProgram } = await import("../src/program.js");
+  const { buildProgram } = await import("../../../packages/cli/src/program.js");
   const program = buildProgram({ packs: [shipPack] });
   expect(program.commands.find(command => command.name() === "ship")).toBeDefined();
 });

@@ -15,7 +15,12 @@
     "clean": "pnpm -r exec rm -rf dist",
     "demo": "pnpm --filter @agentkitai/agentrig-cli run demo",
     "feel:check": "node packages/cli/scripts/feel-budgets.mjs",
-    "feel:prepare": "node packages/cli/scripts/feel-prepare.mjs"
+    "feel:prepare": "node packages/cli/scripts/feel-prepare.mjs",
+    "test:ship": "pnpm test:preflight && pnpm ship:check && vitest run --config packs/ship/vitest.config.ts",
+    "ship:sync": "node packs/ship/compatibility.mjs --write",
+    "ship:check": "node packs/ship/compatibility.mjs",
+    "test:ship:crlf": "node packs/ship/check-crlf.mjs",
+    "test:windows": "pnpm test:preflight && vitest run --config test/vitest.windows.config.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

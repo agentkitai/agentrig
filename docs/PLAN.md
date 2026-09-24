@@ -1130,7 +1130,15 @@ consumers, with a deprecation warning pointing to the full namespace path.
 When both forms occur in one declaration, the namespace wins; invalid legacy
 values still fail validation. Files need not be rewritten. Ship schema registration
 is owned by the compatibility bridge until extraction, not replaceable by a host
-pack. R19c/d skills/scripts/train extraction is explicitly excluded.
+pack. The initial R19b slice excluded skills/scripts/train extraction.
+
+R19c source-pack extraction now owns shipping scripts, bundled skills, shared policy,
+and instruction/script tests under `packs/ship`. Checked-in legacy skill and policy
+paths are generated compatibility outputs (`pnpm ship:sync`), verified without
+writing by `pnpm ship:check`. Existing hosts discover those flat outputs, avoiding
+double registration. Product Vitest discovery stays product-only; the separate
+pack lane gates every PR and replays compatibility skills through a CRLF fixture.
+Installed-package activation and R19d train/session extraction remain separate.
 
 ## 6. Build order
 

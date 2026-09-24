@@ -245,3 +245,19 @@ reset, Retry-After seconds/date, rate_limit probe and fallback; RL5 excludes ord
 minutes per gh call (not a child model retry): metadata wins, otherwise secondary
 backoff starts at 60 seconds. An exhausted ceiling is reported as a GitHub rate
 limit, never as a CI conclusion. Missing/malformed probe metadata uses backoff.
+
+## Ship source-pack lane (R19c)
+
+After `pnpm build`, run `pnpm test:ship` in addition to the product `pnpm test`.
+Shipping instruction contracts and script tests live in `packs/ship/test`, not
+product package suites. CI runs the pack lane on every PR. Test-count receipts
+for moves must add both lanes (including skipped tests), never compare product
+counts alone. `packs/ship/test-migration.json` inventories the relocation and
+mixed product/pack splits.
+
+Edit workflow skills/policy in `packs/ship` only; `pnpm ship:sync` generates the
+legacy compatibility paths and `pnpm ship:check` rejects drift without rewriting.
+`pnpm test:ship:crlf` copies the entire `.agentrig/skills` tree under TMPDIR,
+converts it to CRLF, and reruns the pack lane with `AGENTRIG_TEST_SKILLS_ROOT`.
+Use the same out-of-Git-ancestry TMPDIR requirements above. Run it before every
+push touching instruction contracts/skill-text. The wrapper cleans its own fixture.

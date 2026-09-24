@@ -1,4 +1,4 @@
-import { parseConfigText } from "../src/config.js";
+import { parseConfigText } from "../../../packages/cli/src/config.js";
 import { expect, it } from "vitest";
 // @ts-expect-error skill-side ESM adapter, intentionally outside the compiled CLI
 import { cliAdapters, validateResult, runApi, normalizeReviewerHead } from "../../../scripts/reviewer-adapters.mjs";
