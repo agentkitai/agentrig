@@ -1,3 +1,14 @@
+## Pre-PR crash resume — #572 repair round 1 (#574)
+
+Blocking findings C1/A1/A2 are addressed: a session that proved initial absence
+can transition to its uniquely matched current-marker builder PR, including the
+ordinary verified repair path. Malformed host rows clear stale branch/resume
+state and deny dispatch. Direct hook regressions enforce explicit `pr: null`
+even when an omitted-pr row supplies a valid branch. Initial any-marker/branch
+absence guards and ordinary unpinned-resume denials remain unchanged; host row
+binding is unchanged. Fail-first, named mutants and check receipts travel in the
+PR ledger. A3–A5 remain advisories, not residual issues or repair scope.
+
 ## Mechanical PR ledger integrity — #571 complete (#573)
 
 Scoped ship-pack maintenance adds append-only PR-body mutation checks with fetched
