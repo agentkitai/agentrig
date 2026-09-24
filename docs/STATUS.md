@@ -1,9 +1,11 @@
-## R19d final slice — CLI on train + ship, core train API retired (review pending)
+## R19d done — #568 + #569: CLI on train + ship, core train API retired
 
-R19d implementation consists of first slice **#568** plus final slice **#569**
-([PR](https://github.com/agentkitai/agentrig/pull/569)). Final ROADMAP completion is deliberately
-left to the conductor after independent review disposition resolves; R19e is not
-part of this change.
+R19d is complete across first slice **#568** plus final slice **#569**
+([PR](https://github.com/agentkitai/agentrig/pull/569)). Both independent initial
+reviews passed with no blocking findings. LOW documentation, assertion-strength
+and compatibility-bridge observations remain advisories under R19, not residual
+gates. Declared checks and the ship-pack lane passed on the reviewed head;
+exact-head CI and landing receipts travel in the PR. R19e is not part of this change.
 
 - CLI `train <dir>` now composes `@agentkitai/agentrig-train` with the ship stages;
   `usage --row/--train-dir` uses the public train runtime accounting adapter.
