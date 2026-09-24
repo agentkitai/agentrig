@@ -1,4 +1,4 @@
-## R19c — final slice: pack-owned checks and source of truth (awaiting review)
+## R19c done — #565 scripts, #566 skills/policy, #567 pack-owned checks and source of truth
 
 Completes the source-pack migration begun by #565 (scripts/skeleton) and #566
 (bundled skills/policy): workflow instruction-contract/script tests and their
@@ -11,9 +11,16 @@ legacy `.agentrig/skills` and `docs/SHIPPING-WORKFLOW.md` paths, and `ship:check
 rejects drift without rewriting. Hosts retain their working discovery paths; no
 double activation or installed-package loader is needed. Product test discovery
 excludes the moved tests. Counts and final declared-check receipts travel in the PR.
-No R19d/train move. Final ROADMAP done marker remains conductor-owned after review.
+R19c is complete across #565, #566 and #567; no R19d/train move. Both initial
+reviews and the focused repair review are recorded in #567. F1 (remaining
+product-owned shipping instruction assertions) was independently closed by the
+focused Claude Code review. Final unique counts are 4,287 product + 1,701 pack =
+5,988 (baseline 5,985); CRLF pack replay and declared checks are green. LOW
+observations/wording and future-guard suggestions remain advisories under R19,
+not residual gates. Exact-head CI and landing receipts travel in #567. The operator
+will make the every-PR `ship-pack` job required in branch protection after landing.
 
-F1 repair round 1 (pending independent delta verification): moved the remaining
+F1 repair round 1 (independently verified and closed): moved the remaining
 shipping-convergence guidance fixture and split the topic/land/review/ship/arbiter/
 dogfood policy case from core skill loading into the pack lane. The topic-aware
 product audit also moved the historical shipping-policy link case from the mixed
