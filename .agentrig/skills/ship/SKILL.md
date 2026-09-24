@@ -20,10 +20,22 @@ revocation or narrowing. Do not infer authorization from YOLO or a tool allowanc
 
 ## Builder routing
 
-When the run supplies a train builder provider entry (`--builder-provider <entry>`), pass that
-named entry as `subagent.provider` to every builder and fixer, including continuations, unless
-that row explicitly says otherwise. With no override, product-row builders/fixers use the
-profile default (omit `provider`). Never apply this override to reviewers, arbiters or landers.
+Use provider-bound agent roles for builder/fixer routing: declare `provider: <entry>` in
+`.agentrig/agents/<role>.md`, then call `subagent` with `agent: <role>` and omit `provider`.
+A role binding is authoritative; do not override it with an explicit provider or model role.
+
+Existing train rows with `builderProvider` and `--builder-provider <entry>` remain supported
+with a deprecation diagnostic. The compatibility adapter normally supplies `legacy-ship-builder`
+and `legacy-ship-fixer` roles, adding numeric suffixes when project roles occupy those names.
+Use the exact compatibility bindings from the system prompt as `subagent.agent`, including
+continuations; do not assume the unsuffixed names identify compatibility roles. If two extra
+roles would exceed the 32-role catalogue or inherited tools (including session `read_output`)
+exceed 64 per role, the adapter explicitly diagnoses a legacy-provider fallback instead:
+use the named `subagent.provider` with no `agent`. This path preserves all project roles and
+inherited tools but has no synthetic role provenance; it does not weaken role validation.
+Old conductors without those roles may still pass the named entry as `subagent.provider`.
+With no override or configured role, product-row builders/fixers use the profile default
+(omit `provider`). Never apply this override to reviewers, arbiters or landers.
 Record each child's effective builder provider (named entry or profile default, with session
 manifest provenance when available) in the PR child inventory; preserve it across resume.
 

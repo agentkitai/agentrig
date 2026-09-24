@@ -15,7 +15,7 @@ it("records the sanctioned R18b completion marker after reviewed delivery", asyn
 
 it("routes builder/fixer continuations only and inventories effective provider", async () => {
   const text = (await readSkillText(new URL("../../../.agentrig/skills/ship/SKILL.md", import.meta.url), "utf8")).replace(/\s+/g, " ");
-  for (const phrase of ["`--builder-provider <entry>`", "every builder and fixer, including continuations", "profile default (omit `provider`)", "Never apply this override to reviewers, arbiters or landers", "effective builder provider", "PR child inventory"]) expect(text).toContain(phrase);
+  for (const phrase of ["`--builder-provider <entry>`", "provider-bound agent roles", "`provider: <entry>`", "`agent: <role>` and omit `provider`", "`legacy-ship-fixer` roles", "including continuations", "Old conductors without those roles", "profile default (omit `provider`)", "Never apply this override to reviewers, arbiters or landers", "effective builder provider", "PR child inventory"]) expect(text).toContain(phrase);
 });
 
 it("documents operator routing policy and ten-row review", async () => {
