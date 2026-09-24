@@ -1,0 +1,16 @@
+{
+  "name": "ship",
+  "apiVersion": 1,
+  "configNamespace": "ship",
+  "entry": "index.mjs",
+  "scripts": [
+    "post-review-comment.mjs",
+    "review-finding-index.mjs",
+    "review-provenance.mjs",
+    "review-verdict.mjs",
+    "reviewer-adapters.mjs"
+  ],
+  "extensions": [
+    "extensions/dispatch-record.json"
+  ]
+}

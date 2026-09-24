@@ -7,7 +7,7 @@ export { buildProgram, type ProgramDependencies } from "./program.js";
 export type { CliPack, CliPackCommand } from "./cli-packs.js";
 export { buildRoleProvider, buildProviders, resolveProviderEntries } from "./provider.js";
 export type { ProviderOptions, ProviderHooks, ProviderSet } from "./provider.js";
-export { resolveChildEnvironment } from "./child-env.js";
+export { resolveChildEnvironment, reviewerHome } from "./child-env.js";
 export { resolveProjectChecks } from "./project-checks.js";
 export { parseConfigText, readConfigFile } from "./config.js";
 export type { ConfigReadOptions, PackConfigRegistration, ConfigFile, ProjectChecks, Role, ProviderEntry, Roles } from "./config.js";
