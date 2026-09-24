@@ -1,9 +1,10 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { parseConfigText, readConfigFile, type ConfigReadOptions } from "../src/config.js";
+import { validateEvaluationProfile } from "../src/evaluation-fixtures.js";
+import { parseConfigText, readConfigFile, resolveConfig, type ConfigReadOptions } from "../src/config.js";
 import { buildProgram } from "../src/program.js";
 
 const parseConfig = (value: unknown, options?: ConfigReadOptions) => parseConfigText("fixture", JSON.stringify(value), options);
@@ -105,4 +106,32 @@ it("uses whole-namespace profile precedence and ignores untrusted project config
   await writeFile(path, JSON.stringify({ ...wrap("project"), profiles: { personal: wrap("project-profile") } }));
   await program().parseAsync(["--profile", "personal", "fixture", "--trust", "echo"], { from: "user" });
   expect(run).toHaveBeenLastCalledWith([], expect.objectContaining({ config: { greeting: "project-profile" } }));
+});
+
+describe("legacy validation and effective namespace boundaries", () => {
+  const parse = (value: unknown) => parseConfig(value, options);
+  const checks = { bootstrap: "pnpm install", steps: [{ name: "test", command: "pnpm test" }] };
+  const providers = { pinned: { provider: "openai", model: "pin-1" } };
+  const valid = { primary: { adapter: "api:pinned", model: "pin-1" } };
+  it.each([
+    { primary: { adapter: "api:missing", model: "pin-1" } },
+    { primary: { adapter: "api:pinned", model: "wrong" } },
+  ])("rejects invalid legacy bindings even beside winning valid namespaces: %j", reviewers => {
+    expect(() => parse({ providers, reviewers, packs: { ship: { reviewers: valid } } }))
+      .toThrow(/API adapter must reference/);
+  });
+  it("retains namespace precedence after both reviewer bindings validate", () => {
+    const reviewers = { legacy: { adapter: "codex-cli", model: "pin-2" } };
+    expect(parse({ providers, reviewers, packs: { ship: { reviewers: valid } } }).reviewers).toEqual(valid);
+  });
+  it.each([
+    ["user", undefined], ["user", "personal"],
+    ["project", undefined], ["project", "personal"],
+  ] as const)("keeps namespaces out of %s effective evaluation values (profile %s)", (source, profile) => {
+    const declaration = { model: "pin-1", packs: { fixture: { greeting: "base" }, ship: { checks } } };
+    const file = parse(profile ? { profiles: { personal: declaration } } : declaration);
+    const resolved = resolveConfig({ defaults: {}, [source]: file, profile });
+    expect(resolved).toEqual({ model: "pin-1" });
+    expect(() => validateEvaluationProfile(resolved)).not.toThrow();
+  });
 });

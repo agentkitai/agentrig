@@ -343,6 +343,12 @@ export function parseConfigText(path: string, text: string, options: ConfigReadO
     const issue = parsed.error.issues[0];
     throw new Error(`invalid config ${path} at ${issueField(issue)}: ${safeIssueMessage(issue)}`);
   }
+  // Validate legacy declarations before a winning namespace can replace them.
+  const legacy = validateConfig(ConfigFileSchema).safeParse(parsed.data);
+  if (!legacy.success) {
+    const issue = legacy.error.issues[0];
+    throw new Error(`invalid config ${path} at ${issueField(issue)}: ${safeIssueMessage(issue)}`);
+  }
   const config = parsed.data as ConfigFile;
   const warn = options.onWarning ?? console.warn;
   const migrate = (declaration: { packs?: Record<string, unknown> | undefined; checks?: z.output<typeof ProjectChecksSchema> | undefined; reviewers?: ConfigFile["reviewers"] }, prefix: string) => {
@@ -388,6 +394,7 @@ function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   if (file === undefined) return {};
   const { profiles: _profiles, checks: _checks, reviewers: _reviewers, ...values } = file;
   delete (values as Record<string, unknown>).childEnv;
+  delete (values as Record<string, unknown>).packs;
   return values;
 }
 
