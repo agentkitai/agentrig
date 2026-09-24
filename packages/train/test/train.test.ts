@@ -214,6 +214,20 @@ describe("train", () => {
     expect(await runTrain(f.root, { command: f.command })).toBe("halted"); expect(f.calls).toEqual([]);
     expect(JSON.parse(await readFile(join(f.root, "logs/interrupted.halt.json"), "utf8"))).toMatchObject({ phase: "recovery", pr: null, head: null, sessionIds: [] });
   });
+  it("#572 validates and forwards explicit pre-PR resume without bypass", async () => {
+    const resume = { session: "previous", pr: null, branch: "recovered-builder.v1" };
+    expect(TrainRowSchema.safeParse({ ...row, resume }).success).toBe(true);
+    for (const invalid of [{ session: "previous", pr: null }, { ...resume, branch: "" }, { ...resume, branch: "bad branch" }, { ...resume, pr: 42 }, { session: "previous", branch: "feature" }]) {
+      expect(TrainRowSchema.safeParse({ ...row, resume: invalid }).success).toBe(false);
+    }
+    const f = await fixture();
+    await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, resume }));
+    expect(await runTrain(f.root, { command: f.command })).toBe("empty");
+    const run = f.calls.find(c => c.startsWith("run --headless"))!;
+    expect(run).toContain("--resume previous");
+    expect(run).toContain(JSON.stringify(resume));
+    expect(run).not.toContain("--yolo"); expect(run).not.toContain("--trust");
+  });
   it("passes resume in the existing run path with no trust or permission bypass", async () => {
     const f = await fixture(); await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, resume: { session: "previous", pr: 42 } }));
     expect(await runTrain(f.root, { command: f.command })).toBe("empty");

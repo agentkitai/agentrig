@@ -21,7 +21,8 @@ function repairIntent(task) {
 
 // Framework hook exceptions/timeouts fail open. Own all failures and finish five
 // seconds before that deadline. Never retry a write whose outcome is ambiguous.
-export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false } = {}) {
+export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false, prePrBranchForSession = () => undefined } = {}) {
+  const absenceProofs = new Map();
   return async context => {
     if (context.tool?.name !== "subagent") return createLedgerHook({ gh, budgetMs })(context);
     const deadline = Date.now() + budgetMs;
@@ -61,9 +62,14 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       if (!branch || branch === "HEAD") throw new Error("cannot resolve current branch");
       const row = rowForSession(context.sessionId);
       const pinned = resumePrForSession(context.sessionId);
-      if (pinned !== undefined && (!row || !Number.isSafeInteger(pinned) || pinned <= 0)) throw new Error("invalid host resume PR binding");
+      const prePrBranch = prePrBranchForSession(context.sessionId);
+      const prePr = pinned === null && typeof prePrBranch === "string" && /^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$/u.test(prePrBranch);
+      const proof = absenceProofs.get(context.sessionId);
+      if (!prePr || proof?.row !== row || proof?.branch !== prePrBranch) absenceProofs.delete(context.sessionId);
+      if (prePrBranch !== undefined && !prePr) throw new Error("invalid pre-PR resume binding");
+      if (pinned !== undefined && (!row || (!prePr && (!Number.isSafeInteger(pinned) || pinned <= 0)))) throw new Error("invalid host resume PR binding");
       let prs;
-      if (pinned !== undefined) {
+      if (pinned !== undefined && !prePr) {
         // A resumed host mints a fresh marker but explicitly pins the existing PR.
         // Resolve that identity directly, never infer it from candidate PR bodies.
         const pr = JSON.parse(await command(gh, ["pr", "view", String(pinned), "--json", "number,state,headRefName,headRefOid,body"]));
@@ -76,13 +82,25 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
         if (!Array.isArray(response) || response.length >= 100) throw new Error("invalid or truncated PR lookup response");
         if (response.some(pr => !pr || typeof pr.body !== "string" || typeof pr.headRefName !== "string" || !pr.headRefName || !Number.isSafeInteger(pr.number) || pr.number <= 0 || !/^[a-f0-9]{40}$/u.test(pr.headRefOid))) throw new Error("invalid PR lookup entry");
         prs = row ? response.filter(pr => typeof pr.body === "string" && pr.body.split(/\r?\n/u).includes(row)) : response.filter(pr => pr.headRefName === branch);
-        // A resumed row has an existing association to establish, unlike an
-        // initial builder. Never guess from the checkout or an old row marker.
-        if (row && isResumeForSession(context.sessionId) && prs.length === 0) throw new Error("resumed row has no verified PR association; add the fresh row marker to the PR body or set explicit resume.pr");
+        // Only explicit pre-PR recovery may resume without a pinned PR. The
+        // fresh host marker cannot identify historical markers, so conservatively
+        // refuse any train-marked open PR rather than guess which row owned it.
+        if (row && isResumeForSession(context.sessionId)) {
+          if (!prePr) throw new Error("resumed row requires explicit resume.pr or pre-PR resume with pr: null and branch");
+          if (absenceProofs.has(context.sessionId) && prs.length > 0) {
+            // Only after this session proved absence may its newly created PR
+            // use the unchanged fresh host marker. Keep the builder branch exact.
+            if (prs.length !== 1 || prs[0].headRefName !== prePrBranch) throw new Error("ambiguous or mismatched pre-PR transition");
+          } else {
+            if (response.some(pr => pr.headRefName === prePrBranch || /agentrig-train-row:/u.test(pr.body))) throw new Error("pre-PR resume cannot prove absence: open branch or train-marked PR; set explicit resume.pr");
+            prs = [];
+          }
+        }
       }
       if (!Array.isArray(prs)) throw new Error("invalid PR lookup response");
       if (prs.length === 0) {
         if (typeof context.tool.input?.task === "string" && repairIntent(context.tool.input.task)) throw new Error("repair intent requires a live PR and standalone Repair round / Pre-dispatch read-back receipts");
+        if (prePr && row && context.sessionId) absenceProofs.set(context.sessionId, { row, branch: prePrBranch });
         return { action: "continue" };
       }
       if (prs.length !== 1) throw new Error("ambiguous PR for current branch");
@@ -158,6 +176,7 @@ export function activate(ctx) {
   const rows = new Map();
   const resumePrs = new Map();
   const resumes = new Map();
+  const prePrBranches = new Map();
   // The host embeds this instruction line in the initial prompt; only the PR
   // body binding is on its own line (packages/core/src/train.ts).
   // Remember it per session so conductors on main resolve the builder's PR.
@@ -174,12 +193,15 @@ export function activate(ctx) {
         if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("invalid host Row");
         if (row.resume !== undefined && (!row.resume || typeof row.resume !== "object" || Array.isArray(row.resume))) throw new Error("invalid resume");
         resumePrs.set(context.sessionId, row.resume?.pr);
+        prePrBranches.set(context.sessionId, row.resume?.branch);
         resumes.set(context.sessionId, row.resume !== undefined);
       } catch {
+        prePrBranches.delete(context.sessionId);
+        resumes.set(context.sessionId, true);
         resumePrs.set(context.sessionId, null);
       }
     }
     return { action: "continue" };
   });
-  ctx.hooks.on("pre_tool", createDispatchHook({ rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id), isResumeForSession: id => resumes.get(id) }), { timeoutMs: 30_000 });
+  ctx.hooks.on("pre_tool", createDispatchHook({ rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id), isResumeForSession: id => resumes.get(id), prePrBranchForSession: id => prePrBranches.get(id) }), { timeoutMs: 30_000 });
 }

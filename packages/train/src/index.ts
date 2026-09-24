@@ -46,7 +46,12 @@ export const TrainRowSchema = z.object({
     sessionRoot: text.refine(isAbsolute, "sessionRoot must be absolute").optional(),
     profile: z.string().regex(/^[A-Za-z0-9_-]+$/u).optional(),
   }).strict(),
-  resume: z.object({ session: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u), pr: z.number().int().positive().optional() }).strict().optional(),
+  resume: z.object({
+    session: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u),
+    pr: z.number().int().positive().nullable().optional(),
+    branch: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$/u).optional(),
+  }).strict().refine(resume => resume.pr === null ? resume.branch !== undefined : resume.branch === undefined,
+    "pre-PR resume requires pr: null and branch; other resumes must omit branch").optional(),
 }).strict();
 export type TrainRow = z.infer<typeof TrainRowSchema>;
 export interface TrainRequest {
@@ -225,7 +230,7 @@ export function createTrain(runtime: TrainRuntime, stages: TrainStages) {
           await persist();
           if (await exists(resultPath)) {
             const receipt = stages.receipt.parse(await json(resultPath));
-            if (row.resume?.pr !== undefined && row.resume.pr !== receipt.pr) throw new Error("resume receipt changed pinned PR");
+            if (row.resume?.pr != null && row.resume.pr !== receipt.pr) throw new Error("resume receipt changed pinned PR");
             state.pr = receipt.pr;
           } else if (result.code === 0) throw new Error("child did not supply validated final PR output");
           if (result.code !== 0) throw new Error(`headless row exited ${result.code}`);

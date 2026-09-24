@@ -1,3 +1,14 @@
+## Pre-PR crash resume — #572 repair round 1 (#574)
+
+Blocking findings C1/A1/A2 are addressed: a session that proved initial absence
+can transition to its uniquely matched current-marker builder PR, including the
+ordinary verified repair path. Malformed host rows clear stale branch/resume
+state and deny dispatch. Direct hook regressions enforce explicit `pr: null`
+even when an omitted-pr row supplies a valid branch. Initial any-marker/branch
+absence guards and ordinary unpinned-resume denials remain unchanged; host row
+binding is unchanged. Fail-first, named mutants and check receipts travel in the
+PR ledger. A3–A5 remain advisories, not residual issues or repair scope.
+
 ## Mechanical PR ledger integrity — #571 complete (#573)
 
 Scoped ship-pack maintenance adds append-only PR-body mutation checks with fetched
@@ -8104,3 +8115,7 @@ Built-in `recommended` check/train profile validation now follows run's undeclar
 exception while retaining explicit user/project profiles and project-only commands. Paired tests
 exercise `loadRunConfig`, check resolution and train timeout resolution, including overrides,
 unknown rejection and repository-owned home exclusion. Independent conductor review is complete.
+
+## Issue #572 — explicit pre-PR train recovery
+
+Train rows accept `resume: {session, pr: null, branch}` for a crash before PR creation. The ship dispatch hook permits initial-build continuation only after a complete fetched open-PR listing excludes the named branch and conservatively excludes all train-marked PRs (including earlier markers). All other unpinned resumes deny dispatch; positive pins retain exact PR resolution and byte-readback recording. No repair-intent, permission, review, or landing bypass. Operator form and conservative unrelated-marker refusal are documented in TRAIN-OPERATIONS.

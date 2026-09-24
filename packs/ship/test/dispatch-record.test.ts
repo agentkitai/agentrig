@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt, listing?: Record<string, unknown>[], repairTask?: string, sourceBody?: string) {
+async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt, listing?: Record<string, unknown>[], repairTask?: string, sourceBody?: string, steps?: Array<{ prompt?: string; listing?: Record<string, unknown>[]; task?: string; sessionId?: string }>) {
   const root = await mkdtemp(join(tmpdir(), "dispatch-")); roots.push(root);
   await mkdir(join(root, "bin"));
   const script = `#!/usr/bin/env node
@@ -20,6 +20,7 @@ if(a[0]==='pr' && a[1]==='view') {
   if(mode==='pinned-missing'){console.error('not found');process.exit(1);}
   console.log(JSON.stringify({number:mode==='pinned-wrong'?8:7,url:'https://github.com/agentkitai/agentrig/pull/7',state:mode==='pinned-closed'?'CLOSED':'OPEN',headRefName:'builder-branch',headRefOid:mode==='moved-head'?'b'.repeat(40):'a'.repeat(40),body:mode.startsWith('authorization:')?'Human amendment: Repair round: 4/4; authorization: '+mode.slice(14):mode==='amended'?'Human amendment: Repair round: 4/4; authorization: \"I authorize one additional repair round (4).\"':mode==='wrong-amendment'?'Human amendment: Repair round: 5/5; authorization: \"I authorize round 5.\"':'old marker'}));process.exit(0);
 }
+if(a[0]==='pr' && a[1]==='list' && fs.existsSync(root+'/listing')) { console.log(fs.readFileSync(root+'/listing','utf8'));process.exit(0); }
 if(a[0]==='pr' && a[1]==='list' && ${listing !== undefined}) { console.log(${JSON.stringify(JSON.stringify(listing ?? []))});process.exit(0); }
 if(a[0]==='pr' && ${activation}) {
   const pr={number:7,headRefName:'builder-branch',headRefOid:'a'.repeat(40),body:'agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099'};
@@ -41,13 +42,21 @@ else {if(mode==='read-failure'){console.error('read failed');process.exit(1);} c
   if (activation) {
     const runner = `
 import { activate } from ${JSON.stringify(pathToFileURL(resolve(".agentrig/extensions/dispatch-record.mjs")).href)};
+import { writeFileSync } from "node:fs";
 const hooks = new Map();
 activate({ hooks: { on(point, handler, options) { hooks.set(point, {handler, options}); } } });
 if(hooks.get("pre_tool").options.timeoutMs !== 30000) throw new Error("hook budget changed");
 await hooks.get("user_prompt").handler({sessionId:"parent-123", prompt:${JSON.stringify(prompt)}});
 await hooks.get("user_prompt").handler({sessionId:"other", prompt:"unrelated prompt"});
 await hooks.get("user_prompt").handler({sessionId:"parent-123", prompt:"continue repair"});
-console.log(JSON.stringify(await hooks.get("pre_tool").handler({cwd:${JSON.stringify(root)},sessionId:"parent-123",tool:{name:${JSON.stringify(name)},input:{task:${JSON.stringify(task)}}}})));`;
+const results = [];
+for (const step of ${JSON.stringify(steps ?? [{}])}) {
+  const sessionId = step.sessionId ?? "parent-123";
+  if (step.prompt !== undefined) await hooks.get("user_prompt").handler({ sessionId, prompt: step.prompt });
+  if (step.listing !== undefined) writeFileSync(${JSON.stringify(join(root, "listing"))}, JSON.stringify(step.listing));
+  results.push(await hooks.get("pre_tool").handler({cwd:${JSON.stringify(root)},sessionId,tool:{name:${JSON.stringify(name)},input:{task:step.task ?? ${JSON.stringify(task)}}}}));
+}
+console.log(JSON.stringify(${steps === undefined} ? results[0] : results));`;
     const run = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", runner], { env: { ...process.env, PATH: join(root, "bin") + ":" + process.env.PATH }, timeout: 35000 });
     result = JSON.parse(run.stdout);
   } else result = await handler({ cwd: root, sessionId: "parent-123", tool: { name, input: { task, ...(label ? { label } : {}) } } });
@@ -139,17 +148,43 @@ it.each(["ok", "no-pr"])("unpinned row resume denies without fresh association: 
   const p = await probe(mode, "subagent", undefined, undefined, true, resumePrompt.replace(',"pr":7', ''));
   expect(p.result.action).toBe("deny");
   expect(p.result.reason).toContain("resume.pr");
-  expect(p.result.reason).toContain("fresh row marker");
   expect(p.calls).not.toContain("POST");
   expect(p.calls).not.toContain('"view"');
 });
-it("unpinned row resume posts and verifies after fresh marker association", async () => {
-  const prompt = hostPrompt.replace('"authorization":"not authorized to merge"}', '"authorization":"not authorized to merge","resume":{"session":"prior-session"}}');
-  const p = await probe("ok", "subagent", undefined, undefined, true, prompt);
+it("unpinned row resume denies even with fresh marker association", async () => {
+  const prompt = resumePrompt.replace(',"pr":7', '');
+  // Use the fresh marker rather than resumePrompt's deliberately replaced marker.
+  const fresh = prompt.replace(/agentrig-train-row:[a-f0-9-]+(?=\nReturn)/u, "agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099");
+  const p = await probe("ok", "subagent", undefined, undefined, true, fresh);
+  expect(p.result.action).toBe("deny");
+  expect(p.calls).not.toContain("POST");
+});
+
+const prePrPrompt = resumePrompt.replace('"pr":7', '"pr":null,"branch":"recovered-builder.v1"');
+const candidate = { number: 9, headRefName: "unrelated", headRefOid: "a".repeat(40), body: "unrelated" };
+it("#572 pre-PR resume continues only after fetched absence, on main", async () => {
+  const p = await probe("ok", "subagent", undefined, undefined, true, prePrPrompt, [candidate]);
   expect(p.result.action).toBe("continue");
-  expect(p.calls).toContain("issues/7/comments");
-  expect(p.calls).toContain("issues/comments/123");
-  expect(p.body).toContain(p.task);
+  expect(p.calls).toContain('"list","--state","open"');
+  expect(p.calls).not.toContain("POST");
+});
+it.each([
+  { ...candidate, headRefName: "recovered-builder.v1" },
+  { ...candidate, body: "agentrig-train-row:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
+])("#572 pre-PR resume denies existing branch or earlier marker: %j", async pr => {
+  const p = await probe("ok", "subagent", undefined, undefined, true, prePrPrompt, [pr]);
+  expect(p.result.action).toBe("deny");
+  expect(p.calls).not.toContain("POST");
+});
+it.each(["truncated", "malformed", "lookup-failure"])("#572 pre-PR resume cannot prove absence: %s", async mode => {
+  expect((await probe(mode, "subagent", undefined, undefined, true, prePrPrompt)).result.action).toBe("deny");
+});
+it.each(['', ',"branch":""', ',"branch":7', ',"branch":"bad branch"'])("#572 explicit null requires valid branch %s", async branch => {
+  const prompt = resumePrompt.replace('"pr":7', '"pr":null' + branch);
+  expect((await probe("no-pr", "subagent", undefined, undefined, true, prompt)).result.action).toBe("deny");
+});
+it("#572 pre-PR recovery cannot dispatch repair intent", async () => {
+  expect((await probe("no-pr", "subagent", undefined, undefined, true, prePrPrompt, [], "Repair round: 1/3")).result.action).toBe("deny");
 });
 
 // Keep body and every other identity field valid: the old body-only validator
@@ -379,4 +414,45 @@ it.each(identityHeadings)('JSON finding identity rejects source byte edits: %s',
 it('JSON identities do not normalize Unicode', async () => {
   const task = `${receipt}\nFinding identities: ${JSON.stringify([{heading:'café',url:sourceUrl}])}`;
   expect((await realisticProbe(task, verdictSource(['cafe\u0301']))).result.action).toBe('deny');
+});
+
+const recoveredPr = { number: 7, headRefName: "recovered-builder.v1", headRefOid: "a".repeat(40), body: "agentrig-train-row:00000000-0000-4000-8000-000000000001" };
+const lifecycleProbe = (steps: Array<{ prompt?: string; listing?: Record<string, unknown>[]; task?: string; sessionId?: string }>) =>
+  probe("ok", "subagent", undefined, undefined, true, prePrPrompt, [], undefined, undefined, steps);
+it("#572 C1 absence proof transitions to exact current-row PR and verified repair", async () => {
+  const p = await lifecycleProbe([{ listing: [] }, { listing: [recoveredPr] }, { task: repairTask }]);
+  expect(p.result.map((r: { action: string }) => r.action)).toEqual(["continue", "continue", "continue"]);
+  expect(p.body).toContain("Pre-edit comparison: PASS");
+  expect(p.body).toContain(repairTask);
+  expect(p.calls).toContain("issues/comments/456");
+  expect(p.calls).toContain("issues/comments/123");
+});
+it("#572 C1 current marker cannot replace initial absence proof", async () => {
+  expect((await lifecycleProbe([{ listing: [recoveredPr] }])).result[0].action).toBe("deny");
+});
+it.each([
+  [{ ...recoveredPr, body: "quoted " + recoveredPr.body }],
+  [{ ...recoveredPr, body: "agentrig-train-row:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }],
+  [{ ...recoveredPr, headRefName: "wrong-branch" }],
+  [recoveredPr, { ...recoveredPr, number: 8 }],
+])("#572 C1 transition refuses mismatched or ambiguous association %j", async listing => {
+  const p = await lifecycleProbe([{ listing: [] }, { listing, task: repairTask }]);
+  expect(p.result.map((r: { action: string }) => r.action)).toEqual(["continue", "deny"]);
+  expect(p.calls).not.toContain("POST");
+});
+it("#572 C1 absence proof is session-bound", async () => {
+  const p = await lifecycleProbe([{ listing: [] }, { sessionId: "other", prompt: prePrPrompt, listing: [recoveredPr] }]);
+  expect(p.result.map((r: { action: string }) => r.action)).toEqual(["continue", "deny"]);
+});
+it.each(["Row: {not-json}", 'Row: {"resume":false}'])("#572 A1 malformed host row invalidates prior pre-PR state: %s", async row => {
+  const prompt = prePrPrompt.replace(/^Row: .*$/mu, row);
+  const p = await lifecycleProbe([{ listing: [] }, { prompt, listing: [] }]);
+  expect(p.result.map((r: { action: string }) => r.action)).toEqual(["continue", "deny"]);
+  expect(p.calls).not.toContain("POST");
+});
+it("#572 A2 missing pr with branch is not explicit pre-PR recovery", async () => {
+  const prompt = prePrPrompt.replace('"pr":null,', '');
+  const p = await probe("no-pr", "subagent", undefined, undefined, true, prompt, []);
+  expect(p.result.action).toBe("deny");
+  expect(p.calls).not.toContain("POST");
 });
