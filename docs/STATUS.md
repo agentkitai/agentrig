@@ -1,3 +1,23 @@
+## Eviction follow-ups — #579 / #580 implementation awaiting independent review
+
+Current roadmap row: user-directed eviction follow-ups (#579 / #580); next remains
+ROADMAP §5 continuation, with no dependent work authorized here.
+
+Window-pressure eviction estimates the complete request once per pass and subtracts
+conservative serialized-character savings. The no-usage compaction fallback consumes
+the returned post-tool view estimate, avoiding an extra full serialization. UTF-8
+bytes still govern the size floor and event savings, not token accounting. Window
+mode always protects the newest assistant turn (even explicit zero); legacy age
+policy remains unchanged. Protected fresh results can keep pressure above the
+threshold, so normal compaction remains necessary for small windows.
+
+Regression coverage includes 400 large results, sub-floor candidates, Unicode and
+escaping, threshold/oldest-first stopping, and a fake-provider 8k-window no-usage
+loop that preserves 400 fresh results and includes system/schema contributions.
+Named fail-first/mutation and exact-head declared-check receipts travel in the PR.
+No completion marker before conductor review; no contract deviation. R19 LOW
+observations/wording follow-ups are advisory, not residual defects.
+
 ## Structured child results — implementation awaiting independent review
 
 Optional subagent `outputSchema` uses the existing headless output contract,
