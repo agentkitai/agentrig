@@ -9,6 +9,10 @@
     "./train-host": {
       "types": "./dist/train-host.d.ts",
       "import": "./dist/train-host.js"
+    },
+    "./progress": {
+      "types": "./dist/progress.d.ts",
+      "import": "./dist/progress.js"
     }
   },
   "scripts": {

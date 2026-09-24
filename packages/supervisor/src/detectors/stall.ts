@@ -7,6 +7,9 @@ import { parseTestCounts } from "../test-output.js";
 export interface StallOptions {
   /** Consecutive turns with no file change, varied tool input, new tool kind, or newly read path before it counts as a stall. */
   turns?: number;
+  /** Host-supplied regex sources exempting successful repeated commands.
+   * Defaults to none; workflow policy belongs to the host or its pack. */
+  progressPatterns?: readonly string[];
   /** Consecutive test runs reporting an identical pass count before it counts as a stall. */
   testRuns?: number;
 }
@@ -18,8 +21,8 @@ export interface StallOptions {
  * A new tool kind is exploration, and a tool input that differs from the previous call is varied
  * activity: `git status` → `pnpm test` → `git diff` is verification, not spinning. A failed result
  * withdraws that call's variation credit, so alternating two failing commands is still a stall.
- * Bash exit-code transitions (red→green or green→red) are new information, and successful staging,
- * commit, push, and PR commands are shipping progress even when their input repeats. A familiar read
+ * Bash exit-code transitions (red→green or green→red) are new information. Host-configured
+ * successful command patterns can count as progress even when input repeats. A familiar read
  * tool on an unfamiliar target is exploration too. `read_file`, `grep`, and `glob` therefore count
  * a path only once: walking through new files and
  * directories is orientation, while repeatedly reading or searching the same target can still
@@ -35,6 +38,7 @@ export interface StallOptions {
  */
 export function stallDetector(opts: StallOptions = {}): Detector {
   const turnLimit = opts.turns ?? 3;
+  const progressPatterns = (opts.progressPatterns ?? []).map(pattern => new RegExp(pattern));
   const runLimit = opts.testRuns ?? 3;
 
   const toolKinds = new Set<string>();
@@ -82,8 +86,8 @@ export function stallDetector(opts: StallOptions = {}): Detector {
     return match === null ? null : Number(match[1]);
   };
 
-  const isShippingCommand = (command: string): boolean =>
-    /(?:^|[;&|]\s*)(?:git\s+(?:add|commit|push)\b|gh\s+pr\s+(?:create|merge|ready|edit|comment)\b)/.test(command);
+  const isProgressCommand = (command: string): boolean =>
+    progressPatterns.some(pattern => pattern.test(command));
 
   return {
     id: "stall",
@@ -144,7 +148,7 @@ export function stallDetector(opts: StallOptions = {}): Detector {
               lastBashExitCode.set(pending.inputHash, exitCode);
               while (lastBashExitCode.size > 400) lastBashExitCode.delete(lastBashExitCode.keys().next().value!);
             }
-            if (event.ok && pending.command !== null && isShippingCommand(pending.command)) {
+            if (event.ok && pending.command !== null && isProgressCommand(pending.command)) {
               verificationProgressThisTurn = true;
               reportedQuietStall = false;
             }

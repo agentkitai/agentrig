@@ -169,6 +169,12 @@ describe("supervisorOptions", () => {
       ...over,
     });
 
+  it("supplies ship-pack progress policy to the generic stall detector", async () => {
+    const { shippingProgressPatterns } = await import("@agentkitai/agentrig-ship/progress");
+    expect(wiring().stall?.progressPatterns).toBe(shippingProgressPatterns);
+    expect(shippingProgressPatterns.length).toBeGreaterThan(0);
+  });
+
   it("leaves the contract watchlist alone when the flag is absent", () => {
     // Load-bearing: commander defaults `--drift-contract` to `undefined`, NOT `[]`, so an absent
     // flag leaves `DriftOptions.contract` unset and the detector's own default list applies.

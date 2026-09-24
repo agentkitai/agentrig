@@ -1,6 +1,7 @@
 ---
 name: topic
 description: Run one authorized roadmap band as a sequential release train - dogfood each row, review independently, repair to clean in a bounded converging loop, arbitrate deviations, land; halt only for a human.
+flags: ["fresh-session"]
 ---
 
 ## Resuming

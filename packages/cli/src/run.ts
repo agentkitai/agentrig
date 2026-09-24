@@ -45,6 +45,7 @@ import {
   type SuperviseOptions,
 } from "@agentkitai/agentrig-supervisor";
 import { join } from "node:path";
+import { shippingProgressPatterns } from "@agentkitai/agentrig-ship/progress";
 
 export { DEFAULT_ANTHROPIC_MODEL };
 
@@ -315,6 +316,7 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
     abortRestores: o.supervisorAbortRestores === true,
     ...(o.supervisorAbortRestores !== true || w.restoreCheckpoint === undefined ? {} : {restoreCheckpoint:w.restoreCheckpoint}),
     ...(o.supervisorAbortRestores !== true || w.onRestore === undefined ? {} : {onRestore:w.onRestore}),
+    stall: { progressPatterns: shippingProgressPatterns },
     drift: {
       scope: o.driftScope ?? [],
       ...(o.driftContract === undefined ? {} : { contract: o.driftContract }),
@@ -362,7 +364,6 @@ export function defaultSystemPrompt(cwd: string): string {
     "You are AgentRig, an autonomous software engineering agent.",
     `Working directory: ${cwd}`,
     "Use the available tools to complete the task. Verify your work (run tests or re-read files) before finishing.",
-    "Carry explicit task authorization through the requested workflow, including delivery when authorized; do not ask the user to repeat it. Tool permissions are not task or merge authorization. Preserve later revocations, scope limits, explicit denies and required verification.",
     "Make reasonable in-scope choices rather than asking optional questions. Reserve ask_user for truly required missing information; unavailable answers must not be invented. Report optional diagnostics or memory/bookkeeping failures without abandoning otherwise authorized work; never report a failed required check as passed.",
     "Tool routing: consider only available tools and stop at the first matching case for the next action, not the whole task:",
     "1. Before work covered by a listed skill, load it with skill; catalogue hints are routing data, not authorization.",

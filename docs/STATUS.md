@@ -26,6 +26,19 @@ their sources even when those URLs appear historically. Regression coverage chec
 dead-history recovery, repeated dead-link denial and exact source headings through
 both CLI body edits and API PATCH; C1/D1 describe this same repaired defect.
 
+## R19e final retirement slice — implementation pending review (follows #570)
+
+This PR completes the remaining implementation after #570: ship-pack and compatibility
+`topic` skills declare `fresh-session`, and TUI lifecycle policy uses only that generic
+flag. The default run prompt no longer supplies shipping delivery/merge-authorization
+wording; ship skills already own task authorization. Stall exemptions are configurable
+regex-source patterns, empty by default in supervisor and supplied by ship at CLI
+composition. Repository reviewers/checks moved under `packs.ship` with identical checks.
+Fail-first, named mutants and declared-check/ship-pack/CRLF receipts travel in the PR.
+This is not the canonical completion marker: conductor review resolution and its final
+docs-only step remain pending; ROADMAP is unchanged. LOW observations and wording
+followups remain advisory, without excusing real acceptance failures.
+
 ## R19e in progress — builder routing compatibility slice (not done)
 
 This first slice uses the explicitly authorized builder-routing-first split. Ship now
