@@ -399,3 +399,14 @@ least one verified necessary outside-row path; in-scope-only paths fail. Invalid
 unverifiable results consume a failed attempt: redispatch builder once carrying all
 previous notes, then halt on a second failure. Persist the counter across resume.
 These checks grant no permission, scope expansion, review waiver or merge authority.
+
+### Verify every typed blocker (#582)
+
+A blanket `verifiedBlocker` assertion is insufficient. The shared child-result contract
+requires environment citations matched to command/exit/output in the spawned child's own
+immutable session events; dependency issue/PR/row references checked against fresh API state;
+and ambiguity's inspected conflicting paths/sections plus question routed to the arbiter,
+not a blocker halt. The pack helper checks conductor-owned observations, not child-supplied
+verification booleans. Missing or unverifiable evidence is a failed attempt under the existing
+one-retry rule. Incomplete execution is not an environment blocker. See shared child-results
+in the dogfood/ship/topic skills for exact citation and observation shapes.

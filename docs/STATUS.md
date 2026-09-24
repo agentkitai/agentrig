@@ -1,3 +1,19 @@
+## Verify every typed builder blocker — #582 implementation awaiting independent review
+
+Current roadmap row: user-directed #582; next remains ROADMAP §5 continuation.
+No early ROADMAP completion marker or dependent work.
+
+The pack now rejects blanket non-scope verification: environment matches a cited nonzero
+command/exit/output against the spawned child's observed immutable session event; dependency
+matches a named repository issue/PR/row to fresh unmerged API evidence; ambiguity requires
+inspected conflicting sources and a question and returns arbiter routing, never blocked.
+Missing or malformed proof uses the existing one-retry rule. Compact JSON citations remain
+inside the existing summary/paths envelope. Observations are collected by the conductor,
+never trusted from the child; necessity/conflict remains an independent semantic judgment.
+Rows require an inspected API-linked open issue; absent linkage is unverifiable. No core or
+train host workflow changes. R19 LOW observations and wording followups remain advisories,
+not residual issues. Fail-first, named mutants and declared receipts travel in the PR.
+
 ## Eviction follow-ups — #579 / #580 implementation awaiting independent review
 
 Current roadmap row: user-directed eviction follow-ups (#579 / #580); next remains

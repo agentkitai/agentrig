@@ -10,8 +10,8 @@ it("accepts complete independently observed PR and verified scope blocker", () =
   expect(assessChildResult({ ...context, result: pr })).toMatchObject({ action: "pr", result: pr });
   expect(assessChildResult({ ...context, result: blocked })).toMatchObject({ action: "blocked", result: blocked });
 });
-it.each(["environment", "dependency", "ambiguity"])("accepts verified %s blockers", kind => {
-  expect(assessChildResult({ ...context, result: { status: "blocked", kind, evidence: { summary: "independently confirmed blocker", paths: [] } } })).toMatchObject({ action: "blocked" });
+it.each(["environment", "dependency", "ambiguity"])("rejects blanket verification for %s blockers", kind => {
+  expect(assessChildResult({ ...context, result: { status: "blocked", kind, evidence: { summary: "independently confirmed blocker", paths: [] } } })).toMatchObject({ action: "retry" });
 });
 it.each([{ status: "pr", pr: 7 }, { status: "blocked", kind: "scope" }, { status: "blocked", kind: "environment", evidence: { summary: "", paths: [] } }, { ...pr, extra: true }, "PR #7"])("rejects incomplete or free-text result %j", result => {
   expect(ChildResult.safeParse(result).success).toBe(false);
@@ -63,4 +63,47 @@ it("keeps the final train receipt distinct from intermediate builder handoffs", 
   expect(shipTrainStages.receipt.parse({ pr: 7 })).toEqual({ pr: 7 });
   expect(() => shipTrainStages.receipt.parse(pr)).toThrow();
   expect(() => shipTrainStages.receipt.parse(blocked)).toThrow();
+});
+
+const claim = (kind: string, summary: string) => ({ status: "blocked", kind, evidence: { summary, paths: [] } });
+const environment = { sessionId: "child-582", seq: 12, command: "pnpm build", exitCode: 1, output: "compiler missing" };
+const event = { type: "tool.result", sessionId: "child-582", seq: 12, display: "compiler missing", commandOutcome: { command: "pnpm build", exitCode: 1 } };
+const environmentSummary = JSON.stringify(environment);
+const dependency = { repository: "agentkitai/agentrig", number: 600, kind: "pr" as const };
+const dependencySummary = JSON.stringify(dependency);
+const api = { repository: "agentkitai/agentrig", number: 600, kind: "pr", state: "open", merged_at: null };
+const ambiguity = { sources: ["docs/PLAN.md#2.6", "docs/SHIPPING-WORKFLOW.md#typed"], question: "Which handoff contract takes precedence?" };
+it("rejects the exact self-contradicting environment example from #582", () => {
+  expect(assessChildResult({ ...context, result: claim("environment", "This builder run did not complete implementation. This is an incomplete execution, not a verified repository/environment blocker ...") }).action).toBe("retry");
+});
+it("matches environment citation against the child's own observed session event", () => {
+  const input = { ...context, result: claim("environment", environmentSummary), childSessionId: "child-582", environment, sessionEvents: [event] };
+  expect(assessChildResult(input).action).toBe("blocked");
+  for (const delta of [{ sessionEvents: [] }, { childSessionId: "other" }, { sessionEvents: [{ ...event, sessionId: "other" }] }, { sessionEvents: [{ ...event, seq: 13 }] }, { environment: { ...environment, exitCode: 0 } }, { sessionEvents: [{ ...event, display: "success" }] }, { sessionEvents: [{ ...event, commandOutcome: { command: "other", exitCode: 1 } }] }, { sessionEvents: [{ ...event, commandOutcome: { command: "pnpm build", exitCode: 0 } }] }, { result: claim("environment", "unfinished execution") }])
+    expect(assessChildResult({ ...input, ...delta }).action).toBe("retry");
+});
+it("checks named dependency against independently fetched repository API state", () => {
+  const input = { ...context, result: claim("dependency", dependencySummary), dependency, dependencyApi: api };
+  expect(assessChildResult(input).action).toBe("blocked");
+  for (const delta of [{ dependencyApi: undefined }, { dependencyApi: { ...api, merged_at: "2026-09-24" } }, { dependencyApi: { ...api, number: 601 } }, { dependencyApi: { ...api, repository: "other/repo" } }, { result: claim("dependency", "waiting") }])
+    expect(assessChildResult({ ...input, ...delta }).action).toBe("retry");
+  for (const kind of ["issue", "row"] as const) {
+    const dep = { ...dependency, kind, ...(kind === "row" ? { row: "R19f" } : {}) };
+    expect(assessChildResult({ ...input, dependency: dep, dependencyApi: { ...api, kind: "issue", ...(kind === "row" ? { row: "R19f" } : {}) }, result: claim("dependency", JSON.stringify(dep)) }).action).toBe("blocked");
+    expect(assessChildResult({ ...input, dependency: dep, result: claim("dependency", JSON.stringify(dep)), dependencyApi: { ...api, state: "closed" } }).action).toBe("retry");
+  }
+});
+it("routes verified conflicting sources and question to arbiter, never blocker halt", () => {
+  const input = { ...context, result: claim("ambiguity", JSON.stringify(ambiguity)), ambiguity, verifiedSources: ambiguity.sources };
+  expect(assessChildResult(input).action).toBe("arbiter");
+  expect(assessChildResult({ ...input, attempt: 2 }).action).toBe("arbiter");
+  for (const delta of [{ ambiguity: undefined }, { ambiguity: { ...ambiguity, question: "" } }, { verifiedSources: [] }, { ambiguity: { ...ambiguity, sources: [ambiguity.sources[0], ambiguity.sources[0]] } }, { result: claim("ambiguity", "unclear") }])
+    expect(assessChildResult({ ...input, ...delta }).action).toBe("retry");
+});
+it.each(["environment", "dependency", "ambiguity"])("unverifiable %s preserves the one-retry rule", kind => {
+  const first = assessChildResult({ ...context, result: claim(kind, "unfinished") });
+  expect(first.action).toBe("retry");
+  const second = assessChildResult({ ...context, result: claim(kind, "unfinished"), attempt: 2, previousNotes: first.notes });
+  expect(second.action).toBe("halt");
+  expect(second.notes.slice(0, first.notes.length)).toEqual(first.notes);
 });
