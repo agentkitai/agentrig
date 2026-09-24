@@ -8,6 +8,12 @@ check and LF/CRLF ship-pack receipts travel in the PR. No R19 slice is marked do
 conductor finalization follows independent review. R19 LOW observations and wording
 followups remain advisory, not residual issues.
 
+Repair round 1 for #573 scopes URL fetching to appended references while retaining
+whole-body prefix immutability. Newly appended findings refetch and exactly validate
+their sources even when those URLs appear historically. Regression coverage checks
+dead-history recovery, repeated dead-link denial and exact source headings through
+both CLI body edits and API PATCH; C1/D1 describe this same repaired defect.
+
 ## R19e in progress — builder routing compatibility slice (not done)
 
 This first slice uses the explicitly authorized builder-routing-first split. Ship now

@@ -130,7 +130,6 @@ export function createLedgerHook({ gh = "gh", budgetMs = 25_000 } = {}) {
       // Protect the entire body: it is the review ledger, including historical
       // counters, coverage and check receipts outside a named Ledger section.
       if (!edit.body.startsWith(pr.body)) throw new Error("PR body ledger is append-only: retain all existing bytes and append corrections/resolutions");
-      const urls = new Set(edit.body.match(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+#(?:issuecomment-|discussion_r|pullrequestreview-)[^\s<>()[\]"'`]+/gu) ?? []);
       const appended = edit.body.slice(pr.body.length);
       const lines = operativeLines(appended);
       const identityLine = line => line.startsWith("Finding identities: ");
@@ -138,6 +137,10 @@ export function createLedgerHook({ gh = "gh", budgetMs = 25_000 } = {}) {
         ...lines.filter(identityLine).flatMap(line => assignedFindings([line])),
         ...assignedFindings(lines.filter(line => !identityLine(line))),
       ];
+      // Historical evidence may disappear; refetch only appended references.
+      // Reused finding sources remain new references, never subtract historic URLs.
+      const urls = new Set(appended.match(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+#(?:issuecomment-|discussion_r|pullrequestreview-)[^\s<>()[\]"'`]+/gu) ?? []);
+      for (const finding of findings) for (const url of finding.urls) urls.add(url);
       const sources = new Map();
       for (const url of urls) {
         const parsed = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)#(issuecomment-|discussion_r|pullrequestreview-)(\d+)$/u.exec(url);

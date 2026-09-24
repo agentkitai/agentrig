@@ -17,6 +17,7 @@ async function probe(body: string, form = 'body', mode = 'ok', original = old, s
 const fs=require('fs');const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(join(root,'calls'))},JSON.stringify(a)+'\\n');
 if(${JSON.stringify(mode)}==='timeout'){setTimeout(()=>{},10000);return;}
 if(a[0]==='pr') console.log(JSON.stringify({number:7,url:'https://github.com/o/r/pull/7',body:${JSON.stringify(original)}}));
+else if(a[1]?.endsWith('/999')){process.exit(1);}
 else if(${JSON.stringify(mode)}==='404'){process.exit(1);}
 else console.log(JSON.stringify({id:456,html_url:${JSON.stringify(mode === 'wrong-url' ? url.replace('/7#','/8#') : url)},body:${JSON.stringify(source)}}));
 `); await chmod(gh, 0o755);
@@ -101,4 +102,28 @@ it.each(['body', 'patch'])('denies changing the literal round-1 read-back while 
 });
 it.each(['body', 'patch'])('allows appending the same literal receipt round again via %s', async form => {
   expect((await probe(roundOne + roundOne, form, 'ok', roundOne)).result.action).toBe('continue');
+});
+
+const deadUrl = url.replace('456', '999');
+it.each(['body', 'patch'])('recovers by valid append without refetching dead protected history via %s', async form => {
+  const history = roundOne + `Historical evidence ${deadUrl}\n`;
+  const p = await probe(history + `Resolution evidence ${url}\n`, form, 'ok', history);
+  expect(p.result.action).toBe('continue');
+  expect(p.calls).toContain('issues/comments/456');
+  expect(p.calls).not.toContain('issues/comments/999');
+  expect((await probe(history.replace('Repair round: 1/3', 'Repair round: 2/3') + url, form, 'ok', history)).result.action).toBe('deny');
+});
+it.each(['body', 'patch'])('denies newly appended dead links including repeated historic links via %s', async form => {
+  for (const history of [old, old + deadUrl + '\n']) {
+    expect((await probe(history + deadUrl, form, 'ok', history)).result.action).toBe('deny');
+  }
+});
+it.each(['body', 'patch'])('refetches repeated finding sources and validates exact new headings via %s', async form => {
+  const history = old + `Historical evidence ${url}\n`;
+  const addition = (heading: string) => `Finding identities: ${JSON.stringify([{heading, url}])}\n`;
+  const p = await probe(history + addition(sourceHeading), form, 'ok', history, structuredSource);
+  expect(p.result.action).toBe('continue');
+  expect(p.calls).toContain('issues/comments/456');
+  expect((await probe(history + addition(sourceHeading.trim()), form, 'ok', history, structuredSource)).result.action).toBe('deny');
+  expect((await probe(history + addition(sourceHeading), form, '404', history, structuredSource)).result.action).toBe('deny');
 });
