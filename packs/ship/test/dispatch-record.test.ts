@@ -4,9 +4,10 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+describe.each(["pre_tool", "pre_spawn"])("dispatch via %s", point => {
 async function probe(mode: string, name = "subagent", label?: string, budgetMs?: number, activation = false, prompt = hostPrompt, listing?: Record<string, unknown>[], repairTask?: string, sourceBody?: string, steps?: Array<{ prompt?: string; listing?: Record<string, unknown>[]; task?: string; sessionId?: string }>) {
   const root = await mkdtemp(join(tmpdir(), "dispatch-")); roots.push(root);
   await mkdir(join(root, "bin"));
@@ -45,7 +46,7 @@ import { activate } from ${JSON.stringify(pathToFileURL(resolve(".agentrig/exten
 import { writeFileSync } from "node:fs";
 const hooks = new Map();
 activate({ hooks: { on(point, handler, options) { hooks.set(point, {handler, options}); } } });
-if(hooks.get("pre_tool").options.timeoutMs !== 30000) throw new Error("hook budget changed");
+if(hooks.get("pre_spawn").options.timeoutMs !== 30000) throw new Error("hook budget changed");
 await hooks.get("user_prompt").handler({sessionId:"parent-123", prompt:${JSON.stringify(prompt)}});
 await hooks.get("user_prompt").handler({sessionId:"other", prompt:"unrelated prompt"});
 await hooks.get("user_prompt").handler({sessionId:"parent-123", prompt:"continue repair"});
@@ -54,16 +55,24 @@ for (const step of ${JSON.stringify(steps ?? [{}])}) {
   const sessionId = step.sessionId ?? "parent-123";
   if (step.prompt !== undefined) await hooks.get("user_prompt").handler({ sessionId, prompt: step.prompt });
   if (step.listing !== undefined) writeFileSync(${JSON.stringify(join(root, "listing"))}, JSON.stringify(step.listing));
-  results.push(await hooks.get("pre_tool").handler({cwd:${JSON.stringify(root)},sessionId,tool:{name:${JSON.stringify(name)},input:{task:step.task ?? ${JSON.stringify(task)}}}}));
+  const task = step.task ?? ${JSON.stringify(task)};
+  const context = {cwd:${JSON.stringify(root)},sessionId,tool:{name:${JSON.stringify(name)},input:{task,label:step.label ?? ""}}};
+  const before = await hooks.get("pre_tool").handler(context);
+  if (before.action !== "continue") throw new Error("unexpected early refusal");
+  results.push(await hooks.get("pre_spawn").handler({...context, sessionId:"not-authoritative", spawn:{parent:sessionId,task}}));
+  const after = await hooks.get("pre_tool").handler(context);
+  if (after.action !== "continue") throw new Error("unexpected fallback refusal");
 }
 console.log(JSON.stringify(${steps === undefined} ? results[0] : results));`;
     const run = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", runner], { env: { ...process.env, PATH: join(root, "bin") + ":" + process.env.PATH }, timeout: 35000 });
     result = JSON.parse(run.stdout);
-  } else result = await handler({ cwd: root, sessionId: "parent-123", tool: { name, input: { task, ...(label ? { label } : {}) } } });
+  } else result = await handler(point === "pre_spawn" && name === "subagent" && !label
+    ? { cwd: root, sessionId: "not-authoritative", spawn: { task, parent: "parent-123" }, tool: { name: "subagent", input: { task: "not authoritative", label: "ignore me" } } }
+    : { cwd: root, sessionId: "parent-123", tool: { name, input: { task, ...(label ? { label } : {}) } } });
   return { result, task, body: await readFile(join(root, "body"), "utf8").catch(() => ""), calls: await readFile(join(root, "calls"), "utf8").catch(() => "") };
 }
 it("no PR leaves initial builder untouched", async () => { const p = await probe("no-pr"); expect(p.result.action).toBe("continue"); expect(p.calls).not.toContain("POST"); });
-it("posts exact task and reads back via API before continuing", async () => { const p = await probe("ok"); expect(p.result.action).toBe("continue"); expect(p.body).toContain(p.task); expect(p.body).toContain('parent-123'); expect(p.body).toContain('a'.repeat(40)); expect(p.body).toMatch(/dispatch time: \d{4}-/); expect(p.calls).toContain('issues/comments/123'); });
+it("posts exact task and reads back via API before continuing", async () => { const p = await probe("ok"); expect(p.result.action).toBe("continue"); expect(p.body).toContain(p.task); expect(p.body).toContain('parent-123'); expect(p.body).toContain('a'.repeat(40)); expect(p.body).toMatch(/dispatch time: \d{4}-/); expect(p.calls).toContain('issues/comments/123'); expect(p.calls.match(/"POST"/g)).toHaveLength(1); });
 it.each(["post-failure", "mismatch", "lookup-failure", "rate-limit", "read-failure"])("denies %s", async mode => { const p = await probe(mode); expect(p.result.action).toBe("deny"); expect(p.result.reason).toContain("dispatch record"); });
 it("non-subagent does not query GitHub", async () => { const p = await probe("ok", "bash"); expect(p.result.action).toBe("continue"); expect(p.calls).toBe(""); });
 it("rejects lossy labels after PR exists", async () => { expect((await probe("ok", "subagent", "short label")).result.action).toBe("deny"); });
@@ -87,6 +96,13 @@ it("activate binds literal train host prompt on main despite a search-index gap"
   expect(p.calls).toContain("issues/7/comments");
   expect(p.calls).toContain("issues/comments/123");
   expect(p.body).toContain(p.task);
+  expect(p.body).toContain("parent session id: parent-123");
+  expect(p.calls.match(/"POST"/g)).toHaveLength(1);
+});
+it("activated pre_spawn records once per distinct spawn even for identical tasks", async () => {
+  const p = await probe("ok", "subagent", undefined, undefined, true, hostPrompt, undefined, undefined, undefined, [{}, {}]);
+  expect(p.result).toEqual([{ action: "continue" }, { action: "continue" }]);
+  expect(p.calls.match(/"POST"/g)).toHaveLength(2);
   expect(p.body).toContain("parent session id: parent-123");
 });
 it("activate permits the confirmed no-PR initial builder", async () => {
@@ -455,4 +471,6 @@ it("#572 A2 missing pr with branch is not explicit pre-PR recovery", async () =>
   const p = await probe("no-pr", "subagent", undefined, undefined, true, prompt, []);
   expect(p.result.action).toBe("deny");
   expect(p.calls).not.toContain("POST");
+});
+
 });

@@ -21,10 +21,22 @@ function repairIntent(task) {
 
 // Framework hook exceptions/timeouts fail open. Own all failures and finish five
 // seconds before that deadline. Never retry a write whose outcome is ambiguous.
-export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false, prePrBranchForSession = () => undefined } = {}) {
+export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, spawnEnabled = false, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false, prePrBranchForSession = () => undefined } = {}) {
   const absenceProofs = new Map();
   return async context => {
-    if (context.tool?.name !== "subagent") return createLedgerHook({ gh, budgetMs })(context);
+    if (context.spawn) {
+      // The resolved envelope, not tool spelling/input or ambient session metadata,
+      // is the authority for dispatch. Keep the legacy comparison/record body intact.
+      context = { ...context, sessionId: context.spawn.parent,
+        tool: { name: "subagent", input: { task: context.spawn.task } } };
+    } else {
+      if (context.tool?.name !== "subagent") return createLedgerHook({ gh, budgetMs })(context);
+      // Activated packs gate at pre_spawn, which runs after pre_tool. Do not post
+      // here either before or after that gate: a session/task cache could wrongly
+      // suppress a distinct repeated or concurrent spawn. Retain the legacy label
+      // refusal (labels are not part of the authoritative spawn envelope).
+      if (spawnEnabled && !context.tool.input?.label) return { action: "continue" };
+    }
     const deadline = Date.now() + budgetMs;
     const run = (executable, args, input) => new Promise((resolve, reject) => {
       const remaining = deadline - Date.now();
@@ -185,7 +197,7 @@ export function activate(ctx) {
     if (matches.length === 1) {
       rows.set(context.sessionId, matches[0][1]);
       // Read only the host's adjacent single-line JSON row. Invalid explicit pins
-      // are remembered as invalid so pre_tool denies instead of failing open.
+      // are remembered as invalid so the dispatch gate denies instead of failing open.
       try {
         const preceding = context.prompt.slice(0, matches[0].index).trimEnd().split(/\r?\n/u).at(-1);
         if (!preceding?.startsWith("Row: ")) throw new Error("missing host Row");
@@ -203,5 +215,7 @@ export function activate(ctx) {
     }
     return { action: "continue" };
   });
-  ctx.hooks.on("pre_tool", createDispatchHook({ rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id), isResumeForSession: id => resumes.get(id), prePrBranchForSession: id => prePrBranches.get(id) }), { timeoutMs: 30_000 });
+  const dispatch = createDispatchHook({ spawnEnabled: true, rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id), isResumeForSession: id => resumes.get(id), prePrBranchForSession: id => prePrBranches.get(id) });
+  ctx.hooks.on("pre_spawn", dispatch, { timeoutMs: 30_000 });
+  ctx.hooks.on("pre_tool", dispatch, { timeoutMs: 30_000 });
 }
