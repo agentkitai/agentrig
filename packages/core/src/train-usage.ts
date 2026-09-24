@@ -1,14 +1,7 @@
 import { SpendRecordSchema, type SpendRecord } from "./spend-ledger.js";
 
-export interface UsageTotals {
-  calls: number; input: number; output: number; cacheRead: number; cacheWrite: number;
-  /** Priced subset only; null means no priced calls, never free usage. */
-  estimatedMicros: number | null; unpricedCalls: number; incompleteCalls: number;
-}
-export interface RowUsage {
-  row: string; totals: UsageTotals; coverageWarnings: string[];
-  sessions: Array<{ session: string; builderProvider: string | null; totals: UsageTotals; models: Array<UsageTotals & { provider: string; model: string }> }>;
-}
+import type { UsageTotals, RowUsage } from "@agentkitai/agentrig-train";
+export type { UsageTotals, RowUsage } from "@agentkitai/agentrig-train";
 const empty = (): UsageTotals => ({ calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, estimatedMicros: null, unpricedCalls: 0, incompleteCalls: 0 });
 function add(target: UsageTotals, source: UsageTotals): void {
   for (const key of ["calls", "input", "output", "cacheRead", "cacheWrite", "unpricedCalls", "incompleteCalls"] as const) target[key] += source[key];

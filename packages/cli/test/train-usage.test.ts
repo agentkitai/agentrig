@@ -1,9 +1,11 @@
 import { mkdtemp, mkdir, realpath, readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { expect, it, vi } from "vitest";
-import { SpendLedger, SessionStore, trainStatus, trainUsage } from "@agentkitai/agentrig-core";
+import { describe, expect, it, vi } from "vitest";
+import { SpendLedger, SessionStore } from "@agentkitai/agentrig-core";
 import { usageCommand } from "../src/usage.ts";
+import { trainPaths } from "../../../test/train-paths.ts";
+describe.each(trainPaths)("$name usage", ({ trainStatus, trainUsage }) => {
 it("queue status and usage --row read two rows and nested spawn logs without mutating sources", async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "train-usage-")));
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -96,4 +98,6 @@ it("rejects duplicate row identities across folders and checkouts", async () => 
     await expect(trainUsage(root)).rejects.toThrow("duplicate row identity: same");
     expect(await trainStatus(root)).toMatchObject({ usage: null, usageError: expect.stringContaining("duplicate row identity: same") });
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 });

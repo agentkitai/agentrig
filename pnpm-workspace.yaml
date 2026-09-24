@@ -1,5 +1,6 @@
 packages:
   - "packages/*"
+  - "packs/ship"
 
 # pnpm blocks dependency lifecycle scripts by default; esbuild (vitest's transformer) needs its postinstall.
 allowBuilds:

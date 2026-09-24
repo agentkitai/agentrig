@@ -280,3 +280,17 @@ This reports observed session selection, not a guess from the row override, and 
 covers nested children and non-builder sessions. It is `null` for legacy/missing
 selection evidence. Per-model usage remains authoritative for a session that switched
 models; this field is not a claim that every call used one entry. Retain session logs.
+
+## Package ownership during R19d migration
+
+R19d's first slice moves queue state/execution to `@agentkitai/agentrig-train` and
+supplies today's pre-check, prompt, `{pr}` receipt and landing verification from
+`@agentkitai/agentrig-ship/train`. The pack also supplies #538's bounded GitHub
+rate-limit retry. Core's exported train API and `agentrig train <dir>` remain
+compatibility entrypoints; operators must not switch commands or rewrite train
+directories. The running host can continue using its existing core imports.
+
+R19d remains partial: CLI composition switching, core export removal and movement
+of train-specific child-env/project-check helpers are later slices. Accounting and
+message decoding are injected host adapters for now. STOP/PAUSE, row IDs, queue
+folders, logs/halt records and landing evidence retain their existing semantics.

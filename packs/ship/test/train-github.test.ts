@@ -1,9 +1,20 @@
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, expect, it, vi } from "vitest";
-import { runTrain, type TrainCommand } from "@agentkitai/agentrig-core";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type TrainCommand } from "@agentkitai/agentrig-core";
 
+import { trainPaths } from "../../../test/train-paths.ts";
+import { trainGithubCommand as shipCommand } from "@agentkitai/agentrig-ship/train-github";
+import { trainGithubCommand as cliCommand } from "../../../packages/cli/src/train-github.js";
+describe.each(trainPaths)("$name GitHub policy", ({ name, runTrain }) => {
+const trainGithubCommand = name === "core compatibility" ? cliCommand : shipCommand;
+it("does not multiply rate-limit budgets through compatibility decoration", () => {
+  const command: TrainCommand = async () => ({ code: 0, stdout: "", stderr: "" });
+  const once = trainGithubCommand(command);
+  expect(shipCommand(once)).toBe(once);
+  expect(cliCommand(once)).toBe(once);
+});
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.map(root => rm(root, { recursive: true, force: true }))); roots.length = 0; });
 const row = { task: "Ship fixture", authorization: "I authorize this fixture task and its merge", scope: ["src"], environment: { checkout: resolve(tmpdir(), "fixture-checkout"), repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"] } };
@@ -34,7 +45,7 @@ async function fixture(count = 1) {
   return { root, command, calls };
 }
 
-import { trainGithubCommand } from "../src/train-github.js";
+
 for (const phase of ["pr", "run"]) it(`RL1 retries fake gh ${phase} once then completes row`, async () => {
   const f = await fixture(); let failures = 0;
   const sleep = vi.fn(async () => undefined);
@@ -140,4 +151,6 @@ for (const phase of ["pr", "run"]) for (const unrelatedReset of [101, 3400]) it(
   expect(sleep).toHaveBeenCalledExactlyOnceWith(30000);
   expect(probes).toBe(1);
   expect(attempts).toBe(2);
+});
+
 });
