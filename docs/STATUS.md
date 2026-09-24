@@ -7,7 +7,11 @@ as the replacement. Ship instructions prefer role bindings, while old conductor
 explicit-provider calls and their routing marker remain supported. CLI composes
 those roles through R19a's authoritative role path; train schema, validation and
 usage fields remain readable for existing conductors. Generated ship skill output
-is synchronized as a supported compatibility entrypoint.
+is synchronized as a supported compatibility entrypoint. Repair round 1 preserves child
+`read_output` recovery, allocates collision-free role names, and diagnoses explicit-provider
+fallback at the 64-tool/32-role bounds without truncation or weaker role validation. That
+fallback deliberately has provider routing rather than synthetic role provenance. These
+F1–F4 repairs await independent verification; this is not a review-resolution claim.
 
 Remaining R19e acceptance: generic fresh-session skill flag replacing TUI's topic
 name case; move the default merge/delivery prompt clause into a pack contribution;

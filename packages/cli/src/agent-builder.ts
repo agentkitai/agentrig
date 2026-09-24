@@ -782,16 +782,13 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const observeSession = (session: import("@agentkitai/agentrig-core").Session) => telemetry?.observe(session);
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(catalogue));
-  const builderCompatibility = shipBuilderCompatibility(opts.builderProvider, tools.map(tool => tool.name));
+  const discoveredRoles = opts.subagents !== true || opts.trustedProjectRoot === undefined ? [] : await discoverAgentRoles(opts.trustedProjectRoot,
+    error => extras.onHookError?.(error.message));
+  // Core injects read_output per session, after this initial tool catalogue.
+  const builderCompatibility = shipBuilderCompatibility(opts.builderProvider,
+    [...tools.map(tool => tool.name), "read_output"], discoveredRoles.map(role => role.name));
   if (builderCompatibility.warning) (extras.onNotice ?? console.error)(builderCompatibility.warning);
   if (opts.subagents === true) {
-    const discoveredRoles = opts.trustedProjectRoot === undefined ? [] : await discoverAgentRoles(opts.trustedProjectRoot,
-      error => extras.onHookError?.(error.message));
-    for (const role of builderCompatibility.roles) {
-      if (discoveredRoles.some(existing => existing.name === role.name)) {
-        throw new Error(`legacy builder role name collision: ${role.name}; replace --builder-provider with a provider-bound role`);
-      }
-    }
     const agentRoles = [...discoveredRoles, ...builderCompatibility.roles];
     tools.push(
       subagentTool(

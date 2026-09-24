@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import * as core from "@agentkitai/agentrig-core";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { buildProgram } from "../src/program.js";
 import { cliEnv } from "./cli-env.js";
@@ -73,16 +74,47 @@ it.each([undefined, "CUSTOM SYSTEM: keep exactly this base"])("real request appe
   } finally { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); }
 });
 
-it.each(["legacy-ship-builder", "legacy-ship-fixer"])("legacy CLI entry routes %s through an authoritative role binding", async agent => {
+it.each([
+  { agent: "legacy-ship-builder", count: 0, wide: false },
+  { agent: "legacy-ship-fixer", count: 0, wide: false },
+  { agent: "legacy-ship-builder-1", count: 2, wide: false },
+  { agent: "legacy-ship-builder", count: 30, wide: false },
+  { agent: undefined, count: 31, wide: false },
+  { agent: undefined, count: 32, wide: false },
+  { agent: undefined, count: 0, wide: true },
+])("legacy CLI preserves runtime capabilities $agent/$count/$wide", async ({ agent, count, wide }) => {
   const { cwd, home, logs } = await fixture();
-  const requests: Array<{ model: string; messages: Array<{ role: string; content: string }> }> = [];
+  await writeFile(join(cwd, "large.txt"), "x".repeat(40000) + "RECOVERY_CANARY");
+  if (count) {
+    await mkdir(join(cwd, ".agentrig/agents"));
+    for (let i = 0; i < count; i++) {
+      const name = count === 2 && i === 0 ? "legacy-ship-builder" : count === 2 && i === 1 ? "legacy-ship-fixer" : `role-${i}`;
+      await writeFile(join(cwd, `.agentrig/agents/${name}.md`), '---\ntools: ["read_file"]\n---\nPROJECT ROLE CANARY');
+    }
+  }
+  if (wide) {
+    const builtins = core.builtinTools;
+    vi.spyOn(core, "builtinTools").mockImplementation(options => {
+      const tools = builtins(options);
+      return [...tools, ...Array.from({ length: 65 }, (_, i) => ({ ...tools[0]!, name: `extra_${i}` }))];
+    });
+  }
+  const requests: Array<{ model: string; messages: Array<{ role: string; content: string }>; tools: Array<{ function: { name: string } }> }> = [];
   const server = createServer(async (req, res) => {
     let body = ""; for await (const chunk of req) body += chunk;
     const request = JSON.parse(body); requests.push(request);
-    const delta = requests.length === 1 ? { tool_calls: [{ index: 0, id: "builder-call", type: "function",
-      function: { name: "subagent", arguments: JSON.stringify({ task: "Return done", agent }) } }] } : { content: "done" };
+    const call = (name: string, args: unknown) => ({ tool_calls: [{ index: 0, id: `call-${requests.length}`, type: "function",
+      function: { name, arguments: JSON.stringify(args) } }] });
+    let delta: object = { content: "done" };
+    if (requests.length === 1) delta = call("subagent", { task: "Read large.txt and recover overflow", ...(agent ? { agent } : { provider: "sol" }) });
+    if (requests.length === 2) delta = call("read_file", { path: "large.txt" });
+    if (requests.length === 3) {
+      const text = request.messages.map((m: { content: unknown }) => typeof m.content === "string" ? m.content : "").join("\n");
+      const handle = /read_output (\{"seq":\d+,"from":\d+,"to":\d+\})/.exec(text);
+      delta = call("read_output", handle ? JSON.parse(handle[1]!) : { seq: 0, from: 0, to: 1 });
+    }
     res.setHeader("content-type", "text/event-stream");
-    res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: requests.length === 1 ? "tool_calls" : "stop" }] })}\n\ndata: [DONE]\n\n`);
+    res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: "tool_calls" in delta ? "tool_calls" : "stop" }] })}\n\ndata: [DONE]\n\n`);
   });
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   try {
@@ -95,12 +127,18 @@ it.each(["legacy-ship-builder", "legacy-ship-fixer"])("legacy CLI entry routes %
       "--provider", "openai", "--model", "conductor-model", "--base-url", baseUrl,
       "--max-turns", "2", "--yolo", "--builder-provider", "sol"], { from: "user" });
     expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(0);
-    expect(requests.map(request => request.model)).toEqual(["conductor-model", "builder-model", "conductor-model"]);
+    expect(requests.map(request => request.model)).toEqual(["conductor-model", "builder-model", "builder-model", "builder-model", "conductor-model"]);
     const store = new SessionStore({ root: logs });
     const events = (await Promise.all((await store.list()).map(session => store.readAll(session.id)))).flat();
-    expect(events).toContainEqual(expect.objectContaining({ type: "subagent.spawn", role: expect.objectContaining({ name: agent, provider: "sol" }) }));
-    expect(requests[1]!.messages.filter(message => message.role === "system").map(message => message.content).join("\n"))
-      .toContain(`Act as the ship ${agent.endsWith("fixer") ? "fixer" : "builder"}`);
+    if (agent) expect(events).toContainEqual(expect.objectContaining({ type: "subagent.spawn", role: expect.objectContaining({ name: agent, provider: "sol" }) }));
+    else expect(events.find(event => event.type === "subagent.spawn")).not.toHaveProperty("role");
+    const childTools = requests[1]!.tools.map(tool => tool.function.name);
+    expect(childTools).toContain("read_output");
+    expect(childTools).toEqual(expect.arrayContaining(requests[0]!.tools.map(tool => tool.function.name).filter(name => name !== "subagent")));
+    expect(requests[3]!.messages.filter(message => message.role === "tool").map(message => message.content).join("\n")).toContain("RECOVERY_CANARY");
+    if (!agent) expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("explicit-provider fallback");
+    if (agent) expect(requests[1]!.messages.filter(message => message.role === "system").map(message => message.content).join("\n"))
+      .toContain(`Act as the ship ${agent.includes("fixer") ? "fixer" : "builder"}`);
     expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toMatch(/deprecated.*provider-bound role/);
   } finally { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); }
 });
