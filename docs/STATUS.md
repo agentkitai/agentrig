@@ -9,6 +9,20 @@ absence guards and ordinary unpinned-resume denials remain unchanged; host row
 binding is unchanged. Fail-first, named mutants and check receipts travel in the
 PR ledger. A3–A5 remain advisories, not residual issues or repair scope.
 
+## R19f slice 1 — dispatch gate on pre_spawn
+
+Slice 1 moves the ship-pack dispatch record, pre-edit comparison, and resume checks
+onto the resolved `context.spawn` task/parent envelope. The activated `pre_tool`
+fallback does not post dispatch records; it retains legacy nonempty-label refusals
+and the ledger-integrity handler. Existing comments and deny strings are unchanged.
+Legacy direct factory consumers remain supported. The dispatch fail-first suite
+runs against both legacy and authoritative envelopes, including repeated identical
+spawns and pre_tool-before/after checks for exactly one record per spawn.
+
+R19f is **not complete**: slice 2 (merge policy via `pre_merge`) and slice 3
+(removal of redundant skill bookkeeping prose) remain pending. No merge guard or
+skill prose deletion is included here. Independent conductor review/CI follows.
+
 ## Mechanical PR ledger integrity — #571 complete (#573)
 
 Scoped ship-pack maintenance adds append-only PR-body mutation checks with fetched
