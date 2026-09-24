@@ -5,7 +5,7 @@ it.each(["ship", "topic", "land"])("%s preserves adapter-owned evidence beyond s
   const text = readSkillText(`.agentrig/skills/${skill}/SKILL.md`);
   for (const token of ["AGENTRIG_REVIEW_REPOSITORY", "AGENTRIG_REVIEW_PR", "AGENTRIG_REVIEW_PASS",
     "$HOME/.agentrig/review-evidence/OWNER/REPO/NN/PASS/ATTEMPT/", "node scripts/review-provenance.mjs",
-    '"$RECEIPT_SHA256"', "BEFORE comment validation", "Scratch cleanup never\ndeletes these durable artifacts"]) {
+    '--comment "$LIVE_REVIEW_FILE"', "BEFORE the existing comment validation", "Scratch cleanup never\ndeletes these durable artifacts"]) {
     expect(text).toContain(token);
   }
 });

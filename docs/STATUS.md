@@ -1,3 +1,13 @@
+## Mechanical PR ledger integrity — #571, implementation awaiting independent review
+
+Scoped ship-pack maintenance adds append-only PR-body mutation checks with fetched
+source URL validation, lossless JSON repair finding identities, and automatic
+adapter-manifest attachment/land consumption. Existing landing provenance and
+ledger-completeness gates remain required. Fail-first, named mutation, declared
+check and LF/CRLF ship-pack receipts travel in the PR. No R19 slice is marked done;
+conductor finalization follows independent review. R19 LOW observations and wording
+followups remain advisory, not residual issues.
+
 ## R19e in progress — builder routing compatibility slice (not done)
 
 This first slice uses the explicitly authorized builder-routing-first split. Ship now

@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 
 import { verdictRange, parseVerdict, receiptTransport } from "./review-verdict.mjs";
 import { reviewerVerdict, assertReviewerVerdict } from "./review-finding-index.mjs";
+import { evidenceBlock, reviewIdentity, validateManifest } from "./review-provenance.mjs";
 
 export async function runCli() {
 try {
@@ -49,6 +50,17 @@ try {
     if (resolvedHome !== undefined && (typeof resolvedHome !== "string" || !isAbsolute(resolvedHome) || /[\x00-\x1f\x7f]/u.test(resolvedHome))) throw new Error("invalid reviewer home provenance");
   }
   const verdict = assertReviewerVerdict(body, expected);
+  let manifest;
+  if (verdict) {
+    const prefix = provenanceFile?.endsWith(".provenance.json") ? provenanceFile.slice(0, -".provenance.json".length) : bodyFile.replace(/(?:\.verdict)?\.md$/u, "");
+    manifest = JSON.parse(readFileSync(`${prefix}.durable.json`, "utf8"));
+    const identity = reviewIdentity();
+    if (identity.pr !== pr) throw new Error("durable manifest PR mismatch");
+    const durable = validateManifest(manifest, { ...identity, reviewedHead: head, slot: reviewer, model, adapter: slots[reviewer].adapter });
+    if (reviewerVerdict(durable.output) !== body) throw new Error("posting input differs from durable output");
+    if (body.includes("<!-- agentrig-review-evidence:v1 -->")) throw new Error("review already contains a manifest block");
+  }
+  const attachment = manifest ? `\n${evidenceBlock(manifest)}` : "";
   let sizeExplanation;
   if (Buffer.byteLength(body, "utf8") > 40 * 1024) {
     const ledger = process.env.REVIEW_LARGE_BODY_LEDGER;
@@ -63,13 +75,14 @@ try {
   const payload = `${body}${proofFile === undefined ? "" : `\n${proof}`}`;
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;
-  const capacity = 60000 - heading.length - 2 - (2 * digits + 7);
+  const capacity = 60000 - heading.length - 2 - (2 * digits + 7) - attachment.length;
+  if (capacity <= 0) throw new Error("durable manifest exceeds comment capacity");
   const range = verdict ? verdictRange(body) : undefined;
   const blockStart = range?.start ?? -1;
   const blockEnd = range?.end ?? -1;
   if (verdict && blockEnd - blockStart > capacity) throw new Error("structured verdict block exceeds comment capacity");
   const pieces = [];
-  if (`${heading}\n\n${payload}`.length <= 60000) pieces.push(payload);
+  if (`${heading}\n\n${payload}${attachment}`.length <= 60000) pieces.push(payload);
   else {
     for (let start = 0; start < payload.length;) {
       let end = Math.min(start + capacity, payload.length);
@@ -103,7 +116,7 @@ try {
     } catch { /* Invalid receipts still refuse; never infer permission to retry. */ }
     throw new Error(`refusing rerun; ${advice}; receipt ${receiptPath}:\n${saved}`);
   }
-  const receipt = { verdict, legacyProseFallback: verdict === null, ...(sizeExplanation === undefined ? {} : { sizeExplanation }), pr, heading, total: pieces.length, successful: [], pending: null, status: "posting" };
+  const receipt = { verdict, ...(manifest ? { durable: manifest } : {}), legacyProseFallback: verdict === null, ...(sizeExplanation === undefined ? {} : { sizeExplanation }), pr, heading, total: pieces.length, successful: [], pending: null, status: "posting" };
   const save = () => {
     // Same-directory rename preserves the last complete receipt on failed writes.
     const temporary = `${receiptPath}.${randomUUID()}.tmp`;
@@ -125,10 +138,13 @@ try {
     console.error(`in-memory receipt (durable receipt may lag): ${JSON.stringify(receipt)}`);
   };
   try {
+    let offset = 0;
     for (const [index, piece] of pieces.entries()) {
+      const carriesVerdict = blockStart >= offset && blockStart < offset + piece.length;
+      offset += piece.length;
       const path = pieces.length === 1 ? outputFile : `${outputFile}.${index + 1}`;
       const marker = pieces.length === 1 ? "" : `(${index + 1}/${pieces.length})\n\n`;
-      const comment = `${heading}\n\n${marker}${piece}`;
+      const comment = `${heading}\n\n${marker}${piece}${carriesVerdict ? attachment : ""}`;
       if (comment.length > 60000) throw new Error("review comment exceeds limit");
       writeFileSync(path, comment);
       // Assert the exact first line of EVERY emitted body immediately before posting.

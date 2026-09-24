@@ -2,6 +2,7 @@ import { readSkillText } from "../../../test/skill-text.js";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
@@ -30,9 +31,21 @@ function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?
       writeFileSync(join(dir, "head"), "#!/bin/sh\nprintf 'damaged\\n'\n");
       chmodSync(join(dir, "head"), 0o755);
     }
-    if (source !== undefined) writeFileSync(join(dir, "helper.mjs"), source.replaceAll('"./review-verdict.mjs"', JSON.stringify(new URL("../../../scripts/review-verdict.mjs", import.meta.url).href)).replaceAll('"./review-finding-index.mjs"', JSON.stringify(new URL("../../../scripts/review-finding-index.mjs", import.meta.url).href)));
+    if (source !== undefined) writeFileSync(join(dir, "helper.mjs"), source.replaceAll('"./review-verdict.mjs"', JSON.stringify(new URL("../../../scripts/review-verdict.mjs", import.meta.url).href)).replaceAll('"./review-provenance.mjs"', JSON.stringify(new URL("../../../scripts/review-provenance.mjs", import.meta.url).href)).replaceAll('"./review-finding-index.mjs"', JSON.stringify(new URL("../../../scripts/review-finding-index.mjs", import.meta.url).href)));
+    const match = /<!-- agentrig-verdict:v1 -->\n([\s\S]*?)\n<!-- \/agentrig-verdict -->/u.exec(body);
+    if (match) {
+      let verdict; try { verdict = parseVerdict(body); } catch { /* script owns malformed verdict rejection */ }
+      if (verdict) {
+      const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+      mkdirSync(join(dir, "durable"));
+      const provenance = JSON.stringify({ schema: 1, repository: "o/r", pr: "372", pass: "initial", reviewedHead: head, slot: reviewer, model: model.trim(), adapter: reviewers ? (reviewers as Record<string, {adapter: string}>)[reviewer]!.adapter : "codex-cli", transportModel: model.trim(), assertedModel: model.trim(), exit: 0, verdict, outputSha256: hash(body) });
+      writeFileSync(join(dir, "durable/provenance.json"), provenance);
+      writeFileSync(join(dir, "durable/review.md"), body);
+      writeFileSync(join(dir, "body.durable.json"), JSON.stringify({ receipt: join(dir, "durable/provenance.json"), output: join(dir, "durable/review.md"), sha256: hash(provenance) }));
+      }
+    }
     const result = spawnSync(process.execPath, [source === undefined ? helper : join(dir, "helper.mjs"), "372", reviewer, join(dir, "model"), join(dir, "body"), sha, base, join(dir, "comment")], {
-      cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: sizeReason === undefined ? "" : join(dir, "size-ledger"), PATH: `${dir}:${process.env.PATH}` },
+      cwd: dir, encoding: "utf8", env: { ...process.env, AGENTRIG_REVIEW_REPOSITORY: "o/r", AGENTRIG_REVIEW_PR: "372", AGENTRIG_REVIEW_PASS: "initial", REVIEW_LARGE_BODY_LEDGER: sizeReason === undefined ? "" : join(dir, "size-ledger"), PATH: `${dir}:${process.env.PATH}` },
     });
     return { status: result.status, stderr: result.stderr,
       posts: Array.from({ length: 20 }, (_, i) => join(dir, `comment.${i + 1}`)).filter(existsSync).map(p => readFileSync(p, "utf8")),
@@ -218,7 +231,7 @@ require('node:module').syncBuiltinESMExports();
 `);
     const invoke = (interrupt = false) => spawnSync(process.execPath,
       [...(interrupt ? ["--require", join(dir, "interrupt.cjs")] : []), helper, "372", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
+      { cwd: dir, encoding: "utf8", env: { ...process.env, AGENTRIG_REVIEW_REPOSITORY: "o/r", AGENTRIG_REVIEW_PR: "372", AGENTRIG_REVIEW_PASS: "initial", REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
     const first = invoke(state === "interrupted");
     expect(first.status).toBe(state === "complete" ? 0 : 2);
     const receiptPath = join(dir, "comment.receipt.json");
@@ -271,7 +284,7 @@ require('node:module').syncBuiltinESMExports();
 `);
     const invoke = (interrupt = false) => spawnSync(process.execPath,
       [...(interrupt ? ["--require", join(dir, "interrupt.cjs")] : []), helper, "372", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
+      { cwd: dir, encoding: "utf8", env: { ...process.env, AGENTRIG_REVIEW_REPOSITORY: "o/r", AGENTRIG_REVIEW_PR: "372", AGENTRIG_REVIEW_PASS: "initial", REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
     const first = invoke(true);
     expect(first.status).toBe(2);
     expect(first.stderr).toContain(failure === "head-assertion" ? "canonical first-line assertion failed" : `injected ${failure}`);
@@ -305,7 +318,7 @@ it.each(["head", "model"])("R390 refuses a complete receipt for a different %s w
     const priorHeading = changed === "head" ? heading.replace(head, "c".repeat(40)) : heading.replace("gpt-5.5", "another-model");
     const saved = JSON.stringify({ heading: priorHeading, status: "complete", successful: [1], pending: null, total: 1 });
     writeFileSync(join(dir, "comment.receipt.json"), saved);
-    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
+    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, AGENTRIG_REVIEW_REPOSITORY: "o/r", AGENTRIG_REVIEW_PR: "372", AGENTRIG_REVIEW_PASS: "initial", REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("receipt heading differs from current review");
     expect(r.stderr).not.toContain("already complete; no retry needed");
@@ -340,7 +353,7 @@ it("R401 refuses a complete receipt for a different PR with the same canonical h
     chmodSync(join(dir, "gh"), 0o755);
     const saved = JSON.stringify({ pr: "1", heading, status: "complete", successful: [1], pending: null, total: 1 });
     writeFileSync(join(dir, "comment.receipt.json"), saved);
-    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
+    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, AGENTRIG_REVIEW_REPOSITORY: "o/r", AGENTRIG_REVIEW_PR: "372", AGENTRIG_REVIEW_PASS: "initial", REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("receipt PR differs from current review");
     expect(r.stderr).not.toContain("already complete; no retry needed");
@@ -465,7 +478,7 @@ it.each(["\n", "\r\n", " \t "])("M-normalized-echo: logs legacy whitespace reflo
     expect(result.stderr).toContain("legacy prose fallback");
     expect(result.args).toBeDefined();
   }
-});
+}, 15_000); // Declared test budget; this fixture launches one CLI per echo phrase.
 
 it.each(["> ", "    ", "\t", "```text\n"])("R1-F2 blank lines preserve finding section citation: %j", marker => {
   const citation = marker + echoPhrases[0] + (marker.startsWith("```") ? "\n```" : "");
@@ -535,6 +548,7 @@ it("M-split-block: chunking never breaks the machine verdict", () => {
   expect(large.status, large.stderr).toBe(0);
   const receipt = JSON.parse(large.receipt);
   expect(receipt.total).toBeGreaterThan(1);
+  expect(large.posts.filter(part => part.includes("<!-- agentrig-review-evidence:v1 -->"))).toHaveLength(1);
   const blocks = large.posts.filter(part => part.includes("<!-- agentrig-verdict:v1 -->"));
   expect(blocks).toHaveLength(1);
   expect(blocks[0]).toContain("<!-- /agentrig-verdict -->");
@@ -553,6 +567,7 @@ it("#490 quoted delimiter mentions do not redirect the protected posting range",
   });
   expect(parsed).toEqual([value]);
   expect(result.posts.some(part => part.includes(mention))).toBe(true);
+  expect(result.posts.filter(part => part.includes("<!-- agentrig-review-evidence:v1 -->"))).toHaveLength(1);
 });
 
 it.each(["/accounts/personal", '/accounts/second "quoted" home\\profile', undefined])("#515 receipt-based suffix: resolved home %s, never local guesses", (resolvedHome) => {
@@ -564,7 +579,13 @@ it.each(["/accounts/personal", '/accounts/second "quoted" home\\profile', undefi
     writeFileSync(join(dir, "model"), "gpt-5.5");
     writeFileSync(join(dir, "proof.json"), JSON.stringify({ exit: 0, reviewedHead: head, slot: "Codex", adapter: "codex-cli", model: "gpt-5.5", transportModel: "gpt-5.5", assertedModel: "gpt-5.5", resolvedHome, verdict: parseVerdict(verdictBlock(verdict)) }));
     writeFileSync(join(dir, "gh"), `#!/bin/sh\nexit 0\n`); chmodSync(join(dir, "gh"), 0o755);
-    const result = spawnSync(process.execPath, [helper, "506", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment"), "--provenance", join(dir, "proof.json")], { cwd: dir, encoding: "utf8", env: { ...process.env, CODEX_HOME: "/local/not-the-review-home", PATH: `${dir}:${process.env.PATH}` } });
+    const raw = readFileSync(join(dir, "body"), "utf8");
+    const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+    mkdirSync(join(dir, "durable"));
+    const durable = JSON.stringify({ ...JSON.parse(readFileSync(join(dir, "proof.json"), "utf8")), schema: 1, repository: "o/r", pr: "506", pass: "initial", outputSha256: hash(raw) });
+    writeFileSync(join(dir, "durable/provenance.json"), durable); writeFileSync(join(dir, "durable/review.md"), raw);
+    writeFileSync(join(dir, "body.durable.json"), JSON.stringify({receipt:join(dir,"durable/provenance.json"),output:join(dir,"durable/review.md"),sha256:hash(durable)}));
+    const result = spawnSync(process.execPath, [helper, "506", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment"), "--provenance", join(dir, "proof.json")], { cwd: dir, encoding: "utf8", env: { ...process.env, AGENTRIG_REVIEW_REPOSITORY: "o/r", AGENTRIG_REVIEW_PR: "506", AGENTRIG_REVIEW_PASS: "initial", CODEX_HOME: "/local/not-the-review-home", PATH: `${dir}:${process.env.PATH}` } });
     expect(result.status, result.stderr).toBe(0);
     const posted = readFileSync(join(dir, "comment"), "utf8");
     // The expected suffix comes from the saved adapter receipt for this review,

@@ -366,3 +366,17 @@ it.each([
   expect(p.result.action).toBe("continue");
   expect(p.body).toContain("Pre-edit comparison: PASS");
 });
+
+const identityHeadings = ['  leading and trailing  ', 'quotes " and backslash \\ and backtick `', 'Markdown **bold** # [] -> → ; |', 'café 🔧', 'cafe\u0301 🔧'];
+it.each(identityHeadings)('JSON finding identity is byte-exact: %s', async heading => {
+  const task = `${receipt}\nFinding identities: ${JSON.stringify([{heading,url:sourceUrl}])}`;
+  expect((await realisticProbe(task, verdictSource([heading]))).result.action).toBe('continue');
+});
+it.each(identityHeadings)('JSON finding identity rejects source byte edits: %s', async heading => {
+  const task = `${receipt}\nFinding identities: ${JSON.stringify([{heading:heading + ' ',url:sourceUrl}])}`;
+  expect((await realisticProbe(task, verdictSource([heading]))).result.action).toBe('deny');
+});
+it('JSON identities do not normalize Unicode', async () => {
+  const task = `${receipt}\nFinding identities: ${JSON.stringify([{heading:'café',url:sourceUrl}])}`;
+  expect((await realisticProbe(task, verdictSource(['cafe\u0301']))).result.action).toBe('deny');
+});

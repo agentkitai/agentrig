@@ -76,7 +76,7 @@ it.each(["gpt-5", "gpt-4.1", "claude-opus-5"])("adapter transport and receipt in
       writeFileSync(join(dir, "gh"), "#!/bin/sh\nexit 0\n");
       chmodSync(join(dir, "gh"), 0o755);
       const post = fileURLToPath(new URL("../../../scripts/post-review-comment.mjs", import.meta.url));
-      const postArgs = [post, "123", "Codex", `${prefix}.model.txt`, `${prefix}.md`, actualHead, actualHead, `${prefix}.comment.md`, "--config", join(dir, "config.json")];
+      const postArgs = [post, "547", "Codex", `${prefix}.model.txt`, `${prefix}.md`, actualHead, actualHead, `${prefix}.comment.md`, "--config", join(dir, "config.json")];
       const options = { encoding: "utf8" as const, env: { ...process.env, HOME: dir, AGENTRIG_CHILD_PROFILE: undefined, AGENTRIG_REVIEW_REPOSITORY: "owner/repo", AGENTRIG_REVIEW_PR: "547", AGENTRIG_REVIEW_PASS: "initial", CODEX_HOME: join(dir, "codex-home"), PATH: `${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } };
       expect(spawnSync(process.execPath, postArgs, options).status).not.toBe(0);
       const posted = spawnSync(process.execPath, [...postArgs, "--provenance", `${prefix}.provenance.json`], options);
