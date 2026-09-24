@@ -12,5 +12,16 @@
   ],
   "extensions": [
     "extensions/dispatch-record.json"
+  ],
+  "skills": [
+    "skills/arbiter.md",
+    "skills/dogfood.md",
+    "skills/land.md",
+    "skills/review.md",
+    "skills/ship.md",
+    "skills/topic.md"
+  ],
+  "docs": [
+    "docs/SHIPPING-WORKFLOW.md"
   ]
 }
