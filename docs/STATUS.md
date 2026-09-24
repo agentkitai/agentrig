@@ -1,3 +1,28 @@
+## R19c — first slice: ship pack skeleton and scripts (partial)
+
+Source skeleton at `packs/ship` inventories all five review scripts and the
+`dispatch-record` extension. Old `scripts/*.mjs` and `.agentrig/extensions` paths
+remain compatibility entry points. The source bootstrap uses only the CLI package
+root public export, with additive `reviewerHome`; no private CLI dist imports.
+The reserved R19b `packs.ship` config bridge is used, with identical top-level
+checks/reviewers retained for running train/raw readers. `shipPack` supports trusted
+host registration and an informational command; this is not an installed pack or
+automatic discovery loader. Parity tests pin exports, direct execution, extension
+manifest, config aliases and public API use; existing script behavior suites remain.
+Repair round 1 addresses F1: all executable moved scripts and legacy shims resolve
+the argv entry path before comparing it with Node’s canonical module URL.
+Symlinked direct success/error parity and inert imports have regression coverage;
+F1 was independently closed in the focused review. Repair round 2 addresses new
+F4: absent/nonexistent argv stays import-safe without weakening symlink entry
+detection or swallowing CLI errors. Fail-first coverage spans every moved/legacy
+script. F4 is fixed pending independent delta review, not closed; F2/F3
+advisories are unchanged.
+
+**R19c is not done.** Remaining slices: installed packaging/host wiring as needed;
+skills/roles, SHIPPING-WORKFLOW and shared includes; instruction/script-test
+ownership; required pack CI lane. Skills, instruction-contract tests, shipping docs
+and includes stay put in this slice. No additional gate or R19d–f scope is added.
+
 ## R19b done — CLI contributions/public API #563, namespaced pack config #564
 
 First slice #563 delivered trusted-host CLI commands and an import-safe public CLI

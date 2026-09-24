@@ -86,7 +86,7 @@ it.each([
   ["M2 guessed model", 'const model = readFileSync(modelFile, "utf8").trim();', 'const model = "GPT-5";'],
   ["M6 no stripping", 'const body = raw.replace(/^(?:[ \\t]*\\r?\\n|## External review[^\\n]*(?:\\n|$))*/, "");', 'const body = raw;'],
 ])("kills %s on #370 regression", (_name, before, after) => {
-  const source = readFileSync(helper, "utf8");
+  const source = readFileSync(new URL("../../../packs/ship/scripts/post-review-comment.mjs", import.meta.url), "utf8");
   expect(source).toContain(before);
   const mutant = run(regression, undefined, undefined, undefined, source.replace(before, after));
   expect(mutant.posted).not.toBe(`${heading}\n\nVERDICT: PASS\nReviewed head ${head}\n`);
@@ -99,7 +99,7 @@ it.each([
   ["M4 empty body guard", 'if (!body.trim()) throw new Error("empty reviewer body");', "", "gpt-5.5", head, main, false],
   ["M5 first-line guard", 'if (first.status !== 0 || first.stdout !== `${heading}\n`) throw new Error("canonical first-line assertion failed");'.replace('${heading}\n', '${heading}\\n'), "verdict", "gpt-5.5", head, main, true],
 ] as const)("kills %s: missing gate permits forbidden gh call", (_name, gate, body, model, sha, base, damage) => {
-  const source = readFileSync(helper, "utf8");
+  const source = readFileSync(new URL("../../../packs/ship/scripts/post-review-comment.mjs", import.meta.url), "utf8");
   expect(source).toContain(gate);
   expect(run(body, model, sha, base, undefined, damage).args).toBeUndefined();
   expect(run(body, model, sha, base, source.replace(gate, "").replace(_name === "M3 model guard" ? 'if (model !== slots[reviewer].model) throw new Error("asserted model differs from slot pin");' : "NEVER", ""), damage).args).toBeDefined();
@@ -321,7 +321,7 @@ it("R393 zero-publication failure does not claim a partial post", () => {
   expect(r.stderr).toContain("in-memory receipt");
 });
 it("R393 all-publication receipt failure does not claim a partial post", () => {
-  const source = readFileSync(helper, "utf8").replace("receipt.successful.push(index + 1);", 'receipt.successful.push(index + 1); throw new Error("final receipt fault");');
+  const source = readFileSync(new URL("../../../packs/ship/scripts/post-review-comment.mjs", import.meta.url), "utf8").replace("receipt.successful.push(index + 1);", 'receipt.successful.push(index + 1); throw new Error("final receipt fault");');
   const r = run(`Reviewed head ${head}\nOK`, undefined, head, main, source);
   expect(r.status).toBe(2);
   expect(r.stderr).toContain("all posts confirmed, receipt finalization failed: 1/1");

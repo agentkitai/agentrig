@@ -111,7 +111,7 @@ it.each(["gpt-5", "gpt-5.5"])("M-api-echo: real API adapter %s requires exact as
     // Real provider and adapter entrypoint, synthetic HTTP response only. A response model
     // is deliberately different: unified providers do not expose it as transport proof.
     const sse = `data: ${JSON.stringify({ model: "gpt-5.4", choices: [{ delta: { content: text }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`;
-    writeFileSync(join(dir, "fetch.mjs"), `globalThis.fetch = async () => new Response(${JSON.stringify(sse)}, {headers:{'content-type':'text/event-stream'}});`);
+    writeFileSync(join(dir, "fetch.mjs"), `const originalFetch = globalThis.fetch; globalThis.fetch = async (input, init) => String(input instanceof Request ? input.url : input).startsWith("https://fixture.invalid/") ? new Response(${JSON.stringify(sse)}, {headers:{'content-type':'text/event-stream'}}) : originalFetch(input, init);`);
     writeFileSync(join(dir, "config.json"), JSON.stringify({ providers: { fixture: { provider: "openai", model: "gpt-5.5", baseUrl: "https://fixture.invalid/v1" } }, reviewers: { Codex: { adapter: "api:fixture", model: "gpt-5.5" } } }));
     writeFileSync(join(dir, "prompt"), "source bundle and checks green");
     const prefix = join(dir, "out");

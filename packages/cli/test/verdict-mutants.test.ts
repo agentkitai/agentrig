@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
-const source = readFileSync(new URL("../../../scripts/review-verdict.mjs", import.meta.url), "utf8")
-  .replace("new URL('../packages/core/package.json', import.meta.url)", `new URL(${JSON.stringify(new URL("../../core/package.json", import.meta.url).href)})`);
+const source = readFileSync(new URL("../../../packs/ship/scripts/review-verdict.mjs", import.meta.url), "utf8")
+  .replace("new URL('../../../packages/core/package.json', import.meta.url)", `new URL(${JSON.stringify(new URL("../../core/package.json", import.meta.url).href)})`);
 const head = "a".repeat(40);
 const value = {version:1, reviewedHead:head, slot:"slot", assertedModel:"pin", modelSource:"fixture", verdict:"PASS", findings:[]};
 const mutants = [

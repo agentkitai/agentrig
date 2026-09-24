@@ -14,7 +14,7 @@ it("dogfood delegates launch permissions to the canonical adapter", async () => 
 
 it("topic permits explicit mutation tools without plan mode or bypass", async () => {
   const text = await skill("topic");
-  const adapters = await readFile(new URL("../../../scripts/reviewer-adapters.mjs", import.meta.url), "utf8");
+  const adapters = await readFile(new URL("../../../packs/ship/scripts/reviewer-adapters.mjs", import.meta.url), "utf8");
   expect(text).toContain("Launch each slot through its adapter");
   expect(text).toContain("node <REPO>/scripts/reviewer-adapters.mjs");
   expect(adapters).toContain('"--permission-mode", "dontAsk"');

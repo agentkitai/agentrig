@@ -150,6 +150,8 @@ ctx.hooks.on("pre_model",()=>{calls++;return {action:"continue"}})}`);
 it("trusted headless project discovers and loads the dispatch hook without prompting", async () => {
   const f = await fixture();
   const directory = join(f.cwd, ".agentrig/extensions");
+  // Copy the discovery shim and expose its source-pack implementation.
+  await symlink(fileURLToPath(new URL("../../../packs", import.meta.url)), join(f.cwd, "packs"), process.platform === "win32" ? "junction" : "dir");
   // The project hook shares canonical verdict parsing with the shipping scripts.
   await symlink(fileURLToPath(new URL("../../../scripts", import.meta.url)), join(f.cwd, "scripts"), process.platform === "win32" ? "junction" : "dir");
   await mkdir(directory, { recursive: true });
