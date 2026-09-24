@@ -26,7 +26,7 @@ their sources even when those URLs appear historically. Regression coverage chec
 dead-history recovery, repeated dead-link denial and exact source headings through
 both CLI body edits and API PATCH; C1/D1 describe this same repaired defect.
 
-## R19e final retirement slice — implementation in #575, pending review (follows #570)
+## R19e done — #570 + #575: role routing and final bolt-on retirement
 
 This PR completes the remaining implementation after #570: ship-pack and compatibility
 `topic` skills declare `fresh-session`, and TUI lifecycle policy uses only that generic
@@ -35,11 +35,13 @@ wording; ship skills already own task authorization. Stall exemptions are config
 regex-source patterns, empty by default in supervisor and supplied by ship at CLI
 composition. Repository reviewers/checks moved under `packs.ship` with identical checks.
 Fail-first, named mutants and declared-check/ship-pack/CRLF receipts travel in the PR.
-This is not the canonical completion marker: conductor review resolution and its final
-docs-only step remain pending; ROADMAP is unchanged. LOW observations and wording
-followups remain advisory, without excusing real acceptance failures.
+R19e is complete across #570 and #575. Both independent initial reviews of #575 passed;
+there are no blocking findings. This conductor-owned docs-only finalization marks the
+row done after disposition resolution. Declared checks and the ship-pack lane are green;
+exact-head and post-merge CI receipts travel in the PR. LOW observations and wording
+followups remain advisory, not residual issues. R19f is not part of this change.
 
-## R19e in progress — builder routing compatibility slice (not done)
+## R19e first-slice history — builder routing compatibility (#570; completed by #575)
 
 This first slice uses the explicitly authorized builder-routing-first split. Ship now
 supplies provider-bound compatibility roles for legacy `builderProvider` rows and
@@ -57,10 +59,10 @@ exceeding core’s unchanged 1,048,576-byte bound uses the same diagnosed explic
 fallback (no truncation), with aggregate boundary and real-discovery/runtime regression proof.
 F1–F4 repairs await independent verification; this is not a review-resolution claim.
 
-Remaining R19e acceptance: generic fresh-session skill flag replacing TUI's topic
-name case; move the default merge/delivery prompt clause into a pack contribution;
-configurable supervisor progress patterns supplied by ship. No R19f work, no new
-gates. R19e stays incomplete; the conductor owns final done markers after reviews.
+The remaining acceptance from this first slice is delivered by #575: generic
+fresh-session replaces TUI's topic name case; default merge/delivery wording is
+removed (ship skills already own authorization); supervisor progress patterns are
+configurable and supplied by ship. No R19f work or new gates is included.
 Fail-first, mutation, declared-check and ship-pack receipts travel in this PR.
 
 ## R19d done — #568 + #569: CLI on train + ship, core train API retired
