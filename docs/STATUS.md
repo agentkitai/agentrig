@@ -1,3 +1,17 @@
+## Window-aware context — implementation awaiting independent review
+
+Outbound tool-result eviction now defaults to pressure at 50% of the active model
+window, oldest eligible large results first, stopping below the threshold. Defaults:
+8 KiB minimum payload and no protected turns in window mode; explicit legacy options
+retain the former 5-turn age policy unless a fraction is supplied. Logs remain intact.
+The exact-model table records owner-confirmed `gpt-6-astra` at 1,000,000 tokens;
+explicit provider-entry windows win, unknown IDs retain existing adapter fallbacks
+(OpenAI 128k; Anthropic/ChatGPT 200k), not asserted real model windows. Compaction
+uses the same resolved capability window. Evidence motivation: d4427f6c (8 evictions,
+~150KB elided despite max input ~36k) and 1c85f18a (39 evictions).
+Fail-first and named-mutant receipts travel in the PR. This is not a completed
+ROADMAP row: conductor review, exact-head CI, and authorized landing remain pending.
+
 ## Pre-PR crash resume — #572 repair round 1 (#574)
 
 Blocking findings C1/A1/A2 are addressed: a session that proved initial absence

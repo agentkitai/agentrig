@@ -1,3 +1,4 @@
+import { modelContextWindow } from "./model-windows.js";
 import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, ReasoningEffort, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
@@ -245,7 +246,7 @@ export class AnthropicProvider implements ModelProvider {
       caching: true,
       cacheReadDiscount: 0.1,
       cacheWriteMultiplier: 1.25,
-      contextWindow: opts.contextWindow ?? 200_000,
+      contextWindow: opts.contextWindow ?? modelContextWindow("anthropic", opts.model, 200_000),
     };
   }
 

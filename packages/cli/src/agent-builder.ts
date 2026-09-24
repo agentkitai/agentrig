@@ -146,6 +146,7 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  toolResultEviction?: import("@agentkitai/agentrig-core").ToolResultEvictionOptions;
   /** Train-internal builder-only route; additive to the resolved base system prompt. */
   builderProvider?: string;
   /** Internal notice for mounted UIs; not a user configuration key. */
@@ -504,6 +505,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
         }),
         store: new SessionStore({ root: w.opts.root }),
         maxTokensPerTurn: w.maxTokensPerTurn,
+        ...(w.opts.toolResultEviction === undefined ? {} : { toolResultEviction: w.opts.toolResultEviction }),
       };
     },
   };
@@ -852,6 +854,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     budget,
     ...(pricing === undefined ? {} : { pricing }),
     maxTokensPerTurn,
+    ...(opts.toolResultEviction === undefined ? {} : { toolResultEviction: opts.toolResultEviction }),
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
     ...(extras.onQuestion === undefined ? {} : { onQuestion: extras.onQuestion }),
     ...(extras.onUnattendedQuestion === undefined ? {} : { onUnattendedQuestion: extras.onUnattendedQuestion }),

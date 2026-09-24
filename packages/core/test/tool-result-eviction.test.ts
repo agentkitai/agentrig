@@ -97,3 +97,43 @@ describe("tool-result eviction view", () => {
     });
   });
 });
+
+// Character-based estimate deliberately matches the loop's cheap request estimate.
+const pressure = (contextWindow: number) => ({ contextWindow,
+  estimateTokens: (messages: readonly Message[]) => Math.ceil(JSON.stringify(messages).length / 4) });
+
+describe("window-aware eviction", () => {
+  it("keeps a long session verbatim below half the window", () => {
+    const messages = conversation(Array.from({ length: 40 }, () => "x".repeat(9000)));
+    expect(evictToolResults(messages, {}, pressure(1_000_000)).messages).toBe(messages);
+  });
+  it("crossing half evicts oldest large results first and stops below the threshold", () => {
+    const messages = conversation(["a".repeat(12000), "b".repeat(12000), "c".repeat(12000)]);
+    const view = evictToolResults(messages, {}, pressure(14000));
+    expect([...view.evictedToolUseIds]).toEqual(["call-1"]);
+    expect(pressure(14000).estimateTokens(view.messages)).toBeLessThan(7000);
+    expect(result(view.messages, "call-2")).toEqual(result(messages, "call-2"));
+    expect(result(messages, "call-1")).toMatchObject({ content: "a".repeat(12000) });
+  });
+  it("honors explicit legacy options even below half, and a fraction opts back into pressure", () => {
+    const messages = conversation(["a".repeat(12000), "b".repeat(12000)]);
+    expect(evictToolResults(messages, { keepLastTurns: 1, minBytes: 100 }, pressure(1_000_000)).count).toBe(1);
+    expect(evictToolResults(messages, { keepLastTurns: 1, minBytes: 100, thresholdFraction: 0.5 }, pressure(1_000_000)).count).toBe(0);
+    expect(evictToolResults(messages, { thresholdFraction: 0.01 }, pressure(1_000_000)).count).toBe(0);
+    expect(evictToolResults(messages, { thresholdFraction: 0.005 }, pressure(1_000_000)).count).toBe(1);
+  });
+});
+
+it("stops between results in the same message and keeps explicit protected turns", () => {
+  const messages = conversation(["a".repeat(12000), "b".repeat(12000)]);
+  const combined: Message[] = [messages[0]!,
+    { role: "assistant", content: [...messages[1]!.content, ...messages[3]!.content] },
+    { role: "user", content: [...messages[2]!.content, ...messages[4]!.content] }];
+  expect([...evictToolResults(combined, {}, pressure(10000)).evictedToolUseIds]).toEqual(["call-1"]);
+  expect(evictToolResults(messages, { thresholdFraction: 0.1, keepLastTurns: 1 }, pressure(1000)).count).toBe(1);
+  expect(evictToolResults(messages, { enabled: false }, pressure(1000)).count).toBe(0);
+});
+
+it.each([0, -1, 1.01, NaN, Infinity])("rejects invalid eviction fraction %s", thresholdFraction => {
+  expect(() => evictToolResults([], { thresholdFraction }, pressure(1000))).toThrow("thresholdFraction");
+});

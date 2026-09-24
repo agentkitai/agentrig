@@ -1,3 +1,4 @@
+import { modelContextWindow } from "./model-windows.js";
 import { randomUUID } from "node:crypto";
 import type { ContentBlock, Message } from "../messages.js";
 import { thinkingFromItem, thinkingToItem, validateThinkingHistory } from "./thinking.js";
@@ -337,7 +338,7 @@ export class OpenAIChatGPTProvider implements ModelProvider {
       parallelTools: true,
       caching: true,
       ...(cacheReadDiscount === undefined ? {} : { cacheReadDiscount }),
-      contextWindow: opts.contextWindow ?? 200_000,
+      contextWindow: opts.contextWindow ?? modelContextWindow("openai-chatgpt", opts.model, 200_000),
     };
   }
 
