@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it, vi } from "vitest";
-import { trainCommand, RulePolicy } from "@agentkitai/agentrig-core";
+import { RulePolicy } from "@agentkitai/agentrig-core";
+import { trainCommand } from "../src/train.js";
 import { cliEnv } from "./cli-env.js";
 
 it("actual headless run reports validated final PR to host outside checkout with all child writes denied", async () => {

@@ -1,4 +1,5 @@
-import { trainUsage, SpendLedger, type SpendReport, type SessionSpendSource } from "@agentkitai/agentrig-core";
+import { trainUsage } from "@agentkitai/agentrig-train/runtime";
+import { SpendLedger, type SpendReport, type SessionSpendSource } from "@agentkitai/agentrig-core";
 import { realpath } from "node:fs/promises";
 
 export function formatSpend(report: SpendReport): string {

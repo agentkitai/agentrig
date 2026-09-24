@@ -1,4 +1,4 @@
-import { trainLauncherEnvironment } from "../src/child-env.js";
+import { trainLauncherEnvironment } from "../src/train.js";
 import { expect, it } from "vitest";
 import { parseConfigText } from "../src/config.js";
 const parse = (childEnv: unknown) => parseConfigText("fixture", JSON.stringify({ profiles: { personal: { childEnv } } }));
@@ -74,7 +74,7 @@ it("M-train-slot-config: trusted checkout slots fail fast under the selected use
   const { mkdtemp, mkdir, writeFile, rm, realpath } = await import("node:fs/promises");
   const { join } = await import("node:path");
   const { tmpdir } = await import("node:os");
-  const { trainChildEnvironment } = await import("../src/child-env.js");
+  const { trainChildEnvironment } = await import("../src/train.js");
   const dir = await realpath(await mkdtemp(join(tmpdir(), "train-child-env-"))), cwd = join(dir, "project"), home = join(dir, "home");
   const original = { ...process.env };
   try {

@@ -5,7 +5,8 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect } from "vitest";
 import { parseConfigText, resolveConfig } from "../src/config.js";
 import { validateEvaluationProfile } from "../src/evaluation-fixtures.js";
-import { resolveProjectChecks, resolveTrainTestTimeout } from "../src/project-checks.js";
+import { resolveProjectChecks } from "../src/project-checks.js";
+import { resolveTrainTestTimeout } from "../src/train.js";
 
 const parse = (checks: unknown) => parseConfigText("fixture", JSON.stringify({ checks }));
 describe("declared project checks", () => {

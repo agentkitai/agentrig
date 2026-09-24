@@ -5,7 +5,11 @@
   "type": "module",
   "exports": {
     "./train": "./dist/train.js",
-    "./train-github": "./dist/train-github.js"
+    "./train-github": "./dist/train-github.js",
+    "./train-host": {
+      "types": "./dist/train-host.d.ts",
+      "import": "./dist/train-host.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

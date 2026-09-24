@@ -1,4 +1,5 @@
-import { trainCommand, type TrainCommand } from "@agentkitai/agentrig-core";
+import { trainCommand } from "./train.js";
+import type { TrainCommand } from "@agentkitai/agentrig-train";
 import { trainGithubCommand as decorate } from "@agentkitai/agentrig-ship/train-github";
 
 /** Compatibility entrypoint; bounded transport policy belongs to the ship pack. */

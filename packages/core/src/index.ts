@@ -48,11 +48,9 @@ export type { AuxiliaryCall, AuxiliaryReport } from "./auxiliary.js";
 export { createOutputContract, parseOutputJson, OUTPUT_LIMITS, type OutputContract, type OutputMode } from "./output-schema.js";
 export { InputAttachmentsSchema, INPUT_LIMITS, imageHeader, clipboardBlock, type InputAttachment } from "./input-attachments.js";
 
-export * from "./train.js";
 
 export * from "./provider-concurrency.js";
 
-export * from "./train-usage.js";
 
 export { querySpawnLog } from "./spawn-log.js";
 export type { SpawnLogQuery, SpawnLogEntry } from "./spawn-log.js";

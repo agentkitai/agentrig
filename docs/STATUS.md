@@ -1,4 +1,32 @@
-## R19d first slice — train package and replaceable row stages (partial)
+## R19d done — #568 + #569: CLI on train + ship, core train API retired
+
+R19d is complete across first slice **#568** plus final slice **#569**
+([PR](https://github.com/agentkitai/agentrig/pull/569)). Both independent initial
+reviews passed with no blocking findings. LOW documentation, assertion-strength
+and compatibility-bridge observations remain advisories under R19, not residual
+gates. Declared checks and the ship-pack lane passed on the reviewed head;
+exact-head CI and landing receipts travel in the PR. R19e is not part of this change.
+
+- CLI `train <dir>` now composes `@agentkitai/agentrig-train` with the ship stages;
+  `usage --row/--train-dir` uses the public train runtime accounting adapter.
+- Core contains/exports no train code and depends on neither train nor ship.
+  The train engine stays runtime-injected; `train/runtime` bridges only public
+  core ledger/session/message APIs. Ship owns train child preflight, reviewer-home
+  assertions, fixed-suite timeout selection and the existing GitHub retry stages;
+  CLI supplies generic trusted config/project-check resolution.
+- Directory state, flags, child profile/provider validation, launcher identity,
+  halt records and exact-merge CI remain unchanged. Both supported compositions
+  now install ship transport retry once, including a raw transport override.
+- Regressions move to their owning train package; real built CLI/fake-gh coverage
+  executes real headless children through done and halted rows, captures receipts,
+  checks exact-merge CI, stops before the next row and reads row usage via CLI.
+- Declared build/test/typecheck, pack lane, CRLF checks and named fail-first mutant
+  receipts are recorded in the PR. The running main binary remains untouched;
+  rebuild/activation occurs only between rows. Independent reviews are conductor-owned.
+
+### Historical #568 first-slice state (superseded by the final slice above)
+
+#### R19d first slice — train package and replaceable row stages (partial)
 
 Current roadmap row: **R19d, partial**; next work remains the R19d continuation,
 not R19e. Dependencies R19a/R19b/R19c are complete on fetched main (#549/#559/#562,

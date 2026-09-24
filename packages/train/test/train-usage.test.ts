@@ -1,8 +1,9 @@
+import { rollupTrainUsage } from "@agentkitai/agentrig-train/runtime";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { SpendLedger, rollupTrainUsage, type SpendRecord } from "@agentkitai/agentrig-core";
+import { SpendLedger, type SpendRecord } from "@agentkitai/agentrig-core";
 it("joins calls before grouping two rows, nested children, session/model, unpriced tokens and incomplete calls", async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "row-usage-")));
   try {

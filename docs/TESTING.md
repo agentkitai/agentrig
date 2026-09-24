@@ -261,3 +261,16 @@ legacy compatibility paths and `pnpm ship:check` rejects drift without rewriting
 converts it to CRLF, and reruns the pack lane with `AGENTRIG_TEST_SKILLS_ROOT`.
 Use the same out-of-Git-ancestry TMPDIR requirements above. Run it before every
 push touching instruction contracts/skill-text. The wrapper cleans its own fixture.
+
+### R19d train ownership and built CLI lane
+
+`packages/train/test` owns queue and usage regressions; `test/train-paths.ts`
+exercises CLI composition and independent train+ship composition (there is no
+core facade). Ship GitHub policy tests remain in the explicit `pnpm test:ship`
+lane. The root suite includes `packages/cli/test/train-e2e.test.ts`: build first,
+then it executes real built train/child/status/usage commands with local provider
+SSE and fake git/gh/pnpm processes, proving done/halted transitions without GitHub
+or external model access. Fixture homes/checkouts live under canonical TMPDIR,
+never below a Git ancestor. `train/runtime` boundary tests prevent core dependency
+or train-export reintroduction. Continue to run `pnpm test:ship:crlf` beside the
+normal declared trio before each push involving instruction-contract tests.

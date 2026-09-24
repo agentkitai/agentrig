@@ -1,7 +1,7 @@
-import { SpendRecordSchema, type SpendRecord } from "./spend-ledger.js";
+import { SpendRecordSchema, type SpendRecord } from "@agentkitai/agentrig-core";
 
-import type { UsageTotals, RowUsage } from "@agentkitai/agentrig-train";
-export type { UsageTotals, RowUsage } from "@agentkitai/agentrig-train";
+import type { UsageTotals, RowUsage } from "./index.js";
+export type { UsageTotals, RowUsage } from "./index.js";
 const empty = (): UsageTotals => ({ calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, estimatedMicros: null, unpricedCalls: 0, incompleteCalls: 0 });
 function add(target: UsageTotals, source: UsageTotals): void {
   for (const key of ["calls", "input", "output", "cacheRead", "cacheWrite", "unpricedCalls", "incompleteCalls"] as const) target[key] += source[key];

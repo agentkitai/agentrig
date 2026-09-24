@@ -35,6 +35,9 @@ importers:
       '@agentkitai/agentrig-supervisor':
         specifier: workspace:*
         version: link:../supervisor
+      '@agentkitai/agentrig-train':
+        specifier: workspace:*
+        version: link:../train
       '@modelcontextprotocol/server':
         specifier: 2.0.0
         version: 2.0.0
@@ -102,12 +105,6 @@ importers:
 
   packages/core:
     dependencies:
-      '@agentkitai/agentrig-ship':
-        specifier: workspace:*
-        version: link:../../packs/ship
-      '@agentkitai/agentrig-train':
-        specifier: workspace:*
-        version: link:../train
       '@modelcontextprotocol/client':
         specifier: 2.0.0
         version: 2.0.0
@@ -149,6 +146,9 @@ importers:
 
   packages/train:
     dependencies:
+      '@agentkitai/agentrig-core':
+        specifier: workspace:*
+        version: link:../core
       zod:
         specifier: ^3.24.0
         version: 3.25.76

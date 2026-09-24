@@ -27,9 +27,7 @@
     "@modelcontextprotocol/client": "2.0.0",
     "typescript": "^5.6.0",
     "zod": "^3.23.0",
-    "zod-to-json-schema": "^3.23.0",
-    "@agentkitai/agentrig-ship": "workspace:*",
-    "@agentkitai/agentrig-train": "workspace:*"
+    "zod-to-json-schema": "^3.23.0"
   },
   "devDependencies": {
     "tsx": "^4.23.12"
