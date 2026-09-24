@@ -300,7 +300,11 @@ to the parent only on success. No schema preserves free-text behavior; a parent'
 or supplied child config's final-output contract is not inherited. This is generic
 shape validation, not acceptance of workflow claims. Ship's typed builder/fixer
 handoff and independent verification/retry policy belong to the pack; the train
-host's final conductor `{pr}` receipt is unchanged.
+host's final conductor `{pr}` receipt is unchanged. Every blocker kind requires independent
+conductor evidence: own-session failing command/exit/output for environment, fresh unmerged
+API state for named dependencies, and inspected conflicting sources/question for ambiguity.
+The pack routes verified ambiguity to the arbiter, not a blocker halt; unverifiable claims
+consume the existing one-retry allowance. These are pack policy, not core workflow logic.
 
 ```ts
 interface AgentConfig {

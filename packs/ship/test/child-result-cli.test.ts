@@ -22,5 +22,10 @@ it("CLI returns envelope schema, verified PR, and failed-attempt exit 2 with ret
     const invalid = spawnSync(process.execPath, [script, "assess", file], { encoding: "utf8" });
     expect(invalid.status).toBe(2);
     expect(JSON.parse(invalid.stdout)).toMatchObject({ action: "retry", attempt: 2 });
+    const ambiguity = { sources: ["docs/PLAN.md#2.6", "docs/SHIPPING-WORKFLOW.md#typed"], question: "Which contract wins?" };
+    await writeFile(file, JSON.stringify({ ...observations, result: { status: "blocked", kind: "ambiguity", evidence: { summary: JSON.stringify(ambiguity), paths: [] } }, ambiguity, verifiedSources: ambiguity.sources, verifiedBlocker: true }));
+    const arbitration = spawnSync(process.execPath, [script, "assess", file], { encoding: "utf8" });
+    expect(arbitration.status).toBe(0);
+    expect(JSON.parse(arbitration.stdout)).toHaveProperty("action", "arbiter");
   } finally { await rm(root, { recursive: true, force: true }); }
 });
