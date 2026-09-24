@@ -84,3 +84,21 @@ it.each([
   const hook = mod.createDispatchHook({gh:'/not-an-executable'});
   expect((await hook({cwd:tmpdir(),tool:{name:'bash',input:{command}},sessionId:'s'})).action).toBe('continue');
 });
+
+// #571 names receipt history explicitly: pin those bytes through both body transports.
+const roundOne = '## Ledger\nRepair round: 1/3\nPre-dispatch read-back: Repair round: 1/3; blockers X1; OLD ' + 'a'.repeat(40) + '; verified 2026-09-24T00:00:00Z\n';
+const roundTwo = 'Repair round: 2/3\nPre-dispatch read-back: Repair round: 2/3; blockers X2; OLD ' + 'b'.repeat(40) + '; verified 2026-09-24T01:00:00Z\n';
+it.each(['body', 'patch'])('appends literal round-2 receipts without changing round-1 via %s', async form => {
+  expect((await probe(roundOne + roundTwo, form, 'ok', roundOne)).result.action).toBe('continue');
+});
+it.each(['body', 'patch'])('denies rewriting the literal round-1 receipt via %s', async form => {
+  const rewritten = roundOne.replace('\nRepair round: 1/3\n', '\nRepair round: 2/3 (round 1/3 history retained below)\n');
+  expect((await probe(rewritten, form, 'ok', roundOne)).result.action).toBe('deny');
+});
+it.each(['body', 'patch'])('denies changing the literal round-1 read-back while appending round-2 via %s', async form => {
+  const rewritten = roundOne.replace('Pre-dispatch read-back: Repair round: 1/3', 'Pre-dispatch read-back: Repair round: 2/3') + roundTwo;
+  expect((await probe(rewritten, form, 'ok', roundOne)).result.action).toBe('deny');
+});
+it.each(['body', 'patch'])('allows appending the same literal receipt round again via %s', async form => {
+  expect((await probe(roundOne + roundOne, form, 'ok', roundOne)).result.action).toBe('continue');
+});
