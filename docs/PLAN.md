@@ -292,6 +292,16 @@ and cooperative evaluator limits; labels/digests are not proof of independence.
 
 ### 2.6 Agent + session
 
+`subagent` accepts optional `outputSchema` in the same bounded JSON-Schema subset
+as headless final output. It compiles a fresh prompted output contract per call,
+uses the existing one tool-free repair under unchanged budgets, records
+`output.validated` in the child log, and returns a validated parsed `output.result`
+to the parent only on success. No schema preserves free-text behavior; a parent's
+or supplied child config's final-output contract is not inherited. This is generic
+shape validation, not acceptance of workflow claims. Ship's typed builder/fixer
+handoff and independent verification/retry policy belong to the pack; the train
+host's final conductor `{pr}` receipt is unchanged.
+
 ```ts
 interface AgentConfig {
   provider: ModelProvider;

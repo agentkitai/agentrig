@@ -10,7 +10,7 @@ const scripts = readdirSync(new URL("scripts/", root)).filter(name => name.endsW
 it("source ship manifest and compatibility config register the reserved ship namespace", async () => {
   const manifest = JSON.parse(read("packs/ship/pack.json"));
   expect(manifest).toMatchObject({ name: "ship", configNamespace: "ship", apiVersion: 1 });
-  expect(manifest.scripts).toEqual(scripts);
+  expect(manifest.scripts).toEqual([...scripts, "child-result.mjs"]);
   const config = JSON.parse(read(".agentrig/config.json"));
   expect(config).not.toHaveProperty("checks");
   expect(config).not.toHaveProperty("reviewers");
