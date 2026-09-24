@@ -5,7 +5,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { Command } from "commander";
 import { loadRunConfig } from "../src/config.js";
 import { resolveChildEnvironment } from "../src/child-env.js";
-import { resolveProjectChecks, resolveTrainTestTimeout } from "../src/project-checks.js";
+import { resolveProjectChecks } from "../src/project-checks.js";
+import { resolveTrainTestTimeout } from "../src/train.js";
 
 const roots: string[] = [];
 afterEach(async () => {

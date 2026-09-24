@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promis
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TrainRowSchema, type TrainCommand } from "@agentkitai/agentrig-core";
+import { TrainRowSchema, type TrainCommand } from "@agentkitai/agentrig-train";
 
 import { trainPaths } from "../../../test/train-paths.ts";
 describe.each(trainPaths)("$name", ({ runTrain, trainStatus, trainCommand }) => {

@@ -940,6 +940,15 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R19d moves queue/row execution to `@agentkitai/agentrig-train` with injected stages.
+The CLI composes it with `@agentkitai/agentrig-ship/train`; ship owns prompts,
+receipts, pre-check/landing policy and train host preflight. The optional
+`train/runtime` adapter uses public core ledger/session/message APIs for usage and
+receipt decoding. Core has no train modules/exports or train/ship dependency.
+`train <dir>` and `usage --row/--train-dir` preserve flags and directory contracts;
+see [train operations](TRAIN-OPERATIONS.md). This is ownership extraction, not
+R19e builder-role or TUI retirement.
+
 R16h adds startup-captured strict `tui` settings: fixed dark/light palettes and
 bounded permission/history/abort keys. NO_COLOR overrides TUI styling; fixed
 Ctrl+C/Escape and paste/protected-prompt guards remain. No runtime editor or

@@ -5,9 +5,9 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { runTrain, trainStatus } from "@agentkitai/agentrig-core";
-import { trainChildEnvironment } from "../src/child-env.js";
-import { resolveTrainTestTimeout } from "../src/project-checks.js";
+import { runTrain, trainStatus } from "../src/train.js";
+import { trainChildEnvironment } from "../src/train.js";
+import { resolveTrainTestTimeout } from "../src/train.js";
 import { buildProgram } from "../src/program.js";
 import { loadRunConfig } from "../src/config.js";
 
@@ -37,7 +37,7 @@ it("accepts user-only profiles while resolving the project-owned train test budg
 });
 it("a user-only profile row reaches checkout-validation", async () => {
   const { queue } = await fixture();
-  const command = vi.fn(async (_spec: import("@agentkitai/agentrig-core").TrainCommand) => ({ code: 1, stdout: "", stderr: "checkout validation sentinel" }));
+  const command = vi.fn(async (_spec: import("@agentkitai/agentrig-train").TrainCommand) => ({ code: 1, stdout: "", stderr: "checkout validation sentinel" }));
   expect(await runTrain(queue, { ...options, command })).toBe("halted");
   expect(command).toHaveBeenCalled();
   expect(command.mock.calls[0]?.[0]).toMatchObject({ executable: "git" });
@@ -124,7 +124,7 @@ it.each([undefined, "row-profile"])("launches the validated builder profile (row
   await writeFile(path, JSON.stringify({ ...row, builderProvider: "sol" }));
   expect((await trainStatus(queue, options)).invalidEntries).toEqual([]);
   const launches: Array<{ profile: unknown; model: unknown }> = [];
-  const command: import("@agentkitai/agentrig-core").TrainCommand = async spec => {
+  const command: import("@agentkitai/agentrig-train").TrainCommand = async spec => {
     const argv = spec.argv;
     if (argv[0] === "run") {
       // Faithful fake launch: real run options/parser and loadRunConfig, no model or landing.

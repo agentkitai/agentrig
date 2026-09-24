@@ -21,14 +21,3 @@ export async function resolveProjectChecks(projectRoot: string, profile?: string
     command: step.testTimeout === undefined ? step.command : `${step.command} --testTimeout=${step.testTimeout}`,
   })) };
 }
-
-/** Train keeps its fixed validation sequence; only its pnpm test budget is configurable.
- * Resolve after each fast-forward, from the same profile as the conductor.
- */
-export async function resolveTrainTestTimeout(projectRoot: string, profile?: string): Promise<number | undefined> {
-  const checks = await resolveProjectChecks(projectRoot, profile);
-  const matches = checks?.steps.filter(step => step.testTimeout !== undefined
-    && step.command === `pnpm test --testTimeout=${step.testTimeout}`) ?? [];
-  if (matches.length > 1) throw new Error("ambiguous train pnpm test budget");
-  return matches[0]?.testTimeout;
-}

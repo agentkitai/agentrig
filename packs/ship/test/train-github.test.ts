@@ -2,13 +2,14 @@ import { mkdtemp, realpath, mkdir, writeFile, readFile, readdir, rm } from "node
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type TrainCommand, SpendLedger, SessionStore } from "@agentkitai/agentrig-core";
+import type { TrainCommand } from "@agentkitai/agentrig-train";
+import { SpendLedger, SessionStore } from "@agentkitai/agentrig-core";
 
 import { trainPaths } from "../../../test/train-paths.ts";
 import { trainGithubCommand as shipCommand } from "@agentkitai/agentrig-ship/train-github";
 import { trainGithubCommand as cliCommand } from "../../../packages/cli/src/train-github.js";
 describe.each(trainPaths)("$name GitHub policy", ({ name, runTrain, trainUsage }) => {
-const trainGithubCommand = name === "core compatibility" ? cliCommand : shipCommand;
+const trainGithubCommand = name === "CLI composition" ? cliCommand : shipCommand;
 it("does not multiply rate-limit budgets through compatibility decoration", () => {
   const command: TrainCommand = async () => ({ code: 0, stdout: "", stderr: "" });
   const once = trainGithubCommand(command);
@@ -62,14 +63,13 @@ for (const phase of ["pr", "run"]) it(`raw transport preserves retry ownership a
       return { code: 1, stdout: "", stderr: "HTTP 429 rate limit exceeded\nRetry-After: 1" };
     return f.command(request);
   };
-  const explicitShip = name === "train package + ship stages";
-  // Deliberately raw: only explicit train+ship composition owns automatic retry.
-  expect(await runTrain(f.root, { command: raw })).toBe(explicitShip ? "empty" : "halted");
-  expect(attempts).toBe(explicitShip ? 2 : 1);
+  // Both supported compositions install ship retry exactly once.
+  expect(await runTrain(f.root, { command: raw })).toBe("empty");
+  expect(attempts).toBe(2);
   expect(f.calls.filter(call => call.startsWith("run --"))).toHaveLength(1);
   const state = JSON.parse(await readFile(join(f.root, "logs/1.state.json"), "utf8"));
   expect(state.sessionIds).toEqual(["fixture-session"]);
-  expect(await readdir(join(f.root, explicitShip ? "done" : "halted"))).toEqual(["1.json"]);
+  expect(await readdir(join(f.root, "done"))).toEqual(["1.json"]);
   expect((await trainUsage(f.root))[0]?.totals).toMatchObject({ input: 7, output: 3, unpricedCalls: 1 });
   expect(await readFile(join(checkout, ".agentrig", "usage.jsonl"), "utf8")).toBe(ledgerBefore);
 });

@@ -281,16 +281,24 @@ covers nested children and non-builder sessions. It is `null` for legacy/missing
 selection evidence. Per-model usage remains authoritative for a session that switched
 models; this field is not a claim that every call used one entry. Retain session logs.
 
-## Package ownership during R19d migration
+## Package ownership after R19d extraction
 
-R19d's first slice moves queue state/execution to `@agentkitai/agentrig-train` and
-supplies today's pre-check, prompt, `{pr}` receipt and landing verification from
-`@agentkitai/agentrig-ship/train`. The pack also supplies #538's bounded GitHub
-rate-limit retry. Core's exported train API and `agentrig train <dir>` remain
-compatibility entrypoints; operators must not switch commands or rewrite train
-directories. The running host can continue using its existing core imports.
+`agentrig train <dir>` composes `@agentkitai/agentrig-train` queue execution with
+`@agentkitai/agentrig-ship/train` pre-check, prompt, `{pr}` receipt, landing gates
+and bounded GitHub retry. `@agentkitai/agentrig-train/runtime` supplies accounting
+and message decoding through public core APIs. Core no longer provides train
+exports. Programmatic callers should compose `createTrain(harnessTrainRuntime,
+shipTrainStages)`; raw command overrides receive the ship retry policy once.
 
-R19d remains partial: CLI composition switching, core export removal and movement
-of train-specific child-env/project-check helpers are later slices. Accounting and
-message decoding are injected host adapters for now. STOP/PAUSE, row IDs, queue
-folders, logs/halt records and landing evidence retain their existing semantics.
+The ship pack owns train child preflight, reviewer-home assertions and fixed-suite
+project-test timeout selection. CLI supplies generic configuration/trust/check
+loaders. `usage --row <id> --train-dir <dir>` uses the same runtime accounting as
+train status. No directory migration or operator command/flag change is required:
+STOP/PAUSE, row IDs, queue/active/done/halted/logs, child argv, session attribution,
+launcher identity and exact-merge landing evidence preserve their contracts.
+
+Keep an already-running main binary alive through the active row. Build/activate
+this version only between rows; do not replace a live conductor's binary or state.
+#568 was the compatibility first slice; the final slice removes its temporary
+core → train/ship dependencies. R19d completion is recorded only after independent
+review disposition resolves (see SHIPPING-WORKFLOW completion-marker timing).
