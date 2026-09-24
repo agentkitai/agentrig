@@ -26,7 +26,7 @@ their sources even when those URLs appear historically. Regression coverage chec
 dead-history recovery, repeated dead-link denial and exact source headings through
 both CLI body edits and API PATCH; C1/D1 describe this same repaired defect.
 
-## R19e final retirement slice — implementation pending review (follows #570)
+## R19e final retirement slice — implementation in #575, pending review (follows #570)
 
 This PR completes the remaining implementation after #570: ship-pack and compatibility
 `topic` skills declare `fresh-session`, and TUI lifecycle policy uses only that generic
