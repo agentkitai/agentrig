@@ -2,7 +2,7 @@
   "name": "@agentkitai/agentrig-core",
   "version": "0.0.0",
   "private": true,
-  "description": "Agent loop, tool runtime, permissions, sessions, providers — the event-sourced spine",
+  "description": "Agent loop, tool runtime, permissions, sessions, providers \u2014 the event-sourced spine",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -27,7 +27,9 @@
     "@modelcontextprotocol/client": "2.0.0",
     "typescript": "^5.6.0",
     "zod": "^3.23.0",
-    "zod-to-json-schema": "^3.23.0"
+    "zod-to-json-schema": "^3.23.0",
+    "@agentkitai/agentrig-ship": "workspace:*",
+    "@agentkitai/agentrig-train": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.23.12"

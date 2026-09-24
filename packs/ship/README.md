@@ -14,7 +14,8 @@ Do not register both extension paths: they represent the same extension, not two
 
 `public-api.mjs` resolves only the CLI package-root export via the source workspace's
 package manifest. Run `pnpm install --frozen-lockfile && pnpm build` first, as before.
-This source bootstrap deliberately does not add a workspace package or lockfile change.
+The command bootstrap remains source-based. R19d first slice adds a private workspace
+package for the typed train stages; it does not introduce automatic pack activation.
 Reviewer-home validation is exported additively through the public CLI API; its
 existing train/doctor callers remain intact. No provider credentials or reviewer homes are embedded here.
 
@@ -57,5 +58,17 @@ with an entire-tree CRLF compatibility fixture through the shared loader overrid
 The Windows job retains its original moved workflow checks in their new pack home;
 its product inventory filters out moved files through `test/vitest.windows.config.ts`.
 
-No R19d topic/session/train move, fresh-session flag migration, bolt-on retirement,
-or hook-gate migration is included. No gate grows here.
+## Train stages (R19d first slice)
+
+`@agentkitai/agentrig-ship/train` supplies `shipTrainStages`: existing pre-checks,
+ship prompt, strict `{pr}` receipt and merged-PR/post-merge-CI verification.
+`@agentkitai/agentrig-ship/train-github` owns the bounded #538 GitHub rate-limit
+transport retry; decorating the same wrapper twice does not multiply retry budgets.
+The CLI helper is a compatibility wrapper. `test/train-github.test.ts` covers both
+the old core/CLI path and public train+ship composition in this lane.
+
+The generic engine is `@agentkitai/agentrig-train`. The core facade deliberately
+still composes it with these defaults while the running host keeps using core
+exports. CLI switching, dropping core exports, and moving train-specific child-env
+and project-check helpers remain future R19d slices. No topic/session changes,
+bolt-on retirement or hook-gate migration are included; no gate grows here.

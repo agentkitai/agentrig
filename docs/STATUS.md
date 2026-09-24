@@ -1,3 +1,36 @@
+## R19d first slice — train package and replaceable row stages (partial)
+
+Current roadmap row: **R19d, partial**; next work remains the R19d continuation,
+not R19e. Dependencies R19a/R19b/R19c are complete on fetched main (#549/#559/#562,
+#563/#564, #565/#566/#567). This slice does **not** mark the whole R19d row done.
+
+- New private `@agentkitai/agentrig-train` owns queue state and row execution with
+  replaceable pre-check, prompt, receipt and verification stages. It imports no
+  core, CLI or ship runtime. `@agentkitai/agentrig-ship/train` supplies the current
+  ship flow; the pack also owns #538's bounded GitHub rate-limit retry.
+- Core's train exports are a compatibility facade; `agentrig train <dir>` and the
+  running host keep their entrypoints. Queue/active/done/halted/logs, halt records,
+  row IDs, STOP/PAUSE, child flags, PR binding and post-merge CI evidence are retained.
+  The CLI's GitHub helper delegates to the pack; repeat decoration is idempotent.
+- The existing queue/halt/landing and usage regressions exercise both the core
+  facade and independently composed public train package. Pack-owned GitHub tests
+  cover both paths; a custom-stage fixture replaces all four stages. Named fail-first
+  mutants and exact-head declared/ship-pack/CRLF receipts travel in the PR body.
+- Repair round 1 (#568): decorator construction now runs inside lock cleanup;
+  the legacy core transport override remains caller-owned (no implicit retry),
+  while explicit train+ship composition decorates raw transports. Fail-first
+  regressions cover lock reacquisition, both gh retry phases, call counts and
+  unchanged usage attribution through both public paths. Independent re-review
+  and exact-head CI remain conductor gates.
+- Deferred slices: switch CLI to explicit train+ship composition, drop core train
+  exports, move train-specific child-env and project-check helpers, and finish
+  relocating the ledger/message compatibility adapters. The temporary core →
+  train+ship dependencies are deliberate compatibility wiring, not the final
+  harness boundary. Receipt parsing still normalizes to the existing PR state
+  field; no new generic persisted format or workflow behavior is introduced.
+- No policy tightening or new gates. LOW observations and wording follow-ups
+  remain advisory. R19d's final boundary acceptance and R19e are not pulled forward.
+
 ## R19c done — #565 scripts, #566 skills/policy, #567 pack-owned checks and source of truth
 
 Completes the source-pack migration begun by #565 (scripts/skeleton) and #566

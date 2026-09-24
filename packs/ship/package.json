@@ -1,0 +1,18 @@
+{
+  "name": "@agentkitai/agentrig-ship",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./train": "./dist/train.js",
+    "./train-github": "./dist/train-github.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.24.0",
+    "@agentkitai/agentrig-train": "workspace:*"
+  }
+}

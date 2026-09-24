@@ -2,8 +2,10 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promis
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runTrain, trainStatus, trainCommand, TrainRowSchema, type TrainCommand } from "@agentkitai/agentrig-core";
+import { TrainRowSchema, type TrainCommand } from "@agentkitai/agentrig-core";
 
+import { trainPaths } from "../../../test/train-paths.ts";
+describe.each(trainPaths)("$name", ({ runTrain, trainStatus, trainCommand }) => {
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.map(root => rm(root, { recursive: true, force: true }))); roots.length = 0; });
 const row = { task: "Ship fixture", authorization: "I authorize this fixture task and its merge", scope: ["src"], environment: { checkout: resolve(tmpdir(), "fixture-checkout"), repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"] } };
@@ -436,4 +438,6 @@ it("keeps profile selection in the run child, never the declared checks", async 
     expect(env?.AGENTRIG_CHILD_PROFILE).toBeUndefined(); expect(env?.PROFILE_ONLY).toBeUndefined();
     expect(env?.LAUNCHER_ONLY).toBe("kept"); expect(env?.CODEX_HOME).toBe("/profile/codex");
   }
+});
+
 });

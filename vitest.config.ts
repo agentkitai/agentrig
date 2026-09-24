@@ -23,6 +23,9 @@ export default defineConfig({
     // Tests import workspace packages by name and resolve straight to source,
     // so no build step is needed before `pnpm test`.
     alias: {
+      "@agentkitai/agentrig-train": fileURLToPath(new URL("./packages/train/src/index.ts", import.meta.url)),
+      "@agentkitai/agentrig-ship/train-github": fileURLToPath(new URL("./packs/ship/src/train-github.ts", import.meta.url)),
+      "@agentkitai/agentrig-ship/train": fileURLToPath(new URL("./packs/ship/src/train.ts", import.meta.url)),
       "@agentkitai/agentrig-core": pkg("core"),
       "@agentkitai/agentrig-memory": pkg("memory"),
       "@agentkitai/agentrig-supervisor": pkg("supervisor"),

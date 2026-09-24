@@ -1,23 +1,35 @@
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, realpath, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, expect, it, vi } from "vitest";
-import { runTrain, type TrainCommand } from "@agentkitai/agentrig-core";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type TrainCommand, SpendLedger, SessionStore } from "@agentkitai/agentrig-core";
 
+import { trainPaths } from "../../../test/train-paths.ts";
+import { trainGithubCommand as shipCommand } from "@agentkitai/agentrig-ship/train-github";
+import { trainGithubCommand as cliCommand } from "../../../packages/cli/src/train-github.js";
+describe.each(trainPaths)("$name GitHub policy", ({ name, runTrain, trainUsage }) => {
+const trainGithubCommand = name === "core compatibility" ? cliCommand : shipCommand;
+it("does not multiply rate-limit budgets through compatibility decoration", () => {
+  const command: TrainCommand = async () => ({ code: 0, stdout: "", stderr: "" });
+  const once = trainGithubCommand(command);
+  expect(shipCommand(once)).toBe(once);
+  expect(cliCommand(once)).toBe(once);
+});
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.map(root => rm(root, { recursive: true, force: true }))); roots.length = 0; });
 const row = { task: "Ship fixture", authorization: "I authorize this fixture task and its merge", scope: ["src"], environment: { checkout: resolve(tmpdir(), "fixture-checkout"), repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"] } };
-async function fixture(count = 1) {
+async function fixture(count = 1, checkout = row.environment.checkout) {
+  const fixtureRow = { ...row, environment: { ...row.environment, checkout } };
   const root = await mkdtemp(join(tmpdir(), "train-")); roots.push(root);
   await mkdir(join(root, "queue"));
-  for (let n = 1; n <= count; n++) await writeFile(join(root, "queue", `${n}.json`), JSON.stringify(row));
+  for (let n = 1; n <= count; n++) await writeFile(join(root, "queue", `${n}.json`), JSON.stringify(fixtureRow));
   const calls: string[] = [];
   let marker = "";
   const command: TrainCommand = async (request) => {
     calls.push(request.argv.join(" "));
     const a = request.argv;
     let stdout = "";
-    if (a.includes("--show-toplevel")) stdout = row.environment.checkout;
+    if (a.includes("--show-toplevel")) stdout = checkout;
     if (a[0] === "rev-parse" && !a.includes("--show-toplevel")) stdout = "c".repeat(40);
     if (a[0] === "merge-base" && a[3] === "c".repeat(40)) return { code: 1, stdout: "", stderr: "" };
     if (a.includes("--show-current")) stdout = "main";
@@ -34,7 +46,34 @@ async function fixture(count = 1) {
   return { root, command, calls };
 }
 
-import { trainGithubCommand } from "../src/train-github.js";
+
+for (const phase of ["pr", "run"]) it(`raw transport preserves retry ownership and usage for gh ${phase}`, async () => {
+  const checkout = await realpath(await mkdtemp(join(tmpdir(), "train-retry-checkout-"))); roots.push(checkout);
+  const f = await fixture(1, checkout);
+  const store = new SessionStore({ root: join(f.root, "logs", "sessions") });
+  await store.append("fixture-session", { type: "session.end", reason: "done" });
+  const ledger = new SpendLedger(checkout);
+  const admission = await ledger.admit({ session: "fixture-session", segment: "fixture", provider: "openai-chatgpt", model: "chat", reserve: null, rates: null });
+  await ledger.settle(admission, { input: 7, output: 3 }, true);
+  const ledgerBefore = await readFile(join(checkout, ".agentrig", "usage.jsonl"), "utf8");
+  let attempts = 0;
+  const raw: TrainCommand = async request => {
+    if (request.executable === "gh" && request.argv[0] === phase && ++attempts === 1)
+      return { code: 1, stdout: "", stderr: "HTTP 429 rate limit exceeded\nRetry-After: 1" };
+    return f.command(request);
+  };
+  const explicitShip = name === "train package + ship stages";
+  // Deliberately raw: only explicit train+ship composition owns automatic retry.
+  expect(await runTrain(f.root, { command: raw })).toBe(explicitShip ? "empty" : "halted");
+  expect(attempts).toBe(explicitShip ? 2 : 1);
+  expect(f.calls.filter(call => call.startsWith("run --"))).toHaveLength(1);
+  const state = JSON.parse(await readFile(join(f.root, "logs/1.state.json"), "utf8"));
+  expect(state.sessionIds).toEqual(["fixture-session"]);
+  expect(await readdir(join(f.root, explicitShip ? "done" : "halted"))).toEqual(["1.json"]);
+  expect((await trainUsage(f.root))[0]?.totals).toMatchObject({ input: 7, output: 3, unpricedCalls: 1 });
+  expect(await readFile(join(checkout, ".agentrig", "usage.jsonl"), "utf8")).toBe(ledgerBefore);
+});
+
 for (const phase of ["pr", "run"]) it(`RL1 retries fake gh ${phase} once then completes row`, async () => {
   const f = await fixture(); let failures = 0;
   const sleep = vi.fn(async () => undefined);
@@ -140,4 +179,6 @@ for (const phase of ["pr", "run"]) for (const unrelatedReset of [101, 3400]) it(
   expect(sleep).toHaveBeenCalledExactlyOnceWith(30000);
   expect(probes).toBe(1);
   expect(attempts).toBe(2);
+});
+
 });

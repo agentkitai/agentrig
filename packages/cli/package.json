@@ -41,7 +41,8 @@
     "typescript": "^5.9.3",
     "ws": "8.21.3",
     "yoga-layout": "3.2.1",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@agentkitai/agentrig-ship": "workspace:*"
   },
   "bin": {
     "agentrig": "./dist/index.js"
