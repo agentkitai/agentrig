@@ -72,3 +72,35 @@ it.each([undefined, "CUSTOM SYSTEM: keep exactly this base"])("real request appe
     expect(manifest.blocks).toContainEqual(expect.objectContaining({ source: "system_prompt", origin: system === undefined ? "cli:default-system" : "cli:--system" }));
   } finally { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); }
 });
+
+it.each(["legacy-ship-builder", "legacy-ship-fixer"])("legacy CLI entry routes %s through an authoritative role binding", async agent => {
+  const { cwd, home, logs } = await fixture();
+  const requests: Array<{ model: string; messages: Array<{ role: string; content: string }> }> = [];
+  const server = createServer(async (req, res) => {
+    let body = ""; for await (const chunk of req) body += chunk;
+    const request = JSON.parse(body); requests.push(request);
+    const delta = requests.length === 1 ? { tool_calls: [{ index: 0, id: "builder-call", type: "function",
+      function: { name: "subagent", arguments: JSON.stringify({ task: "Return done", agent }) } }] } : { content: "done" };
+    res.setHeader("content-type", "text/event-stream");
+    res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: requests.length === 1 ? "tool_calls" : "stop" }] })}\n\ndata: [DONE]\n\n`);
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  try {
+    const address = server.address(); if (!address || typeof address === "string") throw Error("fixture address");
+    const baseUrl = `http://127.0.0.1:${address.port}/v1`;
+    await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false, root: logs, repoMap: false,
+      packages: false, extensionDiscovery: false, skillDiscovery: false, subagents: true,
+      providers: { sol: { provider: "openai", model: "builder-model", baseUrl } } }));
+    await buildProgram({ config: { cwd, home, env: cliEnv() } }).parseAsync(["run", "task", "--trust", "--headless", "--json",
+      "--provider", "openai", "--model", "conductor-model", "--base-url", baseUrl,
+      "--max-turns", "2", "--yolo", "--builder-provider", "sol"], { from: "user" });
+    expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(0);
+    expect(requests.map(request => request.model)).toEqual(["conductor-model", "builder-model", "conductor-model"]);
+    const store = new SessionStore({ root: logs });
+    const events = (await Promise.all((await store.list()).map(session => store.readAll(session.id)))).flat();
+    expect(events).toContainEqual(expect.objectContaining({ type: "subagent.spawn", role: expect.objectContaining({ name: agent, provider: "sol" }) }));
+    expect(requests[1]!.messages.filter(message => message.role === "system").map(message => message.content).join("\n"))
+      .toContain(`Act as the ship ${agent.endsWith("fixer") ? "fixer" : "builder"}`);
+    expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toMatch(/deprecated.*provider-bound role/);
+  } finally { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); }
+});

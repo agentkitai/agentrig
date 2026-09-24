@@ -1,3 +1,20 @@
+## R19e in progress — builder routing compatibility slice (not done)
+
+This first slice uses the explicitly authorized builder-routing-first split. Ship now
+supplies provider-bound compatibility roles for legacy `builderProvider` rows and
+`--builder-provider`; its warning names `.agentrig/agents/<role>.md` with `provider:`
+as the replacement. Ship instructions prefer role bindings, while old conductor
+explicit-provider calls and their routing marker remain supported. CLI composes
+those roles through R19a's authoritative role path; train schema, validation and
+usage fields remain readable for existing conductors. Generated ship skill output
+is synchronized as a supported compatibility entrypoint.
+
+Remaining R19e acceptance: generic fresh-session skill flag replacing TUI's topic
+name case; move the default merge/delivery prompt clause into a pack contribution;
+configurable supervisor progress patterns supplied by ship. No R19f work, no new
+gates. R19e stays incomplete; the conductor owns final done markers after reviews.
+Fail-first, mutation, declared-check and ship-pack receipts travel in this PR.
+
 ## R19d done — #568 + #569: CLI on train + ship, core train API retired
 
 R19d is complete across first slice **#568** plus final slice **#569**

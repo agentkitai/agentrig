@@ -1,3 +1,4 @@
+import { shipBuilderCompatibility } from "@agentkitai/agentrig-ship/train-host";
 import { join, resolve } from "node:path";
 import type { TuiSettings } from "./tui/settings.js";
 import { inspectPackages, type InstalledPackage } from "./packages.js";
@@ -781,9 +782,17 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const observeSession = (session: import("@agentkitai/agentrig-core").Session) => telemetry?.observe(session);
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(catalogue));
+  const builderCompatibility = shipBuilderCompatibility(opts.builderProvider, tools.map(tool => tool.name));
+  if (builderCompatibility.warning) (extras.onNotice ?? console.error)(builderCompatibility.warning);
   if (opts.subagents === true) {
-    const agentRoles = opts.trustedProjectRoot === undefined ? [] : await discoverAgentRoles(opts.trustedProjectRoot,
+    const discoveredRoles = opts.trustedProjectRoot === undefined ? [] : await discoverAgentRoles(opts.trustedProjectRoot,
       error => extras.onHookError?.(error.message));
+    for (const role of builderCompatibility.roles) {
+      if (discoveredRoles.some(existing => existing.name === role.name)) {
+        throw new Error(`legacy builder role name collision: ${role.name}; replace --builder-provider with a provider-bound role`);
+      }
+    }
+    const agentRoles = [...discoveredRoles, ...builderCompatibility.roles];
     tools.push(
       subagentTool(
         (() => { const options = subagentOptions({
@@ -833,7 +842,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     // a function so a resumed session gets its snapshot's cwd, not this process's
     systemPrompt: (ctx) => promptBlocks({
       system: [opts.system ?? defaultSystemPrompt(ctx.cwd),
-        ...(opts.builderProvider === undefined ? [] : [`Train builder provider entry: ${JSON.stringify(opts.builderProvider)}. See ship's builder routing rule.`])].join("\n\n"),
+        ...(builderCompatibility.systemPrompt === undefined ? [] : [builderCompatibility.systemPrompt])].join("\n\n"),
       systemOrigin: opts.system === undefined ? "cli:default-system" : "cli:--system",
       // the generation in force when the session starts, so the listing and the `skill` tool
       // above cannot disagree about what this conversation may load

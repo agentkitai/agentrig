@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
 interface ReviewerSlot { adapter: string }
 /** CLI supplies generic configuration/trust resolution; ship owns train preflight policy. */
@@ -37,4 +38,22 @@ export function createTrainHost(host: TrainHost) {
   }
 
   return { trainChildEnvironment, resolveTrainTestTimeout };
+}
+
+/** Compatibility only: new callers use provider-bound .agentrig/agents roles directly. */
+export function shipBuilderCompatibility(provider: string | undefined, toolNames: string[]) {
+  if (provider === undefined) return { roles: [] };
+  const roles = ["builder", "fixer"].map(kind => {
+    const body = `Act as the ship ${kind}. Follow the assigned task and skill; do not expand its scope.`;
+    const fields = { tools: toolNames.filter(name => name !== "subagent"), provider,
+      "model-role": "subagents" as const, delegable: false };
+    const name = `legacy-ship-${kind}`;
+    return { name, body, ...fields, schema: "1" as const, origin: `ship:compat/${name}`,
+      hash: createHash("sha256").update(JSON.stringify({ name, body, fields })).digest("hex") };
+  });
+  return { roles,
+    warning: `builderProvider / --builder-provider is deprecated; replace it with a provider-bound role in .agentrig/agents/<role>.md (provider: ${provider}) and call subagent with agent: <role>.`,
+    // Preserve the old marker for conductors already running the earlier ship instructions.
+    systemPrompt: `Train builder provider entry: ${JSON.stringify(provider)}. See ship's builder routing rule.\nCompatibility role bindings: use subagent agent: "legacy-ship-builder" for builders and agent: "legacy-ship-fixer" for fixers, including continuations. Omit subagent.provider when using these roles. Old conductors may still pass the named provider explicitly. Never apply this override to reviewers, arbiters or landers.`,
+  };
 }
