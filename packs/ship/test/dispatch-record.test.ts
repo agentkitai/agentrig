@@ -139,17 +139,43 @@ it.each(["ok", "no-pr"])("unpinned row resume denies without fresh association: 
   const p = await probe(mode, "subagent", undefined, undefined, true, resumePrompt.replace(',"pr":7', ''));
   expect(p.result.action).toBe("deny");
   expect(p.result.reason).toContain("resume.pr");
-  expect(p.result.reason).toContain("fresh row marker");
   expect(p.calls).not.toContain("POST");
   expect(p.calls).not.toContain('"view"');
 });
-it("unpinned row resume posts and verifies after fresh marker association", async () => {
-  const prompt = hostPrompt.replace('"authorization":"not authorized to merge"}', '"authorization":"not authorized to merge","resume":{"session":"prior-session"}}');
-  const p = await probe("ok", "subagent", undefined, undefined, true, prompt);
+it("unpinned row resume denies even with fresh marker association", async () => {
+  const prompt = resumePrompt.replace(',"pr":7', '');
+  // Use the fresh marker rather than resumePrompt's deliberately replaced marker.
+  const fresh = prompt.replace(/agentrig-train-row:[a-f0-9-]+(?=\nReturn)/u, "agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099");
+  const p = await probe("ok", "subagent", undefined, undefined, true, fresh);
+  expect(p.result.action).toBe("deny");
+  expect(p.calls).not.toContain("POST");
+});
+
+const prePrPrompt = resumePrompt.replace('"pr":7', '"pr":null,"branch":"recovered-builder.v1"');
+const candidate = { number: 9, headRefName: "unrelated", headRefOid: "a".repeat(40), body: "unrelated" };
+it("#572 pre-PR resume continues only after fetched absence, on main", async () => {
+  const p = await probe("ok", "subagent", undefined, undefined, true, prePrPrompt, [candidate]);
   expect(p.result.action).toBe("continue");
-  expect(p.calls).toContain("issues/7/comments");
-  expect(p.calls).toContain("issues/comments/123");
-  expect(p.body).toContain(p.task);
+  expect(p.calls).toContain('"list","--state","open"');
+  expect(p.calls).not.toContain("POST");
+});
+it.each([
+  { ...candidate, headRefName: "recovered-builder.v1" },
+  { ...candidate, body: "agentrig-train-row:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
+])("#572 pre-PR resume denies existing branch or earlier marker: %j", async pr => {
+  const p = await probe("ok", "subagent", undefined, undefined, true, prePrPrompt, [pr]);
+  expect(p.result.action).toBe("deny");
+  expect(p.calls).not.toContain("POST");
+});
+it.each(["truncated", "malformed", "lookup-failure"])("#572 pre-PR resume cannot prove absence: %s", async mode => {
+  expect((await probe(mode, "subagent", undefined, undefined, true, prePrPrompt)).result.action).toBe("deny");
+});
+it.each(['', ',"branch":""', ',"branch":7', ',"branch":"bad branch"'])("#572 explicit null requires valid branch %s", async branch => {
+  const prompt = resumePrompt.replace('"pr":7', '"pr":null' + branch);
+  expect((await probe("no-pr", "subagent", undefined, undefined, true, prompt)).result.action).toBe("deny");
+});
+it("#572 pre-PR recovery cannot dispatch repair intent", async () => {
+  expect((await probe("no-pr", "subagent", undefined, undefined, true, prePrPrompt, [], "Repair round: 1/3")).result.action).toBe("deny");
 });
 
 // Keep body and every other identity field valid: the old body-only validator

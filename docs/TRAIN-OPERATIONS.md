@@ -134,7 +134,21 @@ Each row is a strict zod-validated object (unknown fields are refused):
 `profile` is optional. `environment.sessionRoot` optionally selects an absolute
 session store; otherwise every row uses `<dir>/logs/sessions`. Optional
 `resume: {"session":"prior-session-id","pr":123}` resumes that same session
-through `run --resume`; `pr` is optional, but when present pins the returned PR.
+through `run --resume`; a positive `pr` pins the returned PR.
+For a crash before PR creation, explicitly use
+`resume: {"session":"prior-session-id","pr":null,"branch":"builder-branch"}`.
+Use the actual builder branch, not the conductor's checkout branch. The dispatch
+hook fetches the open-PR repository listing (not search) and permits initial-build
+dispatch only after a complete, valid listing proves no PR for that branch and no
+train-marked PR. Because fresh host markers cannot identify all earlier row
+markers, **any** open PR containing `agentrig-train-row:` conservatively blocks this
+recovery, including unrelated train rows; resolve the association and pin the PR
+rather than guessing. Failed, malformed or saturated listings halt. Repair-intent
+dispatch still requires a verified PR and cannot use this exception.
+Omitted `pr` remains schema-compatible but unpinned resume dispatch fails closed,
+even if the fresh marker is present. Do not use `pr: null` once a PR exists: use
+its positive PR number. `branch` is required only with `pr: null` and forbidden
+otherwise. This changes neither review/merge consent nor landing verification.
 Use the same session store as the original run. Queue text is input, not proof of
 consent: ship must apply the supplied authorization's actual bounds. Scope and
 authorization are forwarded verbatim as data, not converted into tool permissions.

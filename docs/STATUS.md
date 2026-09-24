@@ -8104,3 +8104,7 @@ Built-in `recommended` check/train profile validation now follows run's undeclar
 exception while retaining explicit user/project profiles and project-only commands. Paired tests
 exercise `loadRunConfig`, check resolution and train timeout resolution, including overrides,
 unknown rejection and repository-owned home exclusion. Independent conductor review is complete.
+
+## Issue #572 — explicit pre-PR train recovery
+
+Train rows accept `resume: {session, pr: null, branch}` for a crash before PR creation. The ship dispatch hook permits initial-build continuation only after a complete fetched open-PR listing excludes the named branch and conservatively excludes all train-marked PRs (including earlier markers). All other unpinned resumes deny dispatch; positive pins retain exact PR resolution and byte-readback recording. No repair-intent, permission, review, or landing bypass. Operator form and conservative unrelated-marker refusal are documented in TRAIN-OPERATIONS.
