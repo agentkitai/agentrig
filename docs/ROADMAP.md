@@ -646,11 +646,11 @@ fake provider's request, not on internal state.
 
 ### R1.5 — Context economy (added after the first --yolo dogfood run)
 
-Eviction follow-ups (#579 / #580) — implementation awaiting independent review:
+Eviction follow-ups (#579 / #580) — **done** (#583; independent reviews resolved):
 one complete-input serialization per eviction pass, including the no-usage fallback;
 conservative character-based incremental savings; always protect the newest turn in
 window mode. Preserve threshold and oldest-first behavior and the explicit legacy
-policy. This user-directed follow-up is not marked done before conductor review.
+policy. LOW optimization and future-invariant observations remain advisory in #583.
 
 
 Window-aware context follow-up — **done** (#578; independent reviews resolved): use
