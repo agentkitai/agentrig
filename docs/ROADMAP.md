@@ -646,11 +646,13 @@ fake provider's request, not on internal state.
 
 ### R1.5 — Context economy (added after the first --yolo dogfood run)
 
-Window-aware context follow-up (implementation awaiting independent review): use the
-resolved per-model/provider-entry window for eviction and compaction, with default
+Window-aware context follow-up — **done** (#578; independent reviews resolved): use
+the resolved per-model/provider-entry window for eviction and compaction, with default
 50% pressure and oldest-first eviction. `gpt-6-astra` is owner-confirmed at 1M tokens;
 unknown models keep adapter fallbacks, explicit legacy eviction options remain
-supported. See PLAN §2.2/§2.6 and STATUS; not marked done before conductor review/landing.
+supported. See PLAN §2.2/§2.6 and STATUS. Non-blocking residuals: #579 (estimator
+latency), #580 (fresh-result behavior with custom small windows); coverage and LOW
+observations remain advisories in the PR disposition, not new acceptance gates.
 
 
 *Evidence: the first unattended dogfood run (the supervisor-defect fix, PR #33) spent
