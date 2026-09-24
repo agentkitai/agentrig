@@ -132,4 +132,13 @@ export async function main(args) {
   process.stdout.write(JSON.stringify(durable) + "\n");
 }
 export function runCli() { return main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = error instanceof UsageError ? 64 : 2; }); }
-if (process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url) await runCli();
+
+// Eval/embedded consumers need not supply an existing executable path.
+// Catch entry resolution only: genuine CLI failures must still propagate.
+function entryPath() {
+  try { return process.argv[1] ? realpathSync(process.argv[1]) : undefined; }
+  catch { return undefined; }
+}
+const entry = entryPath();
+
+if (entry && pathToFileURL(entry).href === import.meta.url) await runCli();

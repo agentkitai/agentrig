@@ -57,4 +57,13 @@ export function runCli() {
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) { runCli(); }
+
+// Eval/embedded consumers need not supply an existing executable path.
+// Catch entry resolution only: genuine CLI failures must still propagate.
+function entryPath() {
+  try { return process.argv[1] ? realpathSync(process.argv[1]) : undefined; }
+  catch { return undefined; }
+}
+const entry = entryPath();
+
+if (entry && entry === fileURLToPath(import.meta.url)) { runCli(); }

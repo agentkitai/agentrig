@@ -12,7 +12,11 @@ manifest, config aliases and public API use; existing script behavior suites rem
 Repair round 1 addresses F1: all executable moved scripts and legacy shims resolve
 the argv entry path before comparing it with Node’s canonical module URL.
 Symlinked direct success/error parity and inert imports have regression coverage;
-F1 remains pending independent delta review. F2/F3 advisories are unchanged.
+F1 was independently closed in the focused review. Repair round 2 addresses new
+F4: absent/nonexistent argv stays import-safe without weakening symlink entry
+detection or swallowing CLI errors. Fail-first coverage spans every moved/legacy
+script. F4 is fixed pending independent delta review, not closed; F2/F3
+advisories are unchanged.
 
 **R19c is not done.** Remaining slices: installed packaging/host wiring as needed;
 skills/roles, SHIPPING-WORKFLOW and shared includes; instruction/script-test

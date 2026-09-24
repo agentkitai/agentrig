@@ -104,3 +104,18 @@ it.each(scripts)("%s keeps symlinked legacy/new direct execution and inert impor
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+for (const prefix of ["scripts", "packs/ship/scripts"]) {
+  for (const argv of [[], ["definitely-not-a-file"]]) {
+    it.each(scripts)(`${prefix}/%s imports inertly with ${argv.length ? "nonexistent" : "absent"} argv entry`, name => {
+      const url = new URL(`${prefix}/${name}`, root);
+      const result = spawnSync(process.execPath, ["--input-type=module", "-e",
+        `const module = await import(${JSON.stringify(url.href)}); if (!Object.keys(module).length) throw new Error("missing exports"); console.log("import-only");`, ...argv],
+      { encoding: "utf8", cwd: fileURLToPath(root) });
+      expect(result.error).toBeUndefined();
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe("import-only\n");
+    });
+  }
+}
