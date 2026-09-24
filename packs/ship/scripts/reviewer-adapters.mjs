@@ -2,7 +2,7 @@
 // Skill-side process/provider adapters only. Scheduling, check gates and findings are skill policy.
 import { reviewIdentity, persistReview } from "./review-provenance.mjs";
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseVerdictReceipt, verdictPrompt } from "./review-verdict.mjs";
@@ -132,4 +132,4 @@ export async function main(args) {
   process.stdout.write(JSON.stringify(durable) + "\n");
 }
 export function runCli() { return main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = error instanceof UsageError ? 64 : 2; }); }
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) await runCli();
+if (process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url) await runCli();

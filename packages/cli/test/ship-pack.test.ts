@@ -1,8 +1,8 @@
-import { readFileSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 const root = new URL("../../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, root), "utf8");
@@ -47,6 +47,8 @@ it("pack scripts use the package-root public API, never private CLI dist", () =>
 it("successful direct extraction preserves output and provenance through both paths", () => {
   const dir = mkdtempSync(join(tmpdir(), "ship-parity-"));
   try {
+    const link = join(dir, "checkout");
+    symlinkSync(fileURLToPath(root), link, "junction");
     const input = join(dir, "input.md"), output = join(dir, "output.md");
     writeFileSync(input, "VERDICT: PASS\nReviewed head: " + "a".repeat(40) + "\nNo findings.\n");
     const run = (path: string) => {
@@ -57,6 +59,10 @@ it("successful direct extraction preserves output and provenance through both pa
     const legacy = run("scripts/review-finding-index.mjs");
     rmSync(output); rmSync(`${output}.provenance.json`);
     expect(run("packs/ship/scripts/review-finding-index.mjs")).toEqual(legacy);
+    for (const prefix of ["scripts", "packs/ship/scripts"]) {
+      rmSync(output); rmSync(`${output}.provenance.json`);
+      expect(run(pathToFileURL(join(link, prefix, "review-finding-index.mjs")).href)).toEqual(legacy);
+    }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 it("source bootstrap exposes callable public config, environment and provider APIs", () => {
@@ -70,4 +76,31 @@ it("source bootstrap exposes callable public config, environment and provider AP
   `], { encoding: "utf8" });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
+});
+
+// Node canonicalizes import.meta.url but preserves symlink spelling in argv[1].
+it.each(scripts)("%s keeps symlinked legacy/new direct execution and inert imports", name => {
+  const dir = mkdtempSync(join(tmpdir(), "ship-symlink-"));
+  try {
+    const link = join(dir, "checkout");
+    symlinkSync(fileURLToPath(root), link, "junction");
+    const run = (path: string) => {
+      const result = spawnSync(process.execPath, [path], { encoding: "utf8" });
+      expect(result.error).toBeUndefined();
+      return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+    };
+    for (const prefix of ["scripts", "packs/ship/scripts"]) {
+      const canonical = fileURLToPath(new URL(`${prefix}/${name}`, root));
+      const linked = join(link, prefix, name);
+      const expected = run(canonical);
+      if (name !== "review-verdict.mjs") expect(expected.status).not.toBe(0);
+      expect(run(linked)).toEqual(expected);
+      // Importing with unrelated argv must not execute either entry point.
+      const safe = spawnSync(process.execPath, ["--input-type=module", "-e",
+        `await import(${JSON.stringify(pathToFileURL(linked).href)}); console.log("import-only");`, join(link, "packs/ship/index.mjs")], { encoding: "utf8" });
+      expect(safe.status).toBe(0);
+      expect(safe.stdout).toBe("import-only\n");
+      expect(safe.stderr).toBe("");
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

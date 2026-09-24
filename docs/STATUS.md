@@ -9,6 +9,10 @@ checks/reviewers retained for running train/raw readers. `shipPack` supports tru
 host registration and an informational command; this is not an installed pack or
 automatic discovery loader. Parity tests pin exports, direct execution, extension
 manifest, config aliases and public API use; existing script behavior suites remain.
+Repair round 1 addresses F1: all executable moved scripts and legacy shims resolve
+the argv entry path before comparing it with Node’s canonical module URL.
+Symlinked direct success/error parity and inert imports have regression coverage;
+F1 remains pending independent delta review. F2/F3 advisories are unchanged.
 
 **R19c is not done.** Remaining slices: installed packaging/host wiring as needed;
 skills/roles, SHIPPING-WORKFLOW and shared includes; instruction/script-test

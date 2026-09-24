@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Index live GitHub review comments, never a conductor-authored summary.
 import { cliAdapters, normalizeReviewerHead } from "./reviewer-adapters.mjs";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { verdictRange, hasVerdictBlock, parseVerdict, receiptTransport } from "./review-verdict.mjs";
@@ -133,4 +133,4 @@ export function runCli() {
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) { runCli(); }
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) { runCli(); }

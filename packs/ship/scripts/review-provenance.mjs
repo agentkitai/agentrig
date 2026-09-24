@@ -2,7 +2,7 @@
 // Adapter-owned evidence survives scratch/worktree cleanup. The PR stores the
 // receipt locator AND digest; prose/model claims alone cannot recreate evidence.
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,4 +57,4 @@ export function runCli() {
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) { runCli(); }
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) { runCli(); }

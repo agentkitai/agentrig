@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Usage: node scripts/post-review-comment.mjs PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]
 // Validate the structured verdict and caller binding before any remote side effect.
-import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, rmSync, realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -161,4 +161,4 @@ try {
 
 }
 import { pathToFileURL } from "node:url";
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) await runCli();
+if (process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url) await runCli();
