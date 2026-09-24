@@ -12,7 +12,9 @@ it("source ship manifest and compatibility config register the reserved ship nam
   expect(manifest).toMatchObject({ name: "ship", configNamespace: "ship", apiVersion: 1 });
   expect(manifest.scripts).toEqual(scripts);
   const config = JSON.parse(read(".agentrig/config.json"));
-  expect(config.packs.ship).toEqual({ checks: config.checks, reviewers: config.reviewers });
+  expect(config).not.toHaveProperty("checks");
+  expect(config).not.toHaveProperty("reviewers");
+  expect(Object.keys(config.packs.ship).sort()).toEqual(["checks", "reviewers"]);
   // @ts-expect-error source pack module
   const { shipPack } = await import("../../../packs/ship/index.mjs");
   const { buildProgram } = await import("../../../packages/cli/src/program.js");

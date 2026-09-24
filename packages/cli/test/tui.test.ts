@@ -871,7 +871,7 @@ describe("TuiController", () => {
       [{ type: "text_delta", text: "first" }, usage(1, 1), stop("end_turn")],
     ]);
     const c = makeControllerWith(provider);
-    c.setSkills([{ name: "topic", description: "release train", path: "/p/topic.md", body: "b" }]);
+    c.setSkills([{ name: "topic", description: "release train", path: "/p/topic.md", body: "b", flags: ["fresh-session"] }]);
 
     await c.submit("an earlier turn");
     const firstSession = c.snapshot().sessionId;
@@ -902,17 +902,17 @@ describe("TuiController", () => {
     expect(JSON.stringify(provider.requests[1]!.messages)).not.toContain("earlier turn");
   });
 
-  it("/skill-name continues the conversation, exactly like a task line", async () => {
+  it.each(["deploy", "topic"])("unflagged /%s continues the conversation, exactly like a task line", async (name) => {
     // a /skill that silently started a FRESH session would drop everything said so far
     const provider = new FakeProvider([
       [{ type: "text_delta", text: "Hello!" }, usage(1, 1), stop("end_turn")],
       [{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")],
     ]);
     const c = makeControllerWith(provider);
-    c.setSkills([{ name: "deploy", description: "how to ship", path: "/p/deploy.md", body: "b" }]);
+    c.setSkills([{ name, description: "how to ship", path: "/p/deploy.md", body: "b" }]);
     await c.submit("remember the context");
     const first = c.snapshot().sessionId;
-    await c.submit("/deploy go");
+    await c.submit(`/${name} go`);
     expect(c.snapshot().sessionId).toBe(first);
     // the model sees the earlier conversation, not just the composed skill turn
     const history = JSON.stringify(provider.requests.at(-1)!.messages);

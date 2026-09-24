@@ -12,7 +12,7 @@ export async function compatibilityCopies() {
   if (skills.map(skill => skill.name).join(",") !== "arbiter,dogfood,land,review,ship,topic") throw new Error("Incomplete ship skill inventory");
   const copies = new Map();
   for (const skill of skills) copies.set(`.agentrig/skills/${skill.name}/SKILL.md`,
-    `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n\n${lf(skill.body)}\n`);
+    `---\nname: ${skill.name}\ndescription: ${skill.description}\n${skill.flags === undefined ? "" : `flags: ${JSON.stringify(skill.flags)}\n`}---\n\n${lf(skill.body)}\n`);
   copies.set('docs/SHIPPING-WORKFLOW.md', lf(await readFile(new URL('./docs/SHIPPING-WORKFLOW.md', import.meta.url), 'utf8')));
   return copies;
 }

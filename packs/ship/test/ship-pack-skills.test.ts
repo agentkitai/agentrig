@@ -39,7 +39,8 @@ it.each([false, true])("preserves all six resolved skill bodies and metadata byt
     const legacy = parseSkill(crlf ? lf.replace(/\n/g, "\r\n") : lf, path);
     expect(Buffer.from(skill.body), skill.name).toEqual(Buffer.from(legacy.body));
     expect(skill.description, skill.name).toBe(legacy.description);
-    expect(skill.flags).toBeUndefined();
+    expect(skill.flags).toEqual(skill.name === "topic" ? ["fresh-session"] : undefined);
+    expect(legacy.flags).toEqual(skill.flags);
     expect(skill.assets).toBeUndefined();
     expect(skill.includes?.length).toBeGreaterThan(0);
     const loaded = await skillTool(skills).execute({ name: skill.name }, { emit: () => {} } as unknown as ToolContext);
@@ -73,4 +74,16 @@ it("shares each extracted contract between multiple entries without making fragm
   }
   // A pack-only installation has no repository compatibility tree to fall back to.
   expect((await discoverSkills({ roots: [root] })).map(skill => skill.name)).toEqual(names);
+});
+
+it("repository shipping config is pack-owned with identical check commands", () => {
+  const config = JSON.parse(readFileSync(new URL("../../../.agentrig/config.json", import.meta.url), "utf8"));
+  expect(config).not.toHaveProperty("reviewers");
+  expect(config).not.toHaveProperty("checks");
+  expect(config.packs.ship.checks).toEqual({ bootstrap: "pnpm install --frozen-lockfile", preflight: "pnpm test:preflight", steps: [
+    { name: "build", command: "pnpm build" },
+    { name: "test", command: "pnpm test", countsParser: "vitest", testTimeout: 15000 },
+    { name: "typecheck", command: "pnpm typecheck" },
+  ] });
+  expect(config.packs.ship.reviewers).toEqual({ "Claude Code": { adapter: "claude-cli", model: "claude-opus-5" }, "Codex": { adapter: "codex-cli", model: "gpt-5.6-sol" } });
 });

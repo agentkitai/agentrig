@@ -345,19 +345,25 @@ describe("stall detector", () => {
     expect(feed(stallDetector({ turns: 3 }), events).signals).toHaveLength(1);
   });
 
-  it("treats repeated successful git push operations as shipping progress", () => {
+  it.each([
+    { progressPatterns: undefined, command: "git push origin task", ok: true, stalls: 1 },
+    { progressPatterns: [], command: "git push origin task", ok: true, stalls: 1 },
+    { progressPatterns: ["^custom publish$"], command: "custom publish", ok: true, stalls: 0 },
+    { progressPatterns: ["^custom publish$"], command: "custom publish", ok: false, stalls: 1 },
+    { progressPatterns: ["^custom publish$"], command: "git push origin task", ok: true, stalls: 1 },
+  ])("only configured successful commands exempt repeats: $command/$ok/$stalls", ({ progressPatterns, command, ok, stalls }) => {
     const events: HarnessEvent[] = [];
     for (let i = 0; i < 5; i++) {
       events.push(...exchange(
         `push-${i}`,
         "bash",
         "same-git-push",
-        { command: "git push -u origin feat/supervisor-refinement" },
-        true,
-        "Everything up-to-date",
+        { command },
+        ok,
+        ok ? "Everything up-to-date" : "[exit code 1]",
       ), turnEnd());
     }
-    expect(feed(stallDetector({ turns: 3 }), events).signals).toHaveLength(0);
+    expect(feed(stallDetector({ turns: 3, progressPatterns }), events).signals).toHaveLength(stalls);
   });
 
   it("a turn that changes a file resets the count", () => {
