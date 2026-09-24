@@ -131,12 +131,12 @@ export function createTrain(runtime: TrainRuntime, stages: TrainStages) {
     }
     // A crashed lock is deliberately not stolen. Operator reconciles children before removing it.
     await mkdir(join(root, ".lock"));
-    const command = stages.command?.(options.command ?? trainCommand) ?? options.command ?? trainCommand;
     const list = async (folder: string) => (await readdir(join(root, folder))).sort();
     const status = async () => {
       options.status?.(await trainStatus(root, options));
     };
     try {
+      const command = stages.command?.(options.command ?? trainCommand) ?? options.command ?? trainCommand;
       // Never replay a possibly still-live child or land operation following a crash.
       for (const name of await list("active")) {
         if (!rowName(name)) continue;

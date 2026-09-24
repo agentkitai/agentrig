@@ -16,6 +16,12 @@ not R19e. Dependencies R19a/R19b/R19c are complete on fetched main (#549/#559/#5
   facade and independently composed public train package. Pack-owned GitHub tests
   cover both paths; a custom-stage fixture replaces all four stages. Named fail-first
   mutants and exact-head declared/ship-pack/CRLF receipts travel in the PR body.
+- Repair round 1 (#568): decorator construction now runs inside lock cleanup;
+  the legacy core transport override remains caller-owned (no implicit retry),
+  while explicit train+ship composition decorates raw transports. Fail-first
+  regressions cover lock reacquisition, both gh retry phases, call counts and
+  unchanged usage attribution through both public paths. Independent re-review
+  and exact-head CI remain conductor gates.
 - Deferred slices: switch CLI to explicit train+ship composition, drop core train
   exports, move train-specific child-env and project-check helpers, and finish
   relocating the ledger/message compatibility adapters. The temporary core →

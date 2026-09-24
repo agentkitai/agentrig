@@ -10,5 +10,8 @@ const train = createTrain({ usage: trainUsage, assistantText(value) {
   const message = MessageSchema.safeParse(value);
   if (message.success && message.data.role === "assistant") return message.data.content.filter(block => block.type === "text").map(block => block.text).join("");
   return undefined;
-} }, shipTrainStages);
+} }, { ...shipTrainStages,
+  // The legacy override is caller-owned; CLI callers already decorate it explicitly.
+  command: command => command,
+});
 export const { runTrain, trainStatus, trainCommand } = train;

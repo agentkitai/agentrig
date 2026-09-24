@@ -46,3 +46,28 @@ it("preserves a custom wire receipt through real child transport for the row par
     expect(stages.receipt.parse(wire)).toEqual({ pr: 7 });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it("releases the lock when command decoration throws before row execution", async () => {
+  const root = await mkdtemp(join(tmpdir(), "train-decoration-"));
+  try {
+    const row = JSON.stringify({ task: "custom", authorization: "fixture", scope: ["src"], environment: { checkout: root, repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"] } });
+    await mkdir(join(root, "queue"));
+    await writeFile(join(root, "queue", "custom.json"), row);
+    const preCheck = vi.fn(async () => "base");
+    const command = vi.fn(async () => ({ code: 0, stdout: "", stderr: "" }));
+    const failure = new Error("decorator construction failed");
+    const stages: TrainStages = {
+      command() { throw failure; }, preCheck, prompt: () => "prompt",
+      receipt: { schema: {}, parse: () => ({ pr: 1 }) }, async verify() {},
+    };
+    const train = createTrain({ usage: async () => [], assistantText: () => undefined }, stages);
+    await expect(train.runTrain(root, { command })).rejects.toBe(failure);
+    await expect(readFile(join(root, ".lock"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(root, "queue", "custom.json"), "utf8")).toBe(row);
+    expect(preCheck).not.toHaveBeenCalled();
+    expect(command).not.toHaveBeenCalled();
+    await writeFile(join(root, "STOP"), "");
+    const retry = createTrain({ usage: async () => [], assistantText: () => undefined }, { ...stages, command: raw => raw });
+    await expect(retry.runTrain(root, { command })).resolves.toBe("stopped");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
