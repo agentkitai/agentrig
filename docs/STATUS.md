@@ -1,3 +1,27 @@
+## R19f slice 2 — minimal merge guard (implementation; review/landing pending)
+
+Current roadmap row: R19f slice 2; next is R19f slice 3 (superseded manual
+bookkeeping prose). R19f is **not complete**; no whole-row completion marker.
+
+The ship-pack pre-tool gate guards literal gh PR and REST API merge calls. It
+requires the initial host Row.authorization verbatim in the bound PR body,
+required green exact-current-head checks, and a named lander child whose resolved
+spawn envelope matches a successful dispatch record for that PR. Later prompt or
+tool-input text is not authority. Dispatch comment edits, malformed/failed API
+reads and stale/pending/red checks fail closed with reasons. SHA-pinned execution
+and a final PR re-read bound the check/use race; GitHub branch protection remains
+the remote backstop. Existing ledger integrity and compatibility reexports remain.
+
+CLI child configuration shares activated extension pre-tool gates (not parent
+lifecycle/checkpoint hooks or extension tools), so the actual lander is guarded.
+No review-resolution judgment, new review evidence format, land-skill edits or
+new review rules. Live grants require redispatch after a host restart. The bounded
+shell parser is not a sandbox; indirect scripts are not interpreted. Exact-head
+local receipts and named fail-first/mutation probes travel in the PR ledger.
+[Activation and self-landing handoff](../packs/ship/docs/MERGE-GUARD.md) describes
+how a fresh reviewed-head host exercises this PR's guard during its own landing;
+the builder does not merge. LOW observations and wording followups stay advisory.
+
 ## Verify every typed builder blocker — #582 implementation awaiting independent review
 
 Current roadmap row: user-directed #582; next remains ROADMAP §5 continuation.
@@ -91,7 +115,7 @@ Legacy direct factory consumers remain supported. The dispatch fail-first suite
 runs against both legacy and authoritative envelopes, including repeated identical
 spawns and pre_tool-before/after checks for exactly one record per spawn.
 
-R19f is **not complete**: slice 2 (merge policy via `pre_merge`) and slice 3
+R19f is **not complete**: slice 2 (minimal merge policy via `pre_tool`, implemented above) and slice 3
 (removal of redundant skill bookkeeping prose) remain pending. No merge guard or
 skill prose deletion is included here. Independent conductor review/CI follows.
 

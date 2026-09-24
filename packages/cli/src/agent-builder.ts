@@ -425,6 +425,8 @@ export interface SubagentWiring {
   maxTokensPerTurn: number;
   /** The tools a child inherits, minus skills — rebuilt per child so nothing is shared by accident. */
   childTools: () => AnyTool[];
+  /** Share activated extension gates, not parent lifecycle/checkpoint hooks. */
+  childHooks?: () => Hook[];
 }
 
 /**
@@ -471,6 +473,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       const provider = choice?.provider === undefined ? w.providers.subagents : w.providers.get(choice.provider);
       return {
         provider,
+        ...(w.childHooks === undefined ? {} : { hooks: w.childHooks() }),
         providerSelection: () => ({ provider, entry: choice?.provider ?? w.providers.roleNames.subagents }),
         // skills too: a subagent doing a task the project has instructions for should be able to
         // load them, and the catalogue costs one line each
@@ -806,6 +809,8 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           skills: catalogue,
           maxTokensPerTurn,
           childTools: () => [...builtins(), ...memoryToolset, ...mcpTools],
+          childHooks: () => extensions.loaded.flatMap(extension => extension.hooks)
+            .filter(hook => hook.point === "pre_tool"),
         }); return { ...options, childConfig: choice => ({ ...options.childConfig(choice), observeSession,
           ...(spend === undefined ? {} : { spend }) }) }; })(),
       ),

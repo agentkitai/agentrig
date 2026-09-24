@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 
 // Deliberately not a shell interpreter. Body writes must be a single literal gh
 // command; shell expansion, pipelines and stdin cannot be verified before execution.
-function words(command) {
+export function words(command) {
   const out = []; let value = "", quote, active = false;
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];

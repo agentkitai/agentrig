@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { assignedFindings, operativeLines } from "../scripts/review-ledger.mjs";
+import { createMergeGuard } from "./merge-guard.mjs";
 import { createLedgerHook } from "./ledger-integrity.mjs";
 import { hasVerdictBlock } from "../scripts/review-verdict.mjs";
 import { findingHeadings } from "../scripts/review-finding-index.mjs";
@@ -21,7 +22,7 @@ function repairIntent(task) {
 
 // Framework hook exceptions/timeouts fail open. Own all failures and finish five
 // seconds before that deadline. Never retry a write whose outcome is ambiguous.
-export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, spawnEnabled = false, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false, prePrBranchForSession = () => undefined } = {}) {
+export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, spawnEnabled = false, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false, prePrBranchForSession = () => undefined, onDispatch = () => {} } = {}) {
   const absenceProofs = new Map();
   return async context => {
     if (context.spawn) {
@@ -84,13 +85,13 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       if (pinned !== undefined && !prePr) {
         // A resumed host mints a fresh marker but explicitly pins the existing PR.
         // Resolve that identity directly, never infer it from candidate PR bodies.
-        const pr = JSON.parse(await command(gh, ["pr", "view", String(pinned), "--json", "number,state,headRefName,headRefOid,body"]));
+        const pr = JSON.parse(await command(gh, ["pr", "view", String(pinned), "--json", "number,state,headRefName,headRefOid,body,url"]));
         if (!pr || pr.number !== pinned || pr.state !== "OPEN") throw new Error("pinned resume PR is missing, closed or mismatched");
         prs = [pr];
       } else {
         // Enumerate the repository connection directly: search-index emptiness is not
         // evidence of absence. A full bounded page denies rather than hiding a PR.
-        const response = JSON.parse(await command(gh, ["pr", "list", "--state", "open", "--json", "number,headRefName,headRefOid,body", "--limit", "100"]));
+        const response = JSON.parse(await command(gh, ["pr", "list", "--state", "open", "--json", "number,headRefName,headRefOid,body,url", "--limit", "100"]));
         if (!Array.isArray(response) || response.length >= 100) throw new Error("invalid or truncated PR lookup response");
         if (response.some(pr => !pr || typeof pr.body !== "string" || typeof pr.headRefName !== "string" || !pr.headRefName || !Number.isSafeInteger(pr.number) || pr.number <= 0 || !/^[a-f0-9]{40}$/u.test(pr.headRefOid))) throw new Error("invalid PR lookup entry");
         prs = row ? response.filter(pr => typeof pr.body === "string" && pr.body.split(/\r?\n/u).includes(row)) : response.filter(pr => pr.headRefName === branch);
@@ -177,6 +178,7 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
       const readback = JSON.parse(await command(gh, ["api", "repos/{owner}/{repo}/issues/comments/" + posted.id]));
       if (typeof readback.body !== "string" || !Buffer.from(readback.body).equals(Buffer.from(body))) throw new Error("comment API read-back byte mismatch");
       if (errors.length) throw new Error(errors.join("; "));
+      await onDispatch({ spawn: context.spawn, pr, recordId: posted.id, recordBody: body });
       return { action: "continue" };
     } catch (error) {
       return { action: "deny", reason: `dispatch record failed: ${error instanceof Error ? error.message : String(error)}` };
@@ -184,8 +186,13 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
   };
 }
 
-export function activate(ctx) {
+export function activate(ctx, { gh = "gh", git = "git", budgetMs = 25_000 } = {}) {
   const rows = new Map();
+  const initial = new Set();
+  const authorities = new Map();
+  const pending = new Map();
+  const grants = new Map();
+  const key = spawn => JSON.stringify({ parent: spawn.parent, task: spawn.task, role: spawn.role });
   const resumePrs = new Map();
   const resumes = new Map();
   const prePrBranches = new Map();
@@ -193,6 +200,8 @@ export function activate(ctx) {
   // body binding is on its own line (packages/core/src/train.ts).
   // Remember it per session so conductors on main resolve the builder's PR.
   ctx.hooks.on("user_prompt", context => {
+    const first = !initial.has(context.sessionId);
+    initial.add(context.sessionId);
     const matches = [...(context.prompt?.matchAll(/^Include this exact host-generated row binding on its own line in the PR body: (agentrig-train-row:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\r?$/gmu) ?? [])];
     if (matches.length === 1) {
       rows.set(context.sessionId, matches[0][1]);
@@ -203,6 +212,9 @@ export function activate(ctx) {
         if (!preceding?.startsWith("Row: ")) throw new Error("missing host Row");
         const row = JSON.parse(preceding.slice(5));
         if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("invalid host Row");
+        if (first && typeof row.authorization === "string" && row.authorization.trim()) {
+          authorities.set(context.sessionId, { authorization: row.authorization, row: matches[0][1] });
+        }
         if (row.resume !== undefined && (!row.resume || typeof row.resume !== "object" || Array.isArray(row.resume))) throw new Error("invalid resume");
         resumePrs.set(context.sessionId, row.resume?.pr);
         prePrBranches.set(context.sessionId, row.resume?.branch);
@@ -215,7 +227,30 @@ export function activate(ctx) {
     }
     return { action: "continue" };
   });
-  const dispatch = createDispatchHook({ spawnEnabled: true, rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id), isResumeForSession: id => resumes.get(id), prePrBranchForSession: id => prePrBranches.get(id) });
+  const dispatch = createDispatchHook({ gh, git, budgetMs, spawnEnabled: true, rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id), isResumeForSession: id => resumes.get(id), prePrBranchForSession: id => prePrBranches.get(id),
+    onDispatch: ({ spawn, pr, recordId, recordBody }) => {
+      if (spawn?.role?.name !== "lander") return;
+      const authority = authorities.get(spawn.parent);
+      if (!authority || typeof pr.url !== "string") throw new Error("lander dispatch requires initial Row.authorization and live PR URL");
+      const queue = pending.get(key(spawn)) ?? [];
+      queue.push({ ...authority, url: pr.url, recordId, recordBody });
+      pending.set(key(spawn), queue);
+    },
+  });
+  const merge = createMergeGuard({ gh, budgetMs, grantForSession: id => grants.get(id) });
+  ctx.hooks.on("post_spawn", context => {
+    const spawn = context.spawn;
+    if (spawn?.childId && spawn.role?.name === "lander") {
+      const queue = pending.get(key(spawn));
+      const grant = queue?.shift();
+      if (queue?.length === 0) pending.delete(key(spawn));
+      if (grant) grants.set(spawn.childId, { ...grant, spawn });
+    }
+    return { action: "continue" };
+  });
   ctx.hooks.on("pre_spawn", dispatch, { timeoutMs: 30_000 });
-  ctx.hooks.on("pre_tool", dispatch, { timeoutMs: 30_000 });
+  ctx.hooks.on("pre_tool", async context => {
+    const result = await merge(context);
+    return result.action === "deny" ? result : dispatch(context);
+  }, { timeoutMs: 30_000 });
 }
