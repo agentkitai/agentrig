@@ -1,7 +1,7 @@
 ## R19d final slice — CLI on train + ship, core train API retired (review pending)
 
-R19d implementation consists of first slice **#568** plus the final-slice PR
-linked in this section before handoff. Final ROADMAP completion is deliberately
+R19d implementation consists of first slice **#568** plus final slice **#569**
+([PR](https://github.com/agentkitai/agentrig/pull/569)). Final ROADMAP completion is deliberately
 left to the conductor after independent review disposition resolves; R19e is not
 part of this change.
 
