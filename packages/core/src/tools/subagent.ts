@@ -14,6 +14,7 @@ import { snapshotAgentRoles, type AgentRole } from "../agent-roles.js";
 import { AgentRoleName } from "../manifests.js";
 import type { PromptBlock } from "../context-manifest.js";
 import { ADVISORY_CONTEXT } from "../context-principals.js";
+import { createOutputContract, parseOutputJson, OUTPUT_LIMITS, type OutputContract } from "../output-schema.js";
 import { hasDiagnostics } from "../diagnostics.js";
 
 /**
@@ -52,6 +53,7 @@ export interface SubagentChoice {
 }
 
 const baseShape = {
+  outputSchema: z.union([z.boolean(), z.record(z.unknown())]).optional().describe("Optional bounded JSON Schema for the final child answer; prompted validation with one tool-free repair. Parsed value is returned as output.result. Omit for free text."),
   agent: AgentRoleName.optional().describe("optional configured local agent role, not a job title or skill name; omit agent for a generic worker; unknown roles are refused"),
   task: z
     .string()
@@ -70,7 +72,7 @@ const InputTypeSchema = z.object({ ...baseShape, provider: z.string().optional()
 type Input = z.infer<typeof InputTypeSchema>;
 
 /**
- * The schema is byte-identical to the pre-R3.5 one unless choices are supplied. Returns
+ * Provider choices are advertised only when supplied. Returns
  * `z.ZodTypeAny` rather than `z.ZodType<Input>`: zod infers an optional field's output type as
  * `T | undefined`, which `exactOptionalPropertyTypes` rejects against `label?: string`. `AnyTool`
  * itself only asks for `z.ZodType<any>`, so widening here (rather than casting at the call site)
@@ -80,7 +82,7 @@ function inputSchema(choices: SubagentProviderChoices | undefined, advertisedRol
   // Narrow only the model-facing catalogue. Runtime validation retains the name field
   // so stale/forged role selections reach the fail-closed refusal, never a generic child.
   const shape = advertisedRoles === undefined ? baseShape : advertisedRoles.length === 0
-    ? { task: baseShape.task, label: baseShape.label }
+    ? { task: baseShape.task, label: baseShape.label, outputSchema: baseShape.outputSchema }
     : { ...baseShape, agent: z.enum(advertisedRoles.map(role => role.name) as [string, ...string[]])
       .optional().describe(baseShape.agent.description!) };
   if (choices === undefined || choices.names.length === 0) return z.object(shape);
@@ -362,6 +364,9 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
     // claiming less would let a `--allow read` run arbitrary writes through a child
     permission: "exec",
     execute: async (input: Input, ctx: ToolContext): Promise<ToolResult<unknown>> => {
+      let outputContract: OutputContract | undefined;
+      try { outputContract = input.outputSchema === undefined ? undefined : createOutputContract(input.outputSchema); }
+      catch (error) { return refuse(error instanceof Error ? error.message : String(error)); }
       const role = input.agent === undefined ? undefined : roles.find(candidate => candidate.name === input.agent);
       if (input.agent !== undefined && role === undefined) return refuse(`unknown or unavailable agent role; no child started. ${roleGuidance}`);
       if (role !== undefined && input.provider !== undefined) return refuse("agent role and provider cannot both be selected");
@@ -474,7 +479,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
           childConfig: (grandchildChoice) => ({ ...opts.childConfig(grandchildChoice), abortGraceMs: childGrace }),
         }, allowlist === undefined ? undefined : { tools: allowlist, maxTurns: effectiveTurns }));
       }
-      const { permissionGrants: _configuredGrants, ...childConfig } = config;
+      const { permissionGrants: _configuredGrants, outputContract: _inheritedOutput, ...childConfig } = config;
       // A registry configured on the child config is never authority of its own: a child's grants
       // are DERIVED from the parent's live view, so with no parent registry there is nothing to
       // derive from and the configured one is dropped rather than promoted into standing authority
@@ -483,6 +488,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
       const ignoredGrantRegistry = permissionGrants === undefined && _configuredGrants !== undefined;
       const child = opts.createAgent({
         ...childConfig,
+        ...(outputContract === undefined ? {} : { outputContract }),
         ...(inheritedApprovalMode(ctx) === undefined ? {} : { approvalMode: inheritedApprovalMode(ctx)! }),
         ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
         ...(role === undefined ? {} : { systemPrompt: rolePrompt(config.systemPrompt, role) }),
@@ -604,6 +610,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
 
         /** The last turn that actually said something. */
         let answer = "";
+        let validated = false;
         /** Whether that turn was the child's last: a preamble is not a conclusion. */
         let answerIsFinal = false;
         /** The turn in progress. */
@@ -615,6 +622,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
           for await (const e of session.events) {
             // the child's transcript stays in the child's log: forwarding it would defeat the
             // context isolation that is the entire reason to spawn one
+            if (e.type === "output.validated") validated = e.valid && e.digest === outputContract?.digest;
             if (e.type === "turn.start" || e.type === "turn.aborted") current = "";
             else if (e.type === "model.delta") current += e.text;
             // `turn.end` is emitted even when a turn is aborted or errors mid-tool, so every turn
@@ -643,7 +651,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
               : `(the subagent's final turn carried no message; this was its last one)\n${text}`;
         const sessionLine = `subagent session ${session.id}`
             + (ignoredGrantRegistry ? "\nnote: the configured child permission-grant registry was ignored — this parent session has no live grant registry to derive a child view from, so the child ran with no standing grants" : "");
-          if (summary.reason !== "done") {
+          if (summary.reason !== "done" || outputContract !== undefined && (!validated || !answerIsFinal || outputContract.validate(text) !== "valid")) {
             return capturedResult({
               output: summary,
               display: `${sessionLine}\nsubagent ${summary.reason} after ${summary.turns} turn(s)${answerText === "" ? "" : `:\n${answerText}`}${worktree ? `\nWorktree retained without an integration candidate: ${worktree.artifact}` : ""}`,
@@ -653,7 +661,9 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
           if (worktree && childTools.some(tool => tool.hasBackgroundWork?.())) throw new Error("child has background work; no integration candidate can be captured");
           const candidate = await worktree?.finish(session.id);
           return capturedResult({
-            output: candidate === undefined ? summary : { summary, candidate },
+            output: outputContract === undefined
+              ? (candidate === undefined ? summary : { summary, candidate })
+              : { summary, result: parseOutputJson(text, OUTPUT_LIMITS.textBytes, OUTPUT_LIMITS.textDepth), ...(candidate === undefined ? {} : { candidate }) },
             display: `${sessionLine}\n${answerText === "" ? "(the subagent finished without a final message)" : answerText}${candidate ? `\nRetained patch candidate (not applied): ${candidate.patchPath}\nManifest: ${worktree!.artifact}/candidate.json\nInspect and recheck before separately authorized parent application.` : ""}`,
           });
         } finally {

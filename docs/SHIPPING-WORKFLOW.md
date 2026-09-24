@@ -386,3 +386,16 @@ structured review with findings requires explicit identities; prose-only substit
 are refused. It parses structured findings and compares exact decoded strings, never JSON-line or
 surrounding-prose approximations. Legacy exact heading/source records remain
 supported. Append source identities and resolution evidence; do not collapse them.
+
+## Structured child results
+
+Builder/fixer handoffs use the ship pack's `ChildResult` discriminated contract,
+not the train host's final landed `{pr}` receipt. A PR handoff requires status, PR
+number and exact head; a blocked handoff requires a classified kind and evidence.
+The shared typed-handoff skill section requires the optional subagent output schema
+and the pack assessment helper. The conductor verifies PR/head against the scoped
+repository and task, and blocker necessity independently. Scope blockers require at
+least one verified necessary outside-row path; in-scope-only paths fail. Invalid or
+unverifiable results consume a failed attempt: redispatch builder once carrying all
+previous notes, then halt on a second failure. Persist the counter across resume.
+These checks grant no permission, scope expansion, review waiver or merge authority.

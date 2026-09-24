@@ -1,3 +1,21 @@
+## Structured child results — implementation awaiting independent review
+
+Optional subagent `outputSchema` uses the existing headless output contract,
+child-local validation events and one tool-free repair; successful calls expose
+parsed `output.result`. Free-text calls remain unconstrained and do not inherit
+a final-output contract. The ship pack adds typed PR/blocked builder and fixer
+handoffs, mandatory independent conductor validation, and one failed-result
+redispatch carrying prior notes, then halt. Scope blockers need a verified
+necessary outside-row path, not merely an outside path mentioned in prose.
+
+The transport schema is an envelope within the existing bounded core subset;
+the pack's discriminated validator is mandatory for variant completeness and
+truth checks. Verification observations remain conductor-owned assertions, not
+automatic proof of necessity. No train host change: final landed `{pr}` stays
+separate from builder handoffs. No roadmap completion is claimed before review
+and exact-head CI. R19 LOW observations/wording follow-ups remain advisory, not
+residual defects or extra acceptance criteria.
+
 ## Window-aware context — implementation awaiting independent review
 
 Outbound tool-result eviction now defaults to pressure at 50% of the active model

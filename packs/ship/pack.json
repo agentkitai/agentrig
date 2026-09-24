@@ -8,7 +8,8 @@
     "review-finding-index.mjs",
     "review-provenance.mjs",
     "review-verdict.mjs",
-    "reviewer-adapters.mjs"
+    "reviewer-adapters.mjs",
+    "child-result.mjs"
   ],
   "extensions": [
     "extensions/dispatch-record.json"
