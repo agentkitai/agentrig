@@ -155,3 +155,14 @@ it("run-path builders honor providers.<name>.maxConcurrent across instances and 
     expect((await b.next()).value?.type).toBe("text_delta");
   } finally { await a.return?.(); await b.return?.(); await c.return?.(); await rm(home, { recursive: true, force: true }); }
 });
+
+it("resolves Astra's model window and honors a named entry override", () => {
+  const opts: ProviderOptions = { ...base, providers: {
+    astra: { provider: "openai", model: "gpt-6-astra", baseUrl: "http://localhost:1/v1" },
+    tuned: { provider: "openai", model: "gpt-6-astra", baseUrl: "http://localhost:1/v1", contextWindow: 250000 },
+  }, roles: { main: "astra", subagents: "tuned" } };
+  const providers = buildProviders(opts);
+  expect(providers.main.capabilities.contextWindow).toBe(1_000_000);
+  expect(providers.subagents.capabilities.contextWindow).toBe(250000);
+  expect(providers.get("default").capabilities.contextWindow).toBe(128000);
+});

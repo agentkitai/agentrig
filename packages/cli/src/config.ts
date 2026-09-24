@@ -111,6 +111,12 @@ export type ProjectChecks = z.output<typeof ProjectChecksSchema>;
 
 const ConfigValuesSchema = z
   .object({
+    toolResultEviction: z.object({
+      enabled: z.boolean().optional(),
+      thresholdFraction: z.number().positive().max(1).optional(),
+      keepLastTurns: z.number().int().nonnegative().optional(),
+      minBytes: z.number().int().nonnegative().optional(),
+    }).strict().optional(),
     provider: ProviderKindSchema.optional(),
     model: providerModelName.optional(),
     baseUrl: z.string().url().optional(),

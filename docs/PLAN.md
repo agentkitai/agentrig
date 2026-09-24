@@ -89,6 +89,14 @@ interface ModelProvider {
 
 Ship `anthropic` and `openai-compatible` (covers OpenAI, most local servers) in M2. Others are community/adapter work.
 
+Context windows use an exact per-provider/model table, with explicit named-entry
+`contextWindow` taking precedence. The owner-confirmed `gpt-6-astra` window is
+1,000,000 tokens on OpenAI and OpenAI ChatGPT. Other IDs remain **unknown** unless
+added with a documented source; their compatibility fallbacks remain OpenAI 128,000,
+Anthropic 200,000, and OpenAI ChatGPT 200,000 (not claims about those models).
+Eviction and compaction both use the active provider's resolved capability window,
+including when switching providers; no separate hard-coded compaction window exists.
+
 Named entries (R3.5a): config may define `providers` (name → provider/model/baseUrl/contextWindow/
 reasoningEffort) and `roles` (`main`, `supervisor`, `memory`, `subagents` → entry name). One
 process then runs each role on its own entry; the flat `provider`/`model`/`baseUrl` keys remain
@@ -386,6 +394,29 @@ permission pipeline, never bypass it by calling tool callbacks directly. No work
 engine/DSL/loader, automatic merge, exactly-once guarantee or new build row follows.
 Failed, incomplete or stale evidence stops integration and retains artifacts; even
 passing checks are evidence only for what they actually test. See [decision](plans/R15l.md).
+
+#### Window-aware tool-result eviction
+
+The default outbound-only policy keeps results verbatim while the estimated complete
+input (system, messages and tool schemas, approximately characters / 4) is below
+`toolResultEviction.thresholdFraction * provider.capabilities.contextWindow`.
+`thresholdFraction` defaults to **0.5** and accepts finite values in `(0, 1]`.
+Configure it via SDK `AgentConfig.toolResultEviction` or trusted CLI config/profile
+`toolResultEviction`; the CLI forwards the policy to main and child agents.
+At/above that threshold, replace the oldest eligible large results first, stopping
+as soon as the estimated view is below it. Default minimum payload is **8 KiB**
+(serialized JSON UTF-8 bytes); default protected turns in window mode is **0**.
+Small, unmatched or provenance-tagged results remain intact; if these or non-tool
+context alone exceed the threshold, eviction cannot guarantee fitting the window
+and normal compaction still applies. Session logs/history are never rewritten.
+
+Compatibility overrides: `enabled: false` disables eviction; explicitly setting
+`keepLastTurns` or `minBytes` without `thresholdFraction` selects the prior age-based
+policy (legacy defaults **5 turns / 8 KiB**). Set `thresholdFraction` explicitly to
+combine those size/recency overrides with window pressure instead. Direct SDK
+`evictToolResults` calls without a pressure estimator retain the legacy policy.
+Compaction's zero-usage fallback estimates this same evicted view; its trigger stays
+70% of the resolved provider window and reported usage still takes precedence.
 
 ### 2.7 Hooks
 

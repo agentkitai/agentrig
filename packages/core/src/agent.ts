@@ -135,7 +135,7 @@ export interface AgentConfig {
    * content is never appended to the immutable session log.
    */
   repoMap?: RepoMapOptions | false;
-  /** Outbound-only stale tool-result eviction; enabled with a 5-turn/8-KiB default. */
+  /** Outbound-only tool-result eviction; defaults to 50% window pressure, 8-KiB minimum. */
   toolResultEviction?: ToolResultEvictionOptions;
   /** max_tokens per model response (default 8192). */
   maxTokensPerTurn?: number;
@@ -762,7 +762,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
         if (output !== undefined) requestSystemBlocks = [...requestSystemBlocks, { content: `Return your final answer as one complete JSON value matching this schema. No Markdown or prose outside JSON. Schema: ${JSON.stringify(output.schema)}`,
           source: "system_prompt", origin: "output-schema", authority: "data", context: ADVISORY_CONTEXT, reason: "operator-selected final output shape, not execution authority" }];
         const requestSystem = renderSystemBlocks(requestSystemBlocks);
-        const eviction = evictToolResults(messages, config.toolResultEviction);
+        const evictionPressure = {
+          contextWindow: provider.capabilities.contextWindow,
+          estimateTokens: (view: readonly Message[]) => estimateTokens(requestSystem, [...view]) +
+            Math.ceil(JSON.stringify(outputRepair ? [] : toolSpecs).length / 4),
+        };
+        const eviction = evictToolResults(messages, config.toolResultEviction, evictionPressure);
         if (eviction.count > 0) {
           await emit({ type: "context.evicted", count: eviction.count, bytesSaved: eviction.bytesSaved });
         }
@@ -1191,9 +1196,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
         // Fall back to the estimate when the provider reports no usage, so compaction still
         // fires for servers that never send a usage chunk.
         const contextTokens = usageTokens(usage) || estimateTokens(
-          system,
-          evictToolResults(messages, config.toolResultEviction).messages,
-        );
+          requestSystem,
+          evictToolResults(messages, config.toolResultEviction, evictionPressure).messages,
+        ) + Math.ceil(JSON.stringify(outputRepair ? [] : toolSpecs).length / 4);
         if (
           !compactionExhausted &&
           compaction.shouldCompact({ tokens: contextTokens, window: provider.capabilities.contextWindow })

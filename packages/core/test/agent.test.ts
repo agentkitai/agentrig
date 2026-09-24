@@ -1337,6 +1337,25 @@ describe("tool-result eviction in the loop", () => {
 
   const requestBytes = (request: ModelRequest): number => Buffer.byteLength(JSON.stringify(request.messages));
 
+  it("keeps long below-half sessions intact and passes the same window to compaction", async () => {
+    const provider = new FakeProvider([
+      ...Array.from({ length: 10 }, (_, n) => readTurn(`read-${n}`, "large-b.ts")),
+      [usage(0, 0), stop("end_turn")],
+    ]);
+    provider.capabilities.contextWindow = 1_000_000;
+    const windows: number[] = [];
+    const session = createAgent(makeConfig(provider, {
+      tools: [fixtureReadTool()],
+      compaction: { shouldCompact: ({ window }) => { windows.push(window); return false; }, compact: async messages => messages },
+    })).run("read ten files");
+    const events = await collect(session);
+    await session.done;
+    expect(events.filter(event => event.type === "context.evicted")).toHaveLength(0);
+    expect(resultContent(provider.requests[10]!.messages, "read-0")).toBe(payloads["large-b.ts"]);
+    expect(windows.length).toBeGreaterThan(0);
+    expect(new Set(windows)).toEqual(new Set([1_000_000]));
+  });
+
   it("makes the Nth request smaller when stale results engage, while the disabled baseline grows", async () => {
     const script = [
       readTurn("a", "large-a.ts"),

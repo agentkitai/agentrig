@@ -423,3 +423,9 @@ describe("reasoning replay (the live risk for turn 2 of a tool conversation)", (
     expect(input.filter((i) => i.type === "function_call")).toHaveLength(1);
   });
 });
+
+it("uses the documented Astra window, entry override, and unknown-model fallback", () => {
+  expect(new OpenAIChatGPTProvider({ model: "gpt-6-astra" }).capabilities.contextWindow).toBe(1_000_000);
+  expect(new OpenAIChatGPTProvider({ model: "gpt-6-astra", contextWindow: 64000 }).capabilities.contextWindow).toBe(64000);
+  expect(new OpenAIChatGPTProvider({ model: "unknown" }).capabilities.contextWindow).toBe(200000);
+});

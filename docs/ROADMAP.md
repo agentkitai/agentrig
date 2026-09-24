@@ -646,6 +646,13 @@ fake provider's request, not on internal state.
 
 ### R1.5 — Context economy (added after the first --yolo dogfood run)
 
+Window-aware context follow-up (implementation awaiting independent review): use the
+resolved per-model/provider-entry window for eviction and compaction, with default
+50% pressure and oldest-first eviction. `gpt-6-astra` is owner-confirmed at 1M tokens;
+unknown models keep adapter fallbacks, explicit legacy eviction options remain
+supported. See PLAN §2.2/§2.6 and STATUS; not marked done before conductor review/landing.
+
+
 *Evidence: the first unattended dogfood run (the supervisor-defect fix, PR #33) spent
 **3,301,978 input tokens over 50 turns** for 16,911 out. The work was good; the bill was
 quadratic. Every turn resends the whole conversation, the conversation carries every file ever

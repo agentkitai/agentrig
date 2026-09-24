@@ -5,10 +5,19 @@ import { outputHandleFromDisplay } from "./tools/read-output.js";
 export interface ToolResultEvictionOptions {
   /** Defaults to true. */
   enabled?: boolean;
-  /** Number of most-recent assistant turns whose tool results stay verbatim (default 5). */
+  /** Protected recent turns: explicit use selects legacy policy (default 5); window policy defaults to 0. */
   keepLastTurns?: number;
   /** Evict only tool-result payloads larger than this many serialized JSON UTF-8 bytes (default 8 KiB). */
   minBytes?: number;
+  /** Start/stop eviction at this fraction of the context window. Default: 0.5.
+   * Explicitly setting this selects window policy even with legacy age/size overrides. */
+  thresholdFraction?: number;
+}
+
+export interface ToolResultEvictionPressure {
+  contextWindow: number;
+  /** Estimate complete outbound input, including system text and tool schemas. */
+  estimateTokens(messages: readonly Message[]): number;
 }
 
 export interface ToolResultEviction {
@@ -75,17 +84,31 @@ function stubFor(
  * A result belongs to the assistant turn containing its paired tool_use. The newest K assistant
  * turns are load-bearing and remain byte-for-byte intact. Older large payloads become text stubs;
  * the result block and toolUseId remain, preserving provider tool-use/result pairing.
+ * With pressure, evict oldest eligible results only until the view is below the threshold.
+ * Without pressure (or with explicit legacy options), preserve the original age-based API.
  */
 export function evictToolResults(
   messages: readonly Message[],
   options: ToolResultEvictionOptions = {},
+  pressure?: ToolResultEvictionPressure,
 ): ToolResultEviction {
   const enabled = options.enabled ?? DEFAULT_TOOL_RESULT_EVICTION.enabled;
-  const keepLastTurns = options.keepLastTurns ?? DEFAULT_TOOL_RESULT_EVICTION.keepLastTurns;
+  const windowMode = pressure !== undefined && (options.thresholdFraction !== undefined ||
+    (options.keepLastTurns === undefined && options.minBytes === undefined));
+  const fraction = options.thresholdFraction ?? 0.5;
+  if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) {
+    throw new Error("thresholdFraction must be > 0 and <= 1");
+  }
+  if (windowMode && (!Number.isFinite(pressure.contextWindow) || pressure.contextWindow <= 0)) {
+    throw new Error("contextWindow must be positive and finite");
+  }
+  const threshold = windowMode ? pressure.contextWindow * fraction : Infinity;
+  const underThreshold = (view: readonly Message[]): boolean => windowMode && pressure.estimateTokens(view) < threshold;
+  const keepLastTurns = options.keepLastTurns ?? (windowMode ? 0 : DEFAULT_TOOL_RESULT_EVICTION.keepLastTurns);
   const minBytes = options.minBytes ?? DEFAULT_TOOL_RESULT_EVICTION.minBytes;
   if (!Number.isInteger(keepLastTurns) || keepLastTurns < 0) throw new Error("keepLastTurns must be a non-negative integer");
   if (!Number.isInteger(minBytes) || minBytes < 0) throw new Error("minBytes must be a non-negative integer");
-  if (!enabled) return { messages: messages as Message[], count: 0, bytesSaved: 0, evictedToolUseIds: new Set() };
+  if (!enabled || underThreshold(messages)) return { messages: messages as Message[], count: 0, bytesSaved: 0, evictedToolUseIds: new Set() };
 
   const assistantTurns = messages.reduce(
     (count, message) => count + (message.role === "assistant" ? 1 : 0),
@@ -109,6 +132,7 @@ export function evictToolResults(
     for (let blockIndex = 0; blockIndex < message.content.length; blockIndex += 1) {
       const block = message.content[blockIndex]!;
       if (block.type !== "tool_result") continue;
+      if (underThreshold(outbound ?? messages)) break;
       // Flattening tagged child blocks into a string would silently discard provenance.
       // Keep this payload intact until R13b defines an explicit aggregation policy.
       const hasLabel = (child: ContentBlock): boolean => child.trust !== undefined || child.context !== undefined ||
@@ -125,11 +149,11 @@ export function evictToolResults(
       outbound ??= messages.slice() as Message[];
       content ??= message.content.slice();
       content[blockIndex] = { ...block, content: stub };
+      outbound[messageIndex] = { ...message, content };
       count += 1;
       bytesSaved += saved;
       evictedToolUseIds.add(block.toolUseId);
     }
-    if (content !== undefined) outbound![messageIndex] = { ...message, content };
   }
 
   return { messages: outbound ?? (messages as Message[]), count, bytesSaved, evictedToolUseIds };

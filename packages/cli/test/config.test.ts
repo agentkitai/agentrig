@@ -296,7 +296,7 @@ describe("config file boundary", () => {
 describe("both agent entry points use config", () => {
   it("passes the same configured value through run and the default TUI into built agents", async () => {
     const { cwd, home } = await fixture();
-    await configAt(cwd, { shell: "/bin/bash", model: "configured-model", repoMap: false });
+    await configAt(cwd, { shell: "/bin/bash", model: "configured-model", repoMap: false, toolResultEviction: { thresholdFraction: 0.25 } });
     vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
     const received: Array<RunOptions | TuiOptions> = [];
     const dependencies = {
@@ -312,6 +312,7 @@ describe("both agent entry points use config", () => {
     for (const options of received) {
       expect(options.model).toBe("configured-model");
       expect(options.repoMap).toBe(false);
+      expect(options.toolResultEviction).toEqual({ thresholdFraction: 0.25 });
       const built = await buildAgent(options as AgentBuildOptions);
       expect(built.tools.find((tool) => tool.name === "bash")?.description).toContain("/bin/bash");
     }
@@ -702,4 +703,11 @@ describe("providers and roles (R3.5a)", () => {
       expect(Object.keys(resolved.providers ?? {})).toEqual(["cloud", "local"]);
     }
   });
+});
+
+it("accepts window-aware eviction configuration and rejects invalid fractions", () => {
+  expect(parseConfigText("test", JSON.stringify({ toolResultEviction: { thresholdFraction: 0.25, keepLastTurns: 2 } }))).toMatchObject({ toolResultEviction: { thresholdFraction: 0.25, keepLastTurns: 2 } });
+  for (const thresholdFraction of [0, -1, 1.01]) {
+    expect(() => parseConfigText("test", JSON.stringify({ toolResultEviction: { thresholdFraction } }))).toThrow();
+  }
 });

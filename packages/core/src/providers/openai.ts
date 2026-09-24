@@ -1,3 +1,4 @@
+import { modelContextWindow } from "./model-windows.js";
 import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, ReasoningEffort, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
@@ -256,7 +257,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
       parallelTools: true,
       caching: officialOpenAi,
       ...(cacheReadDiscount === undefined ? {} : { cacheReadDiscount }),
-      contextWindow: opts.contextWindow ?? 128_000,
+      contextWindow: opts.contextWindow ?? modelContextWindow("openai", opts.model, 128_000),
     };
   }
 
