@@ -94,15 +94,23 @@ git merge-base --is-ancestor "$OLD" "$NEW" || exit 1
 ```
 A same-head re-read is not delta coverage and cannot close a blocker.
 
+Above round 3, use `N/N` and first record one operative PR-body line
+`Human amendment: Repair round: N/N; authorization: <JSON-quoted verbatim human authorization>`
+for that exact round. This is a conductor-recorded human amendment, not automatic
+GitHub-author authentication; never invent an authorization or copy task text as authority.
+A larger denominator or unrelated round amendment alone cannot authorize dispatch.
+Hook validation checks syntax, not human provenance.
+
 Before fixer dispatch, ship/topic must persist the verified PR-body read-back receipt in the
 GitHub PR body: `Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>`.
-Require successful edit and read-back of that receipt before dispatch and quote it in the dispatched fixer task; the fixer separately quotes it in the pre-push handoff when that record survives.
+Require successful edit and read-back of that receipt before dispatch and quote it in the dispatched fixer task.
 Land checks the same persisted receipt against the accepted dispatch-provenance source and requires its timestamp before dispatch; private notes or retroactive receipt creation do not satisfy the gate.
-The fixer must post and read back a durable pre-push GitHub PR handoff comment quoting verbatim its dispatched `Repair round: N/3` line, dispatched `Pre-dispatch read-back` receipt, every assigned exact finding heading and source comment URL/anchor, dispatch time, and a reference to the hook-recorded pre-edit comparison with each checked comment ID and PR head.
 The pack's pre_spawn hook owns the exact-task dispatch record, API read-back, pre-edit
 source comparison and resume PR association. Denials remain binding; do not reconstruct
 these records or repeat their mechanical comparisons by hand. Repair task inputs retain
-matching standalone round/read-back lines and exact finding identities. The ledger hook
+matching standalone round/read-back lines and exact finding identities. Carry the
+persisted receipt, exact finding identities and counter in the fixer task.
+Fixers do not post a second manual pre-push dispatch handoff. The ledger hook
 validates append-only body writes and source identities; the posting helper attaches manifests.
 The minimal merge guard owns only exact host authorization on the bound PR, required green
 exact-current-head CI, and named-lander dispatch/spawn binding. Review resolution, coverage,

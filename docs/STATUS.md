@@ -14,6 +14,15 @@ integrity checks and manifest copying are removed from effective skills/policy.
 Repair input receipts, review coverage/disposition, residual judgments, receipt ordering,
 completion-marker timing and post-merge CI remain explicit responsibilities.
 
+### Slice 3 blocking instruction repairs (review pending)
+
+Removed the remaining mandatory manual pre-push dispatch handoff; retained hook
+provenance and receipt inputs. Restored land-time exact live-source judgment for all
+ledger findings, including deferred/advisory sources changed after writes. Restored
+round-bound above-cap human amendments and anti-fabrication semantics: syntax validation
+cannot authenticate human authority. Arbiter d7f66013 approved these bounded repairs;
+no mechanical merge-guard predicate, LOW advisory, or completion marker changes.
+
 ### R19 delivery inventory and proposed completion text
 
 - Definition: #544 approved R19 contract.

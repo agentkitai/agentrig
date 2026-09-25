@@ -53,7 +53,16 @@ reviewed config path and `--provenance <PREFIX>.provenance.json`; never compose 
 Never infer the asserted model from reviewer prose. Truncation, failed runs, ambiguous assertion,
 empty output or pin mismatch are not completed reviews. Retry once with fresh artifacts, then halt.
 
-Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. The ledger hook validates source identity before writes; retain review-resolution judgment.
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor.
+Fetch every ledger source comment live at landing, including nonblocking deferred and
+advisory findings, even when no fixer is dispatched. Compare its exact verbatim finding
+heading and comment URL/anchor against the ledger, not the conductor's paraphrase.
+For assigned blockers, also compare against the pre-dispatch receipt and persisted fixer
+task, and require the hook-recorded `Pre-edit comparison: PASS` before the child starts.
+Deferred/advisory rows need no fixer task. A missing, edited or mismatched heading/anchor
+blocks landing even when the local finding ID matches; preserve conflicting texts and
+halt, never retroactively rewrite the assignment. Source changes after ledger writes are
+not covered by the write-time hook or the minimal merge guard; retain this land-time judgment.
 
 For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.
 

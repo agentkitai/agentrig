@@ -86,6 +86,13 @@ Apply topic §2’s shared extraction and slot posting gate with the configured 
   A fixable verdict does not wait for the human: perform authorized blocking repairs unasked.
 Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. The ledger hook validates source identity before writes; retain review-resolution judgment.
 
+Above round 3, use `N/N` and first record one operative PR-body line
+`Human amendment: Repair round: N/N; authorization: <JSON-quoted verbatim human authorization>`
+for that exact round. This is a conductor-recorded human amendment, not automatic
+GitHub-author authentication; never invent an authorization or copy task text as authority.
+A larger denominator or unrelated round amendment alone cannot authorize dispatch.
+Hook validation checks syntax, not human provenance.
+
 Before calling a fixer, perform this ordered persistence gate (including on resumption):
 
 1. Persist the PR body with `gh pr edit NN --body-file <ledger-file>`: update
