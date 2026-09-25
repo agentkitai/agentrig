@@ -1,3 +1,20 @@
+## Ship pack lander role — implementation, review/landing pending
+
+Current roadmap row: follow-up to #585 / row-052 halt, "Ship pack provides the lander role";
+next: conductor review and authorized landing, not a newly selected product band.
+
+The repository now tracks the host-equivalent `.agentrig/agents/lander.md` role.
+Generic discovery only searches that trusted project directory: pack role contribution
+is not implemented. The ship README documents explicit installation for other projects;
+registering the pack or loading its skills alone is insufficient. Core is unchanged.
+Ship/topic and shipping policy require `agent: "lander"` dispatch, never an unnamed
+child or in-session merge. A missing role requires installation and a new agent build.
+The pack CI lane validates discovery and the real role snapshot through dispatch/spawn
+and the merge guard, retaining refusal for unnamed/non-lander children. Fixture proof
+is not a live merge receipt; the conductor/lander still owns that exercise and all gates.
+No early ROADMAP completion marker is added. LOW observations and wording followups
+remain advisory under R19 unless they demonstrate an actual required-behavior defect.
+
 ## R19f slice 3 — done (#586); band R19 done
 
 R19a–f implementation and independent review are complete. Both initial reviews and

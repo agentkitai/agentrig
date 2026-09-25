@@ -129,7 +129,7 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   for each fix. At most three repair rounds, preserving the counter on resumption; unresolved
   blockers or non-convergence halt, while new advisory notes do not open another round.
 
-Before invoking land in this session or spawning a land child, read `gh pr view NN --json body`.
+Before spawning the named lander child, read `gh pr view NN --json body`.
 Fetch linked review comments too (for example `gh api repos/OWNER/REPO/issues/comments/ID`);
 verify all declared initial canonical headings in the actual comments, including each slot's pinned model,
 reviewed head and main provenance. Verify `## Review disposition` contains dispositions for every
@@ -138,8 +138,7 @@ explicit `none`. Verify all blocker closures and delta coverage through current 
 headings, comments, dispositions or residual records halt BEFORE land-child spawning; a URL alone
 or a private summary is not verification. Persist edits then read back again if anything changes.
 
-- When scoped merge authorization is present, run the `land` skill's steps (in this session or a
-  land subagent) without asking for a second approval. Pass the verbatim human quote, task scope
+- When scoped merge authorization is present, dispatch `subagent` with `agent: "lander"` to follow the `land` skill without asking for a second approval. Pass the verbatim human quote, task scope
   and PR number; require green exact-head CI and watch post-merge CI before reporting completion.
   Otherwise report the reviewed PR and wait for explicit merge authorization.
 - No answer is an answer: never treat silence, a timeout, or your own confidence as approval.

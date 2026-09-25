@@ -308,7 +308,7 @@ finalization before land; do not dispatch an early marker repair while the ledge
 
 ## 4. Conditional land and continue
 
-Before invoking land in this session or spawning a land child, read `gh pr view NN --json body`.
+Before spawning the named lander child, read `gh pr view NN --json body`.
 Fetch linked review comments too (for example `gh api repos/OWNER/REPO/issues/comments/ID`);
 verify all declared initial canonical headings in the actual comments, including each slot's pinned model,
 reviewed head and main provenance. Verify `## Review disposition` contains dispositions for every
@@ -319,7 +319,7 @@ or a private summary is not verification. Persist edits then read back again if 
 
 - After the initial declared pass and all required delta coverage have resolved blocking findings,
   independently confirm CI is green on
-  the PR's actual current head SHA. Then spawn a land subagent with the exact band, row, predecessor
+  the PR's actual current head SHA. Then dispatch `subagent` with `agent: "lander"` and the exact band, row, predecessor
   merge SHA, PR number, and: “Land PR #NN following the land skill. The human authorized this row as
   part of BAND with the following exact invocation: `AUTHORIZATION`. Preserve that quote verbatim
   in the PR description and squash-merge commit body.” Record the lander id from the tool result.

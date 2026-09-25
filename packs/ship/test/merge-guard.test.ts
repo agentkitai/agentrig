@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm, mkdir, cp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { execFileSync } from "node:child_process";
+import { discoverAgentRoles } from "@agentkitai/agentrig-core";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const head = "a".repeat(40);
@@ -71,6 +73,36 @@ else {console.error('unexpected '+JSON.stringify(a));process.exit(2);}
 }
 
 describe("minimal merge guard", () => {
+  it("discovers the tracked lander in a fresh project and grants only its bound child", async () => {
+    const path = ".agentrig/agents/lander.md";
+    // An ignored host-only file must not make a fresh-checkout regression pass.
+    expect(execFileSync("git", ["ls-files", "--error-unmatch", path], { encoding: "utf8" }).trim()).toBe(path);
+    const f = await fixture();
+    await mkdir(join(f.root, ".agentrig/agents"), { recursive: true });
+    await cp(resolve(path), join(f.root, path));
+    const errors: Error[] = [];
+    const roles = await discoverAgentRoles(f.root, error => errors.push(error));
+    expect(errors).toEqual([]);
+    expect(roles).toHaveLength(1);
+    const lander = roles[0]!;
+    expect(lander.name).toBe("lander");
+    expect(lander["model-role"]).toBe("subagents");
+    expect(lander.delegable).toBe(false);
+    expect(lander.provider).toBeUndefined();
+    expect(lander.tools).toEqual(["bash", "bash_job", "read_file", "read_output", "glob", "grep", "skill", "update_plan", "write_file", "edit_file"]);
+    expect(lander.body).toContain("Do not build, repair or review.");
+    expect(lander.body).toContain("gh pr merge NUMBER --squash --match-head-commit FULL_HEAD");
+    // Match subagentTool's production snapshot: an unpinned manifest omits provider.
+    const discovered = { name: lander.name, origin: lander.origin, hash: lander.hash,
+      tools: [...lander.tools], modelRole: lander["model-role"], delegable: lander.delegable };
+    expect(discovered).not.toHaveProperty("provider");
+    expect((await f.dispatch({ ...envelope, role: discovered })).action).toBe("continue");
+    expect(await f.merge()).toEqual({ action: "continue" });
+    expect((await f.merge(command, "parent")).action).toBe("deny");
+    const unnamed = await fixture();
+    await unnamed.dispatch({ task: envelope.task, parent: envelope.parent });
+    expect((await unnamed.merge()).action).toBe("deny");
+  });
   it("allows authorized green dispatched lander via gh and REST without review evidence", async () => {
     const f = await fixture(); expect((await f.dispatch()).action).toBe("continue");
     expect(await f.merge()).toEqual({ action: "continue" });
