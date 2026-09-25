@@ -440,3 +440,46 @@ it.each([
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
 });
+
+const wrappedEcho = echoPhrases[1]!.replace("probed and", "probed\r\n  and");
+it.each([
+  `> ${echoPhrases[1]}`, `> ${wrappedEcho.replace("\r\n  ", "\r\n> ")}`,
+  `Contract: \`${echoPhrases[1]}\``, `Contract: \`${wrappedEcho}\``,
+  `\`\`\`text\n${wrappedEcho}\n\`\`\``, `~~~text\n${wrappedEcho}\n~~~`,
+  `    ${echoPhrases[1]}`, `    ${wrappedEcho.replace("\r\n  ", "\r\n    ")}`,
+])("M-quotation-forms: genuine finding quotation posts unchanged: %s", quote => {
+  const body = `VERDICT: FAIL\n### LOW: Missing evidence\n\nScenario and fix: record evidence.\n\n${quote}\n`;
+  const result = run(body);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).toBe(`${heading}\n\n${body}`);
+  expect(run(`VERDICT: PASS\n${quote}`).args).toBeUndefined();
+});
+it.each([
+  `\n\nUnheaded summary.\n> ${echoPhrases[1]}`,
+  `\n## Summary\n> ${echoPhrases[1]}`,
+  `\n---\n> ${echoPhrases[1]}`, `\n***\n> ${echoPhrases[1]}`, `\n_ _ _\n> ${echoPhrases[1]}`,
+  `\n\nSummary \`label\`.\n> ${echoPhrases[1]}`,
+  `\n${wrappedEcho}`,
+])("M-section-boundary: quotation escape cannot leak: %s", tail => {
+  const result = run(`VERDICT: FAIL\n### LOW: Real\nScenario; fix evidence.${tail}`);
+  expect(result.args).toBeUndefined();
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+});
+it.each(echoPhrases)("M-wrapped-echo: whitespace normalized literal refuses: %s", phrase => {
+  const result = run(`VERDICT: PASS\n${phrase.split(" ").join(" \r\n\t")}`);
+  expect(result.args).toBeUndefined();
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+});
+it.each([
+  `\`${echoPhrases[1]}`, `\\\`${echoPhrases[1]}\``,
+  `\`\`\`text\n${echoPhrases[1]}`, `\`\`\`\`text\n${echoPhrases[1]}\n\`\`\``,
+  `~~~text\n${echoPhrases[1]}\n\`\`\``,
+])("M-malformed-citation: incomplete or escaped quotation refuses: %s", quote => {
+  const result = run(`VERDICT: FAIL\n### LOW: Real\nScenario and fix.\n\n${quote}`);
+  expect(result.args).toBeUndefined();
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+});
+it("M-fenced-heading: cited headings do not reset finding scope", () => {
+  const body = `VERDICT: FAIL\n### LOW: Real\nFix evidence.\n\n\`\`\`md\n## Summary\n${echoPhrases[0]}\n\`\`\`\n> ${echoPhrases[1]}`;
+  expect(run(body).status).toBe(0);
+});

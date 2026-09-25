@@ -1,5 +1,22 @@
 # Status
 
+## Review-helper prose and quotation residuals (#450, #451, #453, #454) — pending review
+
+Live finding indexing ignores balanced inline grammar examples in ordinary prose,
+while real unsupported finding openings still fail closed and heading bytes remain exact.
+Override diagnostic tests normalize separators, including simulated Windows relative paths.
+Posting accepts blockquoted, balanced inline-code, fenced and indented contract citations
+inside findings; literal echoes are whitespace-normalized before refusal. A new heading,
+thematic break, or blank-delimited unquoted paragraph after the scenario ends quotation
+permission. Blanks before the first scenario or explicit citation do not end it. Unclosed
+fences and escaped/unbalanced inline delimiters grant no escape. This is a bounded
+Markdown recognizer, not semantic verdict validation or paraphrase detection.
+Existing topic/ship blockquote guidance remains supported; additional forms are described
+here within replay helper/test-only scope. No skills, product code, roadmap markers or
+continuation order changed. Fail-first, named mutants, declared checks and CRLF receipts
+belong to the draft PR handoff; independent review and hosted CI remain pending.
+Repair round: 0/3.
+
 ## Reviewer-slot residuals, third batch (#441–445) — implemented, pending review
 
 Testing policy positively pins current declared-slot wording with the actual stale

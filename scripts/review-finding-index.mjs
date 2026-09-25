@@ -28,19 +28,70 @@ export const instructionEchoSentences = [
   "A pass verdict lists what you probed and which mutants you ran",
   "Report which of the PR body's claims you verified, and any you could not.",
 ];
+// Match balanced code spans, including multi-backtick spans and wrapped citations.
+// An escaped opening backtick is prose, not a quotation boundary.
+function inlineCode(text, replacement) {
+  return text.replace(/(?<![\\`])(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g, replacement);
+}
 export function assertReviewerVerdict(body) {
-  // Posting checks literal echoes, not live finding-index completeness or identity.
+  // Posting does not enforce live-index completeness or invent comment provenance.
   const headings = new Set(findingHeadings(body));
-  let inFinding = false;
-  for (const line of body.split(/\r?\n/)) {
-    if (/^ {0,3}#{1,6} /.test(line)) inFinding = headings.has(line);
-    else if (headings.has(line)) inFinding = true;
-    // Narrow escape hatch: a Markdown blockquote inside an indexed finding. The
-    // unquoted surrounding finding must still state the scenario and proposed fix.
-    if (inFinding && /^ {0,3}> /.test(line)) continue;
-    if (instructionEchoSentences.some(sentence => line.includes(sentence))) {
-      throw new Error("reviewer body echoes instructions; not a verdict");
+  const lines = body.split(/\r?\n/);
+  let inFinding = false, content = false, paragraphBreak = false;
+  const unchecked = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (headings.has(line)) {
+      inFinding = true; content = false; paragraphBreak = false;
+    } else if (/^ {0,3}(?:#{1,6} |(?:-\s*){3,}$|(?:\*\s*){3,}$|(?:_\s*){3,}$)/.test(line)) {
+      inFinding = false;
     }
+    if (!line.trim()) {
+      if (content) paragraphBreak = true;
+      unchecked.push(line);
+      continue;
+    }
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    const quoted = /^ {0,3}> ?/.test(line) || /^(?: {4}|\t)/.test(line) || marker;
+    // A new unquoted prose paragraph after the finding's scenario ends the escape.
+    // Blank lines before its first paragraph or an explicit citation are harmless.
+    // Inspect only this paragraph, and only when a boundary needs deciding.
+    // Joining the entire remaining body on every line is quadratic on large posts.
+    let rest = line;
+    if (inFinding && paragraphBreak && !quoted) {
+      for (let j = i + 1; j < lines.length && lines[j].trim(); j++) rest += "\n" + lines[j];
+    }
+    let inlineCitation = false;
+    inlineCode(rest, (_span, _ticks, citation) => {
+      if (instructionEchoSentences.some(sentence => citation.replace(/\s+/g, " ").includes(sentence))) inlineCitation = true;
+      return "";
+    });
+    if (paragraphBreak && !quoted && !inlineCitation) inFinding = false;
+    paragraphBreak = false;
+    if (inFinding && marker) {
+      const end = lines.findIndex((other, j) => j > i
+        && new RegExp(`^ {0,3}${marker[0]}{${marker.length},}\\s*$`).test(other));
+      if (end !== -1) { i = end; unchecked.push("\0"); continue; }
+      // Unclosed fences never grant a quotation escape.
+      inFinding = false;
+    }
+    if (inFinding && quoted) { unchecked.push("\0"); continue; }
+    // Gather a paragraph so a balanced inline citation may wrap across lines.
+    let paragraph = line;
+    if (inFinding && !headings.has(line)) {
+      while (i + 1 < lines.length && lines[i + 1].trim()
+        && !/^ {0,3}(?:#|>|`{3}|~{3}|(?:-\s*){3,}$|(?:\*\s*){3,}$|(?:_\s*){3,}$)/.test(lines[i + 1])) paragraph += "\n" + lines[++i];
+      paragraph = inlineCode(paragraph, "\0");
+      content = true;
+    }
+    unchecked.push(paragraph);
+  }
+  // Strip citation formatting even OUTSIDE findings: quoting the whole prompt is
+  // still an echo. Whitespace normalization catches reflow, not paraphrases.
+  const normalized = unchecked.join("\n").replace(/^ {0,3}> ?/gm, "")
+    .replace(/`+/g, "").replace(/\s+/g, " ");
+  if (instructionEchoSentences.some(sentence => normalized.includes(sentence.replace(/\s+/g, " ")))) {
+    throw new Error("reviewer body echoes instructions; not a verdict");
   }
 }
 
@@ -80,9 +131,10 @@ function findingHeadings(body, unsupported = () => {}) {
     // Priority planning sections are the explicit prose exception, not all P1 prose.
     const unsupportedOpening = /^ {0,3}#{1,6} +/.test(line) && /^(?:\*\*)?(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])\b/.test(candidate)
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
+    const fallback = /^\s*(?:\*\*)?(?:F\d+\b|\[P\d+\])/i.test(candidate) ? line : inlineCode(line, "");
     if (finding) {
       findings.push(line);
-    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(fallback))) {
       unsupported(line);
     }
   }

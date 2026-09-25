@@ -4,6 +4,12 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { readSkillText } from "../../../test/skill-text.js";
 
+function expectIncomplete(read: typeof readSkillText, root: string, skill: string) {
+  try { read(".agentrig/skills/dogfood/SKILL.md"); throw new Error("missing refusal"); }
+  catch (error) {
+    expect((error as Error).message.replaceAll("\\", "/")).toBe(`incomplete skills override: ${skill}/SKILL.md in ${root.replaceAll("\\", "/")}`);
+  }
+}
 const owned: string[] = [];
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -28,7 +34,7 @@ it("does not silently fall back to checkout skills when the override is incomple
   const root = fixture();
   rmSync(join(root, "dogfood", "SKILL.md"));
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: dogfood/SKILL.md in ${root}`);
+  expectIncomplete(readSkillText, root, "dogfood");
 });
 
 it("keeps non-skill document bytes and paths unchanged", () => {
@@ -47,10 +53,28 @@ it("rejects an incomplete tree even when the requested skill exists", () => {
   const root = fixture();
   rmSync(join(root, "topic"), { recursive: true });
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: topic/SKILL.md in ${root}`);
+  expectIncomplete(readSkillText, root, "topic");
 });
 it("preserves generated SKILL.md raw bytes including line-ending-only edits", () => {
   const path = join(fixture(), "SKILL.md");
   writeFileSync(path, "one\r\ntwo\r");
   expect(readSkillText(path)).toBe("one\r\ntwo\r");
+});
+
+it.each(["dogfood", "topic"])("M-windows-diagnostic: native separators for %s remain precise", async skill => {
+  const root = fixture();
+  rmSync(join(root, skill), { recursive: true });
+  vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
+  vi.resetModules();
+  vi.doMock("node:path", async () => {
+    const actual = await vi.importActual<typeof import("node:path")>("node:path");
+    return { ...actual,
+      relative: (...args: [string, string]) => actual.relative(...args).replaceAll("/", "\\"),
+      resolve: (...args: string[]) => actual.resolve(...args.map(arg => arg.replaceAll("\\", "/"))),
+    };
+  });
+  try {
+    const { readSkillText: windowsRead } = await import("../../../test/skill-text.js");
+    expectIncomplete(windowsRead, root, skill);
+  } finally { vi.doUnmock("node:path"); vi.resetModules(); }
 });

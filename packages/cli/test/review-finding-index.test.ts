@@ -72,3 +72,16 @@ it.each([
   const heading = "### LOW: Actual finding";
   expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
 });
+
+it.each([
+  "The sentence quotes `### HIGH — title` and `F1 — HIGH —` as examples.",
+  "- **#444** permits inline `F1 — HIGH —` examples.",
+  "The syntax ``F1 — HIGH — `title` `` is illustrative.",
+  "Ordinary prose mentions `[P4]` syntax.",
+])("M-inline-grammar: prose examples do not hide actual headings: %s", prose => {
+  const heading = "### LOW: Real `exact` finding";
+  expect(findingIndex(url, { html_url: url, body: `${prose}\r\n\r\n${heading}` })).toEqual([{ comment: url, heading }]);
+});
+it.each(["### F2: HIGH unsupported `example`", "F2: HIGH unsupported `example`", "### HIGH `title`", "[P4] Unknown `priority`", "F2: `HIGH` unsupported", "### F2: `HIGH` unsupported", " F2: `HIGH` unsupported", "### **F2**: `HIGH` unsupported"])("M-inline-not-heading-escape: %s", body => {
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+});
