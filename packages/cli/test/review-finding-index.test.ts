@@ -72,3 +72,21 @@ it.each([
   const heading = "### LOW: Actual finding";
   expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
 });
+
+// Ordinary prose can describe grammar without becoming a finding opening.
+it.each([
+  '- **#444** accepts inline `F1 — HIGH —` examples.',
+  'The sentence quotes `### HIGH — title` and `[P4]` grammar.',
+  'Mention F1 — HIGH — without treating this sentence as a heading.',
+  '### Grammar example: `F1 — HIGH —`',
+  'A backtick escaped example \\`F1 — HIGH —\\` is prose too.',
+])("M-inline-grammar: ignores syntax mentioned in prose: %s", prose => {
+  const heading = "   ### LOW: Preserve `Exact`  bytes";
+  for (const eol of ["\n", "\r\n"]) {
+    expect(findingIndex(url, { html_url: url, body: [prose, "", heading, "Evidence."].join(eol) }))
+      .toEqual([{ comment: url, heading }]);
+  }
+});
+it.each(["### F2: HIGH — unsupported", "   ### [P4] Unknown", "F2: HIGH — unsupported", "### HIGH Missing delimiter"])("M-opening-guard: still refuses actual malformed finding %s", body => {
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+});

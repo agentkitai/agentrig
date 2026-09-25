@@ -1,5 +1,32 @@
 # Status
 
+## Finding-index prose and path-separator residuals (#450, #451, #453, #454)
+
+Replay-scoped helper/test change; no product code or roadmap continuation changes.
+The live index ignores finding grammar mentioned inside ordinary prose, while
+unsupported finding openings still fail closed and indexed headings retain exact bytes.
+Override diagnostic assertions normalize path separators, checking both missing-file
+and override-root identity against native and simulated Windows diagnostics.
+Generated-fixture exceptions and instruction-loader bypass guards are unchanged.
+
+The posting helper’s shared echo guard compares its existing skill-pinned literals
+with normalized whitespace, including CRLF and blank-line rewrapping. Finding
+citations may use blockquotes, complete inline backtick spans, closed backtick/tilde
+fences, or indented code; surrounding scenario/fix prose remains checked. Finding
+permission ends at a non-finding heading, thematic break, or new unquoted paragraph
+after content, preventing leaks into an unheaded later section. Blank lines just
+after a finding heading and between quotation blocks are allowed. This intentionally
+conservative paragraph boundary means a later unquoted paragraph must not rely on
+an earlier finding’s citation permission. Malformed/unclosed citations grant no
+inline/fence escape; fenced headings cannot create finding state. Existing topic/ship
+blockquote guidance remains supported (it does not forbid these additional forms).
+No denylist expansion or semantic/paraphrase detector is claimed.
+
+Fail-first, named mutants, CRLF-loader and declared-check receipts accompany the
+draft replay PR. Independent review is a parent handoff; hosted CI is not awaited.
+Repair round: 0/3. Residuals: none. Replay prohibits merge, issue actions, and ROADMAP
+markers; the historical merge authorization is not operative.
+
 ## Reviewer-slot residuals, third batch (#441–445) — implemented, pending review
 
 Testing policy positively pins current declared-slot wording with the actual stale

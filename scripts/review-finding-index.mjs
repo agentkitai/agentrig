@@ -29,18 +29,56 @@ export const instructionEchoSentences = [
   "Report which of the PR body's claims you verified, and any you could not.",
 ];
 export function assertReviewerVerdict(body) {
-  // Posting checks literal echoes, not live finding-index completeness or identity.
+  // Posting checks echoes, not live finding-index completeness or identity.
   const headings = new Set(findingHeadings(body));
-  let inFinding = false;
-  for (const line of body.split(/\r?\n/)) {
-    if (/^ {0,3}#{1,6} /.test(line)) inFinding = headings.has(line);
-    else if (headings.has(line)) inFinding = true;
-    // Narrow escape hatch: a Markdown blockquote inside an indexed finding. The
-    // unquoted surrounding finding must still state the scenario and proposed fix.
-    if (inFinding && /^ {0,3}> /.test(line)) continue;
-    if (instructionEchoSentences.some(sentence => line.includes(sentence))) {
-      throw new Error("reviewer body echoes instructions; not a verdict");
+  const lines = body.split(/\r?\n/);
+  let inFinding = false, hasContent = false, blank = false, fence;
+  let paragraph = [];
+  const unquoted = [];
+  const check = () => {
+    let text = paragraph.join("\n");
+    // Only complete, unescaped, equal-length backtick spans are citations.
+    if (inFinding) text = text.replace(/(?<![\\`])(`+)(?!`)[\s\S]*?(?<![\\`])\1(?!`)/g, " ");
+    unquoted.push(text);
+    paragraph = [];
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) {
+      if (!fence.quoted) paragraph.push(line.replace(/^ {0,3}> ?/, ""));
+      if (marker?.[0] === fence.marker[0] && marker.length >= fence.marker.length && line.trim() === marker) fence = undefined;
+      continue;
     }
+    if (!line.trim()) { check(); blank = true; continue; }
+    const quote = /^ {0,3}> ?/.test(line) || /^(?: {4}|\t)/.test(line) || marker;
+    // A new unquoted paragraph after finding content is a section boundary,
+    // even without ATX markup. Blank space immediately after the heading is OK.
+    if (blank && hasContent && !quote) { check(); inFinding = false; }
+    blank = false;
+    if (/^ {0,3}#{1,6} /.test(line) || headings.has(line) || /^ {0,3}(?:[-*_]\s*){3,}$/.test(line)) {
+      check();
+      inFinding = headings.has(line);
+      hasContent = false;
+    } else hasContent = true;
+    if (marker) {
+      check();
+      // Unclosed fences never grant an escape; their contents still get checked.
+      const closed = lines.slice(i + 1).some(next => {
+        const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(next)?.[1];
+        return close?.[0] === marker[0] && close.length >= marker.length;
+      });
+      fence = { marker, quoted: inFinding && closed };
+      continue;
+    }
+    if (inFinding && quote) { check(); continue; }
+    // Strip quote prefixes outside findings too: rewrapping cannot hide an echo.
+    paragraph.push(line.replace(/^ {0,3}> ?/, ""));
+  }
+  check();
+  const normalized = unquoted.join("\n").replace(/\s+/g, " ");
+  if (instructionEchoSentences.some(sentence => normalized.includes(sentence))) {
+    throw new Error("reviewer body echoes instructions; not a verdict");
   }
 }
 
@@ -82,7 +120,7 @@ function findingHeadings(body, unsupported = () => {}) {
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
     if (finding) {
       findings.push(line);
-    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /^(?:F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(candidate.trimStart()))) {
       unsupported(line);
     }
   }

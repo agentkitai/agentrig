@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 // @ts-expect-error standalone helper
-import { findingIndex } from "../../../scripts/review-finding-index.mjs";
+import { findingIndex, instructionEchoSentences } from "../../../scripts/review-finding-index.mjs";
 
 function fixtureConfig(dir: string) {
   mkdirSync(join(dir, ".agentrig"), { recursive: true });
@@ -371,7 +371,8 @@ const echoPhrases = [
 ];
 it("M-contract-drift: pins literal echo phrases to current review skill", () => {
   const contract = readSkillText(new URL("../../../.agentrig/skills/review/SKILL.md", import.meta.url));
-  for (const phrase of echoPhrases) expect(contract).toContain(phrase);
+  expect(instructionEchoSentences).toEqual(echoPhrases);
+  for (const phrase of instructionEchoSentences) expect(contract).toContain(phrase);
 });
 it.each(echoPhrases)("M-echo-gate: rejects instruction echo before gh: %s", phrase => {
   const result = run(`VERDICT: PASS\nReviewed head ${head}\n${phrase}\n`);
@@ -439,4 +440,93 @@ it.each([
   expect(run(body + echoPhrases[0]).stderr).toContain("reviewer body echoes instructions; not a verdict");
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
+});
+
+const wrappedEcho = echoPhrases[1]!.replace("probed and", "probed\n  and");
+it.each([
+  `> ${wrappedEcho.replaceAll("\n", "\n> ")}`,
+  `Contract says: \`${wrappedEcho}\`. Fix its evidence requirement.`,
+  `Contract says: \`\`${wrappedEcho}\`\`.`,
+  `\`\`\`md\n${wrappedEcho}\n\`\`\``,
+  `~~~~md\n${wrappedEcho}\n~~~~`,
+  `    ${wrappedEcho.replaceAll("\n", "\n    ")}`,
+].flatMap(citation => [citation, citation.replace(/\n(?:> |    )?  and/, " and")]))("M-citation-format: posts a bounded finding citation losslessly: %s", citation => {
+  for (const eol of ["\n", "\r\n"]) {
+    const body = `VERDICT: FAIL\n### LOW: Contract mismatch\n\nScenario: the receipt is missing. Fix the receipt.\n${citation}\n`.replaceAll("\n", eol);
+    const result = run(body);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.posted).toBe(`${heading}\n\n${body}`);
+  }
+});
+it.each(echoPhrases)("M-wrapped-echo: refuses reflowed literal before gh: %s", phrase => {
+  for (const eol of ["\n", "\r\n"]) {
+    const wrapped = phrase.split(" ").join(`${eol}\t`);
+    const result = run(`VERDICT: PASS${eol}${wrapped}${eol}`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+    expect(result.args).toBeUndefined();
+  }
+});
+it.each([
+  `## Verification\n> ${wrappedEcho.replaceAll("\n", "\n> ")}`,
+  `\nUnrelated later prose section.\n> ${echoPhrases[0]}`,
+  `\nVerification\n------------\n> ${echoPhrases[0]}`,
+  `\n---\n> ${echoPhrases[0]}`,
+  `---\n> ${echoPhrases[0]}`,
+])("M-finding-boundary: quotation permission cannot leak: %s", later => {
+  const result = run(`VERDICT: FAIL\n### LOW: Missing evidence\nScenario and proposed fix.\n${later}\n`);
+  expect(result.status).not.toBe(0);
+  expect(result.args).toBeUndefined();
+});
+it.each([
+  `> ${wrappedEcho.replaceAll("\n", "\n> ")}`,
+  `\`\`\`md\n### LOW: Fake finding\n${wrappedEcho}\n\`\`\``,
+  `Contract says: \`${wrappedEcho}\`.`,
+  `    ${wrappedEcho}`,
+  `### LOW: Real\nEscaped delimiter: \\\`${echoPhrases[0]}\\\``,
+  `### LOW: Real\nUnclosed delimiter: \`${echoPhrases[0]}`,
+  `### LOW: Real\nMismatched delimiter: \`\`${echoPhrases[0]}\``,
+])("M-unbounded-citation: refuses unscoped or malformed quotation: %s", body => {
+  const result = run(`VERDICT: FAIL\n${body}\n`);
+  expect(result.status).not.toBe(0);
+  expect(result.args).toBeUndefined();
+});
+
+it("M-blank-wrap: whitespace normalization spans blank lines", () => {
+  const result = run(echoPhrases[0]!.split(" ").join("\r\n \r\n"));
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(result.args).toBeUndefined();
+});
+it.each([
+  `\`\`\`md\n${echoPhrases[0]}`,
+  `\`\`\`md\n${echoPhrases[0]}\n~~~`,
+  `\`\`\`\`md\n${echoPhrases[0]}\n\`\`\``,
+  `\`\`\`md\n${echoPhrases[0]}\n\`\`\`not-a-close`,
+])("M-fence-completeness: unclosed or mismatched finding fence refuses: %s", citation => {
+  const result = run(`### LOW: Contract\nScenario and fix.\n${citation}`);
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(result.args).toBeUndefined();
+});
+it("M-fence-exit: closing a citation cannot exempt later raw echoes", () => {
+  const citation = `### LOW: Contract\nScenario and fix.\n\`\`\`md\n${echoPhrases[0]}\n\`\`\`\n`;
+  expect(run(citation).status).toBe(0);
+  expect(run(citation + echoPhrases[1]).args).toBeUndefined();
+});
+it("M-code-heading: heading-shaped citation content does not end a finding", () => {
+  const body = `F1 — LOW — Contract\nScenario and fix.\n~~~~md\n## Not a section\n${echoPhrases[0]}\n~~~~~\n> ${echoPhrases[1]}\n`;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+});
+it("M-inline-boundary: an unclosed code span cannot capture a later section", () => {
+  const result = run(`### LOW: Contract\nScenario opens \`code\n\nUnrelated section\n${echoPhrases[0]}\nclosing \` delimiter.`);
+  expect(result.args).toBeUndefined();
+});
+
+it("M-blank-quotes: separate quote blocks remain inside the finding", () => {
+  const body = `### LOW: Contract\n\nScenario and fix.\n\n> ${echoPhrases[0]}\n\n> ${echoPhrases[1]}`;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+});
+it("M-heading-inline-boundary: a heading code span cannot cross blank paragraphs", () => {
+  const result = run(`### LOW: cites \`${echoPhrases[0]}\n\n\` Evidence and fix.`);
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(result.args).toBeUndefined();
 });
