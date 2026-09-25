@@ -1,7 +1,8 @@
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import * as fs from "node:fs";
+import { afterEach, expect, it, vi } from "vitest";
 import { snapshotStore } from "../../../test/project-store.js";
 
 const roots: string[] = [];
@@ -49,4 +50,45 @@ it("includes nested artifacts but does not traverse symlinks outside the store",
   expect(snapshotStore(root)).toEqual(before);
   writeFileSync(join(root, "nested", "artifact"), "modified");
   expect(snapshotStore(root)).not.toEqual(before);
+});
+
+// Deterministically remove an entry after stat, immediately before its next read.
+it.each(["readFileSync", "readdirSync", "readlinkSync"] as const)("reports removed-during-inventory for %s", operation => {
+  const root = fixture();
+  const path = join(root, "vanishing");
+  if (operation === "readFileSync") writeFileSync(path, "PRIVATE_CONTENT");
+  else if (operation === "readdirSync") mkdirSync(path);
+  else symlinkSync(fixture(), path, process.platform === "win32" ? "junction" : "dir");
+  const io = { ...fs };
+  const original = fs[operation];
+  const spy = vi.spyOn(io, operation).mockImplementation(((...args: unknown[]) => {
+    if (args[0] === path) rmSync(path, { recursive: true, force: true });
+    return (original as (...args: unknown[]) => unknown)(...args);
+  }) as never);
+  try {
+    expect(() => snapshotStore(root, io)).toThrow(`project-store guard: removed-during-inventory: ${path}`);
+  } finally { spy.mockRestore(); }
+});
+
+it("reports an enumerated entry disappearing before stat rather than ignoring it", () => {
+  const root = fixture();
+  const path = join(root, "vanishing");
+  writeFileSync(path, "private");
+  const io = { ...fs };
+  const original = fs.lstatSync;
+  const spy = vi.spyOn(io, "lstatSync").mockImplementation(((target: fs.PathLike) => {
+    if (target === path) rmSync(path);
+    return original(target);
+  }) as typeof fs.lstatSync);
+  try { expect(() => snapshotStore(root, io)).toThrow(`project-store guard: removed-during-inventory: ${path}`); }
+  finally { spy.mockRestore(); }
+});
+
+it.each(["lstatSync", "readdirSync"] as const)("does not swallow non-ENOENT inventory errors from %s", operation => {
+  const root = fixture();
+  const io = { ...fs };
+  const error = Object.assign(new Error("denied"), { code: "EACCES" });
+  const spy = vi.spyOn(io, operation).mockImplementation(() => { throw error; });
+  try { expect(() => snapshotStore(root, io)).toThrow(error); }
+  finally { spy.mockRestore(); }
 });

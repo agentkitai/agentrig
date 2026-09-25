@@ -2,6 +2,24 @@
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## Project-store guard follow-ups — #355, #356, #357, #364
+
+Test/docs-only maintenance; no roadmap advancement or product-default changes.
+The shared read-only guard now also inventories checkout/package `.agentrig/wiki`.
+CLI extension fixtures explicitly place memory under realpath tmpdir roots,
+retaining real memory behavior instead of disabling it. The generated-skill lead
+did not reproduce a leak in isolation and was left unchanged.
+Racing deletion after enumeration/stat fails with a contextual path and
+`removed-during-inventory`; absent roots remain valid and other I/O errors propagate.
+Deterministic injected filesystem reads exercise all three post-stat read races and
+nested pre-stat deletion. Disposable checkout probes pin each guarded wiki path.
+Windows includes inventory/wiring regressions; TESTING documents coverage, cost,
+quiescence, concurrent genuine writers and remedies without a bypass. Historical
+#313 now points clean-main advances at shipping policy §1 CI-staleness.
+Fail-first, named mutations and full-trio receipts are in the draft PR; independent
+review and hosted CI remain pending. No claim of whole-`.agentrig` or transient-write
+coverage; no project data is deleted by the guard. Current roadmap row is unchanged.
+
 ## Review and cleanup skill wording sweep (#341, #342, #348, #349, #351, #365)
 
 Instruction-only cleanup: topic enumerates optional conductor-trio trees/temporary roots on
@@ -168,7 +186,8 @@ roadmap advancement; local proof is recorded in the PR, independent review and C
 Topic's rerun check still matches the CURRENT head SHA in the complete canonical heading.
 Recorded MAIN is historical provenance for the origin/main merge base reviewed, not an
 additional equality gate against current origin/main. Moved main follows the existing
-conflict/material-delta policy rather than causing a redundant initial pair. Instruction-contract
+conflict/material-delta policy in shipping policy §3, with clean main advances routed
+through §1 CI-staleness, rather than causing a redundant initial pair. Instruction-contract
 coverage pins this clarification at the operative rerun check and rejects removal, current-main
 equality, redundant-pair and lost-routing mutants. No heading, landing gate or runtime change;
 this maintenance task does not advance ROADMAP §5. Independent review and exact-head hosted

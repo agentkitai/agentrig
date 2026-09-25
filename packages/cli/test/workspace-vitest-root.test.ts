@@ -53,3 +53,8 @@ it("inherits trace2 isolation into Windows and web configs", () => {
   expect(windows.test!.env).toEqual(base.test!.env);
   expect(web.test!.env).toEqual(base.test!.env);
 });
+
+it("includes inventory and wiring regressions in the Windows lane", () => {
+  expect(windowsCoverage).toContain("packages/cli/test/project-store.test.ts");
+  expect(windowsCoverage).toContain("packages/cli/test/project-store-wiring.test.ts");
+});

@@ -22,8 +22,9 @@ import { fileURLToPath } from "node:url";
 import { snapshotStore } from "./project-store.js";
 
 const projectStores = ["", "packages/cli/", "packages/core/", "packages/memory/", "packages/supervisor/"]
-  .map((base) => fileURLToPath(new URL(`../${base}.agentrig/raw/sessions`, import.meta.url)));
-const before = projectStores.map(snapshotStore);
+  .flatMap((base) => ["raw/sessions", "wiki"].map((store) =>
+    fileURLToPath(new URL(`../${base}.agentrig/${store}`, import.meta.url))));
+const before = projectStores.map(root => snapshotStore(root));
 afterAll(() => {
-  expect(projectStores.map(snapshotStore), "test suite must leave project session stores untouched").toEqual(before);
+  expect(projectStores.map(root => snapshotStore(root)), "test suite must leave project session stores untouched (including wiki)").toEqual(before);
 });

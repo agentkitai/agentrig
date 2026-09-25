@@ -42,6 +42,38 @@ git-ai, which can write `refs/notes/ai` in fixture repositories and race teardow
 It does not disable `trace2.normalTarget` or `trace2.perfTarget`.
 This is separate from fixture ancestry and does not change the preflight check.
 
+## The suite-wide project-store guard
+
+Every test file inherits `test/setup-no-ci.ts` (including Windows and web lanes).
+It takes read-only before/after inventories of `.agentrig/raw/sessions` and
+`.agentrig/wiki` at the checkout root and in each of `packages/cli`, `packages/core`,
+`packages/memory`, and `packages/supervisor`. This is not whole-`.agentrig` coverage.
+The dedicated inventory and disposable-checkout wiring regressions are also in the
+Windows include list.
+
+The inventory records empty directories, nested artifacts, session snapshots,
+SHA-256 file content hashes and symlink targets without traversing symlinks or
+printing session contents. It catches additions, deletions and same-size rewrites;
+transient changes restored before teardown are outside this persisted-state proof.
+An initially absent store is valid. An enumerated entry removed during scanning
+fails with `project-store guard: removed-during-inventory: <path>`, including
+removal between stat and reading a file, directory or link. Other I/O errors also
+fail closed. Inventories cost work proportional to store bytes for each test file.
+
+`test suite must leave project session stores untouched (including wiki)` means
+one of these inventories changed. The guard never repairs or deletes data and has
+no opt-out. It prevents fixtures from interleaving logs or wiki artifacts with real
+project data. Parallel workers can report another test's leak, so isolate suspect
+files to identify its source; route both session `--root` and `--memory` into
+realpath-resolved tmpdir fixtures, not checkout-relative defaults.
+
+Guarded stores must be **quiescent** throughout the run. A legitimate concurrent
+AgentRig session in the same checkout can trigger the guard too: stop or wait for
+that writer, or run tests in a separate owned worktree with quiescent stores and
+rerun. Do not delete genuine sessions, ignore the failure, or disable the guard.
+Use a proof `TMPDIR` outside Git ancestry as described below; moving TMPDIR alone
+does not relocate a CLI's relative project-store defaults.
+
 ## The fixture preflight
 
 `test/fixture-preflight.mjs` runs before the suite in `pnpm test` and is silent unless it finds
