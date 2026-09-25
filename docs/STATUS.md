@@ -1,3 +1,27 @@
+## Hook refusals (#587) — implementation; review/landing pending
+
+Current roadmap row: issue #587, "Hook refusals: no false positives on read-only merge text, distinct messages";
+next: conductor review and authorized landing. No new roadmap completion marker.
+
+The ship hook distinguishes literal help and quoted data from recognized executable
+merge intent. Help is invocation-local; real compound/wrapped merges remain refused.
+Merge and ledger refusals name their own rule and accepted literal command form.
+A shared bounded lexical view preserves shell word boundaries for both intent gates;
+shell substitutions/programs and recognized interpreter/API payloads remain guarded.
+This is not a shell sandbox or a general payload interpreter. Authority, CI and
+append-only ledger checks are unchanged. Rejected: dropping all quoted text or
+exempting a whole compound command just because it contains a help flag.
+R19 LOW observations and wording followups remain advisories, not residual issues.
+
+Repair round 1/3 implements review blockers C1/C2/C3/X1; independent delta review
+is still pending. The help exemption accepts only help flags plus at most one explicit
+PR target, never a value-taking merge option. Absolute pulls API URLs enter ledger
+validation and mutation forms remain unsupported rather than bypassing it. The shell
+wrapper list includes csh/tcsh/fish. Substitution extraction balances nested delimiters
+with per-frame quote and escape handling instead of truncating at the first close.
+Regression tests cover both guards and interactions between these cases; restoration
+mutants for each blocker fail. C4 and advisory wording are intentionally unchanged.
+
 ## Ship pack lander role — implementation, review/landing pending
 
 Current roadmap row: follow-up to #585 / row-052 halt, "Ship pack provides the lander role";

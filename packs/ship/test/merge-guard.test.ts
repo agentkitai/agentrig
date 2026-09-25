@@ -73,6 +73,56 @@ else {console.error('unexpected '+JSON.stringify(a));process.exit(2);}
 }
 
 describe("minimal merge guard", () => {
+  it.each([
+    "gh pr merge --help", "gh pr merge -h",
+    "pwd && gh pr merge --help | cat", "gh pr merge 7 -h; pwd",
+    "printf '%s' 'gh pr merge 7 --squash'",
+    'echo "gh pr merge 7" && pwd',
+    "gh pr comment 7 --body 'refused: gh pr merge --help'",
+    "printf '%s' 'gh api repos/o/r/pulls/7/merge -X PUT'",
+    "echo 'https://api.github.com/repos/o/r/pulls/7/merge'",
+  ])("read-only merge text continues without fetch: %s", async text => {
+    const f = await fixture();
+    expect(await f.merge(text)).toEqual({ action: "continue" });
+    await expect(readFile(join(f.root, "calls"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it.each([
+    "gh pr merge --help; gh pr merge 7", "echo --help; gh pr merge 7",
+    "sh -c 'gh pr merge 7'", "eval 'gh pr merge 7'",
+    "env gh pr merge 7", "gh 'pr' 'merge' 7",
+    `python3 -c 'import os; os.system("gh pr merge 7")'`,
+    `node -e 'require("child_process").execSync("gh pr merge 7")'`,
+    "gh pr merge 7 -- --help", "gh pr merge 7; echo '--help'",
+    "gh pr merge 7 # --help", "gh pr merge 7 # -h",
+    `curl https://api.github.com/graphql -d 'mutation { mergePullRequest(input: {}) { clientMutationId } }'`,
+    "gh p'r' mer\\ge 7",
+    'echo "$(gh pr merge 7)"', "echo `gh pr merge 7`",
+    "printf '%s' 'safe'; gh pr merge 7",
+  ])("real wrapped merge remains refused: %s", async text => {
+    const f = await fixture();
+    expect((await f.merge(text)).action).toBe("deny");
+  });
+  it("names separate literal-command rules and accepted forms", async () => {
+    const f = await fixture();
+    const merge = await f.merge("pwd && gh pr merge 7");
+    expect(merge.reason).toContain("merge guard:");
+    expect(merge.reason).toContain("gh pr merge NUMBER --squash --match-head-commit FULL_HEAD");
+    expect(merge.reason).not.toContain("body edits");
+  });
+  it.each([
+    `python3 -c 'import os; os.system("gh pr edit 7 --body replaced")'`,
+    `node -e 'require("child_process").execSync("gh pr edit 7 --body replaced")'`,
+  ])("retains interpreter-wrapped ledger refusal: %s", async text => {
+    const f = await fixture();
+    expect((await f.merge(text)).action).toBe("deny");
+  });
+  it("names the ledger rule and accepted body-edit form independently", async () => {
+    const f = await fixture();
+    const ledger = await f.merge("pwd && gh pr edit 7 --body replaced");
+    expect(ledger.reason).toContain("ledger integrity");
+    expect(ledger.reason).toContain("gh pr edit NUMBER --body-file FILE");
+    expect(ledger.reason).not.toContain("merge guard");
+  });
   it("discovers the tracked lander in a fresh project and grants only its bound child", async () => {
     const path = ".agentrig/agents/lander.md";
     // An ignored host-only file must not make a fresh-checkout regression pass.
