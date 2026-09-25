@@ -36,7 +36,7 @@ export function mergeIntent(command) {
       // literal recognition without claiming to interpret those languages.
       if (args.some(arg => /\bpr\s+merge\b|\bpulls\/[^\s/]+\/merge\b|\bmergePullRequest\b/u.test(arg))) return true;
     }
-    return args.includes("graphql") && args.includes("api") && args.some(arg => /\bmergePullRequest\b/u.test(arg));
+    return (args.includes("api") || args.some(arg => /^(?:.*\/)?curl$/u.test(arg))) && args.some(arg => /\bmergePullRequest\b/u.test(arg));
   });
 }
 

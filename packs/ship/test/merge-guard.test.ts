@@ -93,6 +93,8 @@ describe("minimal merge guard", () => {
     `python3 -c 'import os; os.system("gh pr merge 7")'`,
     `node -e 'require("child_process").execSync("gh pr merge 7")'`,
     "gh pr merge 7 -- --help", "gh pr merge 7; echo '--help'",
+    "gh pr merge 7 # --help", "gh pr merge 7 # -h",
+    `curl https://api.github.com/graphql -d 'mutation { mergePullRequest(input: {}) { clientMutationId } }'`,
     "gh p'r' mer\\ge 7",
     'echo "$(gh pr merge 7)"', "echo `gh pr merge 7`",
     "printf '%s' 'safe'; gh pr merge 7",

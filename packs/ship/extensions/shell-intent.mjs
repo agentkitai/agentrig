@@ -6,6 +6,10 @@ export function shellIntentParts(command) {
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
     if (quote === "'") { if (ch === "'") quote = undefined; else value += ch; continue; }
+    if (!quote && !active && ch === "#") {
+      while (i + 1 < command.length && command[i + 1] !== "\n") i++;
+      continue;
+    }
     if (ch === "'" && !quote) { quote = ch; active = true; continue; }
     if (ch === '"') { quote = quote ? undefined : ch; active = true; continue; }
     // Substitutions execute even inside double-quoted data. Inspect their
