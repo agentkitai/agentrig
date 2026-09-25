@@ -66,7 +66,7 @@ script calls without receipts retain their old heading; they are not shipping pr
 Before launching CLI reviewers, select the operator's user profile with adapter
 `--profile <name>` (or inherit the CLI's `AGENTRIG_CHILD_PROFILE`) and run
 `agentrig doctor --profile <name>` in the trusted reviewed project. The adapter and
-train require explicit `CODEX_HOME` / `CLAUDE_CONFIG_DIR` via user-profile `childEnv`
+train require each adapter’s explicit CLI home variable via user-profile `childEnv`
 or the inherited environment; never default to an implicit login home. See
 [launch environment](../../../docs/TRAIN-OPERATIONS.md#profile-scoped-child-environment).
 
