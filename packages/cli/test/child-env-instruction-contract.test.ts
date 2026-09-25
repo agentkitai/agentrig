@@ -4,6 +4,6 @@ it.each(["dogfood", "ship", "topic", "land", "review", "arbiter"])("%s preserves
   const text = readSkillText(`.agentrig/skills/${skill}/SKILL.md`);
   expect(text).toContain('insert ` [VARIABLE="/resolved/path"]` immediately after the model parentheses');
   expect(text).toContain('Pass `--profile <name>` to the adapter');
-  expect(text).toContain('missing CODEX_HOME or CLAUDE_CONFIG_DIR refuses that CLI slot');
+  expect(text).toContain('a missing adapter-required CLI home refuses that slot (variable names are in shipping policy)');
   expect(text).toContain('Never read or print credentials');
 });

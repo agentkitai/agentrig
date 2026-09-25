@@ -57,7 +57,7 @@ the slot's pinned model; it duplicates no endpoints, credentials or routing. See
 
 Each declared slot's initial comment must start with:
 `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-For new CLI receipts, insert ` [VARIABLE="/resolved/path"]` immediately after the model parentheses, using adapter `resolvedHome`; this is part of the complete canonical heading. Pass `--profile <name>` to the adapter when selecting user profile childEnv. Run `agentrig doctor --profile <name>` first; missing CODEX_HOME or CLAUDE_CONFIG_DIR refuses that CLI slot. Never read or print credentials. API/legacy receipts without resolvedHome retain the heading above.
+For new CLI receipts, insert ` [VARIABLE="/resolved/path"]` immediately after the model parentheses, using adapter `resolvedHome`; this is part of the complete canonical heading. Pass `--profile <name>` to the adapter when selecting user profile childEnv. Run `agentrig doctor --profile <name>` first; a missing adapter-required CLI home refuses that slot (variable names are in shipping policy). Never read or print credentials. API/legacy receipts without resolvedHome retain the heading above.
 Substitute the slot name, transport-proven pinned model, full reviewed PR head SHA and full origin/main SHA. Preserve the honest assertedModel separately.
 The initial heading model must equal the slot's pinned model. A different model makes this a
 missing required initial review, not a receipt. Require the complete heading, not just a prefix
