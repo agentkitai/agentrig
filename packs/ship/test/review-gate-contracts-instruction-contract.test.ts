@@ -15,7 +15,7 @@ const checks: Array<[string, string, string, string[]]> = [
  ["M-ship-pin",skill("ship"),"## 2.",["scripts/reviewer-adapters.mjs", "slot's pinned model"]],
  ...[skill("topic"),"docs/SHIPPING-WORKFLOW.md"].map(path => ["M-delta-closure",path,"## 3.", ['git rev-parse --verify "$OLD^{commit}"','git rev-parse --verify "$NEW^{commit}"','[ "$OLD" != "$NEW" ]','git merge-base --is-ancestor "$OLD" "$NEW"',"fixer delta plus independent focused review","ledger rebuttal quoting a reproducible command and its result","arbiter verdict","prohibit re-prompting the raising reviewer under the","conductor’s contract reading as closure"]] as [string,string,string,string[]]),
  ...["topic","ship"].map(name => ["M-fixer-readback",skill(name),"## 3.",["Read back `gh pr view NN --json body` BEFORE spawning", "Quote that persisted `Repair round: N/3` plus ledger blocker IDs verbatim", "Dispatch only ledger-blocking findings", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "Require edit success and read back the receipt", "Record any reclassification in the ledger first with its rationale", "Nonblocking defects go to residual issues; advisory"]] as [string,string,string,string[]]),
- ...["ship", "topic"].map(name => ["M-land-persistence",skill(name),"Before invoking land",["`gh pr view NN --json body`","Fetch linked review comments too","verify all declared initial canonical headings", "dispositions for every", "`## Residuals` has issue links or", "explicit `none`", "halt BEFORE land-child spawning", "including each slot's pinned model", "reviewed head and main provenance", "every focused review", "Verify all blocker closures and delta coverage through current head", "Persist edits then read back again if anything changes"]] as [string,string,string,string[]]),
+ ...["ship", "topic"].map(name => ["M-land-persistence",skill(name),"Before spawning the named lander child",["`gh pr view NN --json body`","Fetch linked review comments too","verify all declared initial canonical headings", "dispositions for every", "`## Residuals` has issue links or", "explicit `none`", "halt BEFORE land-child spawning", "including each slot's pinned model", "reviewed head and main provenance", "every focused review", "Verify all blocker closures and delta coverage through current head", "Persist edits then read back again if anything changes"]] as [string,string,string,string[]]),
 ];
 // Preserve section boundaries before normalizing whitespace for phrase comparisons.
 const sectionFrom = (s: string, start: string) => {
@@ -51,11 +51,11 @@ const fixerWindow = (s: string, path: string) => {
 // All persistence requirements must execute before dispatch, not merely in the same section.
 const landWindow = (s: string, name: string) => {
  const section = sectionFrom(s, name === "ship" ? "## 3." : "## 4.");
- const anchor = "Before invoking land";
+ const anchor = "Before spawning the named lander child";
  const start = section.indexOf(anchor);
  expect(start).toBeGreaterThanOrEqual(0);
  expect(section.slice(start - 2, start)).toBe("\n\n");
- const spawn = section.indexOf(name === "ship" ? "- When scoped merge authorization" : "Then spawn a land subagent");
+ const spawn = section.indexOf(name === "ship" ? "- When scoped merge authorization" : "Then dispatch `subagent` with");
  expect(spawn).toBeGreaterThan(start);
  return section.slice(start, spawn);
 };
@@ -68,7 +68,7 @@ for (const name of ["ship", "topic"]) {
  it(`M-land-placement ${name} standalone gate before spawn in section`, () => landGate(read(skill(name)), name));
  for (const mutation of ["EOF", "after-spawn", "split-paragraph", "lazy-continuation"]) it(`M-land-placement ${name} ${mutation} mutant`, () => {
   const s = read(skill(name)); landGate(s, name);
-  const gate = s.match(/Before invoking land[\s\S]*?Persist edits then read back again if anything changes\./)![0];
+  const gate = s.match(/Before spawning the named lander child[\s\S]*?Persist edits then read back again if anything changes\./)![0];
   let mutant = s.replace(gate, "");
   if (mutation === "EOF") mutant += `\n\n${gate}\n`;
   else if (mutation === "after-spawn") {

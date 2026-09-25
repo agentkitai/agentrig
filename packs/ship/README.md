@@ -72,3 +72,22 @@ still composes it with these defaults while the running host keeps using core
 exports. CLI switching, dropping core exports, and moving train-specific child-env
 and project-check helpers remain future R19d slices. No topic/session changes,
 bolt-on retirement or hook-gate migration are included; no gate grows here.
+
+## Lander role installation
+
+Role discovery currently reads only the trusted project's `.agentrig/agents`;
+`pack.json` cannot contribute roles. This source repository therefore tracks
+[the lander role](../../.agentrig/agents/lander.md) at that conventional path.
+For another trusted project, copy that file to `.agentrig/agents/lander.md`, commit
+it explicitly if local ignore rules exclude agent state, and rebuild the agent
+with subagents enabled. Do not symlink it: role discovery refuses symlinks.
+Installing the skills or registering `shipPack` alone does not install this role.
+No generic core discovery change or implicit install is introduced here.
+
+Ship/topic landing dispatch uses `subagent({ agent: "lander", task: "..." })`.
+The manifest retains the host role's explicit tool allowlist (including overflow
+recovery), `model-role: subagents`, and `delegable: false`. It neither selects a
+provider nor grants permissions or merge consent. The activated dispatch/merge
+hooks must still bind the child and PR; missing roles halt rather than falling
+back to an unnamed child. `pnpm test:ship` checks the tracked role in a fresh
+checkout and exercises a grant using its production-discovered snapshot.

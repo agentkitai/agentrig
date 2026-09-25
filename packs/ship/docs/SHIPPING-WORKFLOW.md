@@ -210,6 +210,13 @@ PRs recover the ledger and review history. Never land unresolved blockers to mee
 
 ## 4. Final join and receipt
 
+Dispatch `subagent` with `agent: "lander"` for landing; a generic child merely told
+to follow land, or a conductor merging in-session, has no named-lander grant.
+Use the tracked `.agentrig/agents/lander.md` role (see the ship pack README for
+installation in other trusted projects). If discovery does not expose `lander`,
+halt and restore that role, then rebuild the agent; never fall back to an unnamed
+child. Preserve the existing authorization and review gates before dispatch.
+
 The lander checks the initial review pair, every material delta's focused verdict,
 mechanical-delta evidence, and each finding's disposition. Preserve explicit task
 merge authorization and later revocations. Require green exact-head CI, then merge
