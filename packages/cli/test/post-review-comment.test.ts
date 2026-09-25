@@ -440,3 +440,71 @@ it.each([
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
 });
+
+const quoteForms = [
+  (s: string) => `> ${s.replace('probed and', 'probed\n> and')}`,
+  (s: string) => `Citation: \`${s.replace('probed and', 'probed\nand')}\``,
+  (s: string) => `\`\`Citation: ${s}\`\``,
+  (s: string) => `\`\`\`text\n${s}\n\`\`\``,
+  (s: string) => `~~~~\n${s}\n~~~~`,
+  (s: string) => `    ${s.replace('probed and', 'probed\n    and')}`,
+];
+it.each(quoteForms.flatMap((quote, i) => ['\n', '\r\n'].map(eol => ({ quote, i, eol }))))('M-quote-format $i: only finding citations escape', ({ quote, eol }) => {
+  const citation = quote(echoPhrases[1]!).replaceAll('\n', eol);
+  const body = `VERDICT: FAIL\n### LOW: Receipt missing\nThe receipt lacks probes; fix the evidence.\n${citation}\n`;
+  const result = run(body);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).toBe(`${heading}\n\n${body}`);
+  const outside = run(`VERDICT: PASS\n${citation}\n`);
+  expect(outside.status).not.toBe(0);
+  expect(outside.stderr).toContain('reviewer body echoes instructions');
+  expect(outside.args).toBeUndefined();
+});
+it.each(['\n\nUnheaded summary\n', '\n## Summary\n', '\n---\n'])('M-section-leak: ends finding scope at %j', boundary => {
+  const result = run(`### LOW: Receipt missing\nFix the evidence.${boundary}> ${echoPhrases[0]}\n`);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('reviewer body echoes instructions');
+  expect(result.args).toBeUndefined();
+});
+it.each(echoPhrases)('M-wrapped-echo: rejects normalized literal %s', phrase => {
+  for (const eol of ['\n', '\r\n']) {
+    const result = run(`VERDICT: PASS${eol}${phrase.split(' ').join(` \t${eol}`)}`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('reviewer body echoes instructions');
+    expect(result.args).toBeUndefined();
+  }
+});
+it.each(['`', '\\`', '```\n'])('M-malformed-quote: no escape for unclosed/escaped %j', open => {
+  const result = run(`### LOW: Receipt missing\nFix evidence.\n${open}${echoPhrases[0]}`);
+  expect(result.status).not.toBe(0);
+  expect(result.args).toBeUndefined();
+});
+it('M-blank-citation: blank lines do not end an explicitly quoted finding citation', () => {
+  expect(run(`### LOW: Receipt missing\nFix evidence.\n\n> ${echoPhrases[0]}\n`).status).toBe(0);
+});
+
+it.each([
+  (s: string) => `\`\`\`\`\n${s}\n\`\`\``,
+  (s: string) => `~~~\n${s}\n\`\`\``,
+  (s: string) => `\`\`\n${s}\n\``,
+  (s: string) => `\\\`${s}\\\``,
+])('M-malformed-pair: malformed quotations do not grant an escape', quote => {
+  const result = run(`### LOW: Missing proof\nFix evidence.\n${quote(echoPhrases[0]!)}`);
+  expect(result.status).not.toBe(0);
+  expect(result.args).toBeUndefined();
+});
+it('M-fence-heading: a heading inside a citation cannot create finding scope', () => {
+  const result = run(`\`\`\`md\n### LOW: Example\n\`\`\`\n> ${echoPhrases[0]}`);
+  expect(result.status).not.toBe(0);
+  expect(result.args).toBeUndefined();
+});
+it('M-escaped-close: an escaped closing backtick does not close a citation', () => {
+  const result = run(`### LOW: Missing proof\nFix evidence.\n\`${echoPhrases[0]}\\\``);
+  expect(result.status).not.toBe(0);
+  expect(result.args).toBeUndefined();
+});
+it('M-nested-quote: wrapped nested blockquotes outside findings still refuse', () => {
+  const result = run(`VERDICT: PASS\n> > ${echoPhrases[1]!.replace('probed and', 'probed\n> > and')}`);
+  expect(result.status).not.toBe(0);
+  expect(result.args).toBeUndefined();
+});

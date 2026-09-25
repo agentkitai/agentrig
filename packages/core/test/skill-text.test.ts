@@ -4,6 +4,13 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { readSkillText } from "../../../test/skill-text.js";
 
+function assertIncomplete(read: () => unknown, missing: string, root: string) {
+  expect(() => {
+    try { read(); } catch (error) {
+      throw new Error(String(error).replaceAll("\\", "/"));
+    }
+  }).toThrow(`incomplete skills override: ${missing} in ${root}`.replaceAll("\\", "/"));
+}
 const owned: string[] = [];
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -28,7 +35,7 @@ it("does not silently fall back to checkout skills when the override is incomple
   const root = fixture();
   rmSync(join(root, "dogfood", "SKILL.md"));
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: dogfood/SKILL.md in ${root}`);
+  assertIncomplete(() => readSkillText(".agentrig/skills/dogfood/SKILL.md"), join("dogfood", "SKILL.md"), root);
 });
 
 it("keeps non-skill document bytes and paths unchanged", () => {
@@ -47,10 +54,14 @@ it("rejects an incomplete tree even when the requested skill exists", () => {
   const root = fixture();
   rmSync(join(root, "topic"), { recursive: true });
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: topic/SKILL.md in ${root}`);
+  assertIncomplete(() => readSkillText(".agentrig/skills/dogfood/SKILL.md"), join("topic", "SKILL.md"), root);
 });
 it("preserves generated SKILL.md raw bytes including line-ending-only edits", () => {
   const path = join(fixture(), "SKILL.md");
   writeFileSync(path, "one\r\ntwo\r");
   expect(readSkillText(path)).toBe("one\r\ntwo\r");
+});
+
+it.each(["dogfood", "topic"])("diagnostic assertions accept simulated Windows separators: %s", skill => {
+  assertIncomplete(() => { throw new Error(`incomplete skills override: ${skill}\\SKILL.md in C:\\proof`); }, join(skill, "SKILL.md"), "C:/proof");
 });

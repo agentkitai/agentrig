@@ -1,5 +1,27 @@
 # Status
 
+## Review-helper prose, quotations and diagnostic portability (#450, #451, #453, #454)
+
+Finding-index fallback recognizes finding openings rather than inline grammar
+mentions; supported heading bytes and delimiter-less ALL-CAPS refusals remain.
+Override diagnostic assertions use joined paths and normalize separators, with
+Windows-shaped error regressions for both missing-file cases. No loader or product
+behavior changes.
+
+Posting's shared echo guard normalizes whitespace in its small literal denylist.
+Within a finding, blockquotes, matched inline code spans (including wrapped spans),
+closed fences and indented citations are exempt. Scope covers the opening paragraph
+and contiguous explicit citation blocks, permitting blank lines before block quotes,
+fences or indented code; a new unquoted paragraph, another heading, or thematic
+break ends it. This conservative paragraph boundary prevents unheaded summaries
+from inheriting the last finding. Unclosed fences/spans do not grant an exemption.
+Existing skill guidance's blockquote form remains supported; this additive helper
+format support does not require changes to the recommended review format.
+
+Only helper/tests and this status section change; no roadmap progression. Fail-first,
+named mutants, LF/CRLF and named declared-check receipts are recorded in the draft
+PR. Controlled replay stops at builder handoff; no external reviews or merge.
+
 ## Reviewer-slot residuals, third batch (#441–445) — implemented, pending review
 
 Testing policy positively pins current declared-slot wording with the actual stale

@@ -72,3 +72,13 @@ it.each([
   const heading = "### LOW: Actual finding";
   expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
 });
+
+it.each([
+  'A sentence quoting `### HIGH — title` is ordinary prose.',
+  '- **#444** preserves inline `F1 — HIGH —` examples.',
+  'The grammar mentions [P4] without declaring a finding.',
+  'Escaped \\`F1 — HIGH —\\` is still ordinary prose.',
+])('M-inline-fallback: ignores grammar mentions: %s', prose => {
+  const heading = '### LOW: Actual';
+  expect(findingIndex(url, { html_url: url, body: `${prose}\r\n\r\n${heading}` })).toEqual([{ comment: url, heading }]);
+});
