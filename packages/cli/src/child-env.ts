@@ -48,7 +48,7 @@ export async function trainChildEnvironment(cwd: string, profile?: string, build
   const env = await resolveChildEnvironment({ cwd, ...(user === undefined ? {} : { user }), validateProfile: true, ...(config === undefined ? {} : { project: config }), ...(profile === undefined ? {} : { profile }) });
   if (builderProvider !== undefined) {
     const selected = profile ?? env.AGENTRIG_CHILD_PROFILE;
-    const resolved = resolveConfig({ defaults: {}, cli: {}, env: {}, ...(user === undefined ? {} : { user }), ...(config === undefined ? {} : { project: config }), ...(selected === undefined || selected === "recommended" ? {} : { profile: selected }) });
+    const resolved = resolveConfig({ defaults: {}, cli: {}, env: {}, ...(user === undefined ? {} : { user }), ...(config === undefined ? {} : { project: config }), ...(selected === undefined || (selected === "recommended" && user?.profiles?.recommended === undefined && config?.profiles?.recommended === undefined) ? {} : { profile: selected }) });
     if (builderProvider !== "default" && !Object.hasOwn(resolved.providers ?? {}, builderProvider)) {
       throw new Error(`BUILDER_PROVIDER_UNKNOWN: ${JSON.stringify(builderProvider)}; declare it in the active profile's providers or correct builderProvider`);
     }

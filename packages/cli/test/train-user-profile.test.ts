@@ -62,9 +62,11 @@ it("builderProvider validates against the active user profile before checkout", 
   const { home, checkout, queue } = await fixture();
   await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: {
     personal: { providers: { sol: { provider: "openai", model: "fixture" } } }, other: {},
+    recommended: { providers: { special: { provider: "openai", model: "fixture" } } },
   } }));
   await expect(trainChildEnvironment(checkout, "personal", "sol")).resolves.toBeDefined();
   await expect(trainChildEnvironment(checkout, "personal", "default")).resolves.toBeDefined();
+  await expect(trainChildEnvironment(checkout, "recommended", "special")).resolves.toBeDefined();
   await expect(trainChildEnvironment(checkout, "other", "sol")).rejects.toThrow(/BUILDER_PROVIDER_UNKNOWN/);
   await expect(trainChildEnvironment(checkout, "personal", "toString")).rejects.toThrow(/BUILDER_PROVIDER_UNKNOWN/);
   await writeFile(join(queue, "queue/001.json"), JSON.stringify({ task: "Test", authorization: "Test only", scope: ["packages/cli"], builderProvider: "missing", environment: { checkout, repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"], profile: "personal" } }));
