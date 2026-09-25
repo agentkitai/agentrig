@@ -466,6 +466,10 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       const skills = w.skills.current().skills;
       return {
         provider: choice?.provider === undefined ? w.providers.subagents : w.providers.get(choice.provider),
+        providerSelection: () => {
+          const entry = choice?.provider ?? w.providers.roleNames.subagents;
+          return { entry, provider: w.providers.get(entry) };
+        },
         // skills too: a subagent doing a task the project has instructions for should be able to
         // load them, and the catalogue costs one line each
         tools: [...w.childTools(), ...(skills.length > 0 ? [skillTool(skills)] : [])],

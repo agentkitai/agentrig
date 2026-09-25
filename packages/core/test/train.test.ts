@@ -34,6 +34,36 @@ async function fixture(count = 1) {
   return { root, command, calls };
 }
 describe("train", () => {
+  it("builderProvider accepts named entries, rejects malformed and reserved entries", () => {
+    expect(TrainRowSchema.parse({ ...row, builderProvider: "helper" }).builderProvider).toBe("helper");
+    expect(TrainRowSchema.parse(row).builderProvider).toBeUndefined();
+    for (const builderProvider of ["", " ", "default", "Helper", "x\n", "a".repeat(129), "__proto__", "a/b", '"helper"']) {
+      expect(TrainRowSchema.safeParse({ ...row, builderProvider }).success).toBe(false);
+    }
+  });
+  it("builderProvider validation precedes checkout and passes a documented run option", async () => {
+    const f = await fixture();
+    await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "helper" }));
+    const childEnvironment = vi.fn(async (_cwd: string, _profile?: string, provider?: string) => {
+      if (provider !== "helper") throw new Error("missing builder provider");
+      return {};
+    });
+    expect(await runTrain(f.root, { command: f.command, childEnvironment })).toBe("empty");
+    expect(childEnvironment).toHaveBeenCalledWith(row.environment.checkout, undefined, "helper");
+    expect(f.calls.find(call => call.startsWith("run --headless"))).toContain("--builder-provider helper");
+  });
+  it("builderProvider unknown or unavailable resolver fails closed before claim", async () => {
+    const f = await fixture();
+    await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "missing" }));
+    const childEnvironment = async () => { throw new Error("BUILDER_PROVIDER_UNKNOWN"); };
+    expect(await runTrain(f.root, { command: f.command, childEnvironment })).toBe("halted");
+    expect((await trainStatus(f.root, { childEnvironment })).invalidEntries[0]).toContain("BUILDER_PROVIDER_UNKNOWN");
+    expect(f.calls).toEqual([]);
+    expect(await readdir(join(f.root, "queue"))).toEqual(["1.json"]);
+    expect(await runTrain(f.root, { command: f.command })).toBe("halted");
+    expect(f.calls).toEqual([]);
+  });
+
   it("refuses invalid schema before running any command", async () => {
     const f = await fixture(); await writeFile(join(f.root, "queue/1.json"), "{}");
     expect(TrainRowSchema.safeParse({ ...row, environment: { ...row.environment, yolo: "yes" } }).success).toBe(false);
@@ -426,4 +456,22 @@ it("keeps profile selection in the run child, never the declared checks", async 
     expect(env?.AGENTRIG_CHILD_PROFILE).toBeUndefined(); expect(env?.PROFILE_ONLY).toBeUndefined();
     expect(env?.LAUNCHER_ONLY).toBe("kept"); expect(env?.CODEX_HOME).toBe("/profile/codex");
   }
+});
+
+it("builderProvider revalidates after checkout advances before checks or run", async () => {
+  const f = await fixture();
+  await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "helper" }));
+  let advanced = false;
+  const command: TrainCommand = async request => {
+    if (request.argv[0] === "merge") advanced = true;
+    return f.command(request);
+  };
+  const childEnvironment = async () => {
+    if (advanced) throw new Error("BUILDER_PROVIDER_UNKNOWN after fast-forward");
+    return {};
+  };
+  expect(await runTrain(f.root, { command, childEnvironment })).toBe("halted");
+  expect(f.calls).not.toContain("build");
+  expect(f.calls.some(call => call.startsWith("run --headless"))).toBe(false);
+  expect(await readFile(join(f.root, "logs/1.halt.json"), "utf8")).toContain("BUILDER_PROVIDER_UNKNOWN after fast-forward");
 });

@@ -286,3 +286,11 @@ describe("which provider a child runs on (R3.5a)", () => {
     expect(wiring().providerChoices).toBeUndefined();
   });
 });
+
+it("builderProvider provenance records explicit and profile-default child entry without changing main", () => {
+  const options = wiring();
+  for (const choice of [undefined, { provider: "cloud" }]) {
+    const config = options.childConfig(choice);
+    expect(config.providerSelection?.()).toEqual({ entry: choice?.provider ?? "local", provider: config.provider });
+  }
+});

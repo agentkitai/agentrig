@@ -390,3 +390,12 @@ beforeEach(async () => {
   vi.stubEnv("AGENTRIG_CHILD_PROFILE", undefined);
 });
 afterEach(async () => { vi.unstubAllEnvs(); await rm(profileHome, { recursive: true, force: true }); });
+
+it("builderProvider run option reaches the fake run without rebinding other providers", async () => {
+  let received: Record<string, unknown> | undefined;
+  const program = buildProgram({ run: async (_task, opts) => { received = { ...opts }; } });
+  await program.parseAsync(["run", "Follow ship", "--builder-provider", "helper"], { from: "user" });
+  expect(received?.builderProvider).toBe("helper");
+  expect(received?.roles).toBeUndefined();
+  expect(program.commands.find(cmd => cmd.name() === "run")!.helpInformation()).toContain("--builder-provider <entry>");
+});

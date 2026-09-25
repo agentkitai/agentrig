@@ -21,6 +21,7 @@ import {
   type HarnessEvent,
 } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, MemoryContextText, RecallText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
+import { builderProviderTask } from "./child-env.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions, type AgentExtras } from "./agent-builder.js";
 import { withMaintenanceSignal } from "./maintenance.js";
@@ -76,6 +77,8 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   verbose?: boolean;
   headless?: boolean;
   resume?: string;
+  /** Ship workflow routing data, not a main/subagents role override. */
+  builderProvider?: string;
   /** Named config profile to overlay; may arrive from the subcommand flag or the root-level one. */
   profile?: string;
   system?: string;
@@ -420,6 +423,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
   let supervisorSoft: number;
   let supervisorTurnsRemaining: number;
   try {
+    task = builderProviderTask(task, opts.builderProvider, opts);
     validateAbortRestores(opts);
     supervisorSoft = parseSoft(opts.supervisorSoft);
     supervisorTurnsRemaining = parseTurnsRemaining(opts.supervisorTurnsRemaining);

@@ -7,7 +7,7 @@ export interface UsageTotals {
 }
 export interface RowUsage {
   row: string; totals: UsageTotals; coverageWarnings: string[];
-  sessions: Array<{ session: string; totals: UsageTotals; models: Array<UsageTotals & { provider: string; model: string }> }>;
+  sessions: Array<{ session: string; builderProvider: string | null; totals: UsageTotals; models: Array<UsageTotals & { provider: string; model: string }> }>;
 }
 const empty = (): UsageTotals => ({ calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, estimatedMicros: null, unpricedCalls: 0, incompleteCalls: 0 });
 function add(target: UsageTotals, source: UsageTotals): void {
@@ -15,7 +15,7 @@ function add(target: UsageTotals, source: UsageTotals): void {
   if (source.estimatedMicros !== null) target.estimatedMicros = (target.estimatedMicros ?? 0) + source.estimatedMicros;
 }
 /** Join by call, then session/model; traverse spawn ancestry rather than counting child costs twice. */
-export function rollupTrainUsage(records: SpendRecord[], rows: Array<{ row: string; sessions: string[] }>, spawns: Array<{ parent: string; child: string }>): RowUsage[] {
+export function rollupTrainUsage(records: SpendRecord[], rows: Array<{ row: string; sessions: string[] }>, spawns: Array<{ parent: string; child: string; builderProvider?: string }>): RowUsage[] {
   // Propagate every claim to a fixed point before accounting. A conflicting parent
   // contaminates its descendants too, regardless of edge order or cycles.
   const owners = new Map<string, Set<string>>();
@@ -61,8 +61,15 @@ export function rollupTrainUsage(records: SpendRecord[], rows: Array<{ row: stri
       add(model, { ...empty(), ...settled?.usage, cacheRead: settled?.usage?.cacheRead ?? 0, cacheWrite: settled?.usage?.cacheWrite ?? 0, calls: 1, estimatedMicros: priced ? settled!.cost : null,
         unpricedCalls: priced ? 0 : 1, incompleteCalls: settled?.complete === true ? 0 : 1 });
     }
+    // Preserve children that failed before a metered call, without assigning intent as fact.
+    for (const [session, claims] of owners) if (claims.size === 1 && claims.has(row.row) && !sessions.has(session)) sessions.set(session, new Map());
     const totals = empty();
-    const grouped = [...sessions].sort(([a], [b]) => a.localeCompare(b)).map(([session, models]) => ({ session, totals: empty(), models: [...models.values()].sort((a, b) => `${a.provider}/${a.model}`.localeCompare(`${b.provider}/${b.model}`)) }));
+    const grouped = [...sessions].sort(([a], [b]) => a.localeCompare(b)).map(([session, models]) => {
+      const entries = new Set(spawns.filter(spawn => spawn.child === session && spawn.builderProvider !== undefined)
+        .map(spawn => spawn.builderProvider!));
+      return { session, builderProvider: entries.size === 1 ? [...entries][0]! : null, totals: empty(),
+        models: [...models.values()].sort((a, b) => `${a.provider}/${a.model}`.localeCompare(`${b.provider}/${b.model}`)) };
+    });
     for (const session of grouped) for (const model of session.models) { add(totals, model); add(session.totals, model); }
     return { row: row.row, totals, sessions: grouped, coverageWarnings };
   });

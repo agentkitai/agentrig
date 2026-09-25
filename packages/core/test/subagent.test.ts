@@ -1318,6 +1318,7 @@ describe("provider choice on the spawn tool", () => {
       childConfig: (choice) => {
         seen.push(choice?.provider);
         return {
+          providerSelection: () => ({ entry: choice?.provider ?? "local", provider: new ScriptedProvider([[say("done"), stop("end_turn")]]) }),
           provider: new ScriptedProvider([[say("done"), usage(1, 1), stop("end_turn")]]),
           tools: [],
           permissions: new RulePolicy([]),
@@ -1328,10 +1329,12 @@ describe("provider choice on the spawn tool", () => {
       },
       createAgent,
     });
-    const ctx = { cwd: root, sessionId: "parent", emit: () => {}, signal: new AbortController().signal };
+    const emitted: Array<{ type: string; builderProvider?: string }> = [];
+    const ctx = { cwd: root, sessionId: "parent", emit: (event: { type: string; builderProvider?: string }) => { emitted.push(event); }, signal: new AbortController().signal };
     await tool.execute({ task: "a", provider: "cloud" }, ctx);
     await tool.execute({ task: "b" }, ctx);
     expect(seen).toEqual(["cloud", undefined]);
+    expect(emitted.filter(event => event.type === "subagent.spawn").map(event => event.builderProvider)).toEqual(["cloud", "local"]);
   });
 
   it("threads the choice through the depth re-wrap, so a grandchild's spawn still offers it (I4a)", async () => {

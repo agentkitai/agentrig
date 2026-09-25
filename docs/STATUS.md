@@ -1,5 +1,14 @@
 # Status
 
+## Pending review — issue #517, row builder-provider routing
+
+Current task: #517 implementation; next: independent conductor review (no ROADMAP marker).
+Optional validated row/run routing reaches ship without rebinding other roles.
+Child spawn evidence carries the actual named entry into per-session train usage,
+including children without metered calls; historical unknowns remain null. Operator
+scope defaults are documented, not guessed by code. Repair round: 0/3; live ten-row
+cost/quality recheck is future operational evidence, not claimed by fixture tests.
+
 ## Pending review — issue #522, train declared-check environment
 
 Between-row checks use the pre-profile launcher environment plus tool homes and

@@ -1,3 +1,4 @@
+import { TrainRowSchema } from "@agentkitai/agentrig-core";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { readConfigFile, resolveConfig, type ConfigFile, type ReviewerSlot } from "./config.js";
@@ -41,11 +42,26 @@ export function reviewerHome(slot: string, adapter: string, env: NodeJS.ProcessE
 export function assertReviewerHomes(reviewers: Record<string, ReviewerSlot> | undefined, env: NodeJS.ProcessEnv): void {
   for (const [slot, binding] of Object.entries(reviewers ?? {})) reviewerHome(slot, binding.adapter, env);
 }
-export async function trainChildEnvironment(cwd: string, profile?: string): Promise<NodeJS.ProcessEnv> {
+/** Validate against the effective profile, never a vendor id or an inherited object key. */
+export function assertBuilderProvider(builderProvider: string | undefined, config: Pick<ConfigFile, "providers">): void {
+  TrainRowSchema.shape.builderProvider.parse(builderProvider);
+  if (builderProvider !== undefined && !Object.hasOwn(config.providers ?? {}, builderProvider)) {
+    throw new Error(`BUILDER_PROVIDER_UNKNOWN: declare providers.${builderProvider} in the active profile or omit builderProvider`);
+  }
+}
+/** Preserve task bytes; this is explicit workflow data, not permission or global routing. */
+export function builderProviderTask(task: string, builderProvider: string | undefined, config: Pick<ConfigFile, "providers">): string {
+  assertBuilderProvider(builderProvider, config);
+  return builderProvider === undefined ? task : `${task}\nShip run option: --builder-provider ${JSON.stringify(builderProvider)}. See the ship skill for routing and child inventory requirements.`;
+}
+export async function trainChildEnvironment(cwd: string, profile?: string, builderProvider?: string): Promise<NodeJS.ProcessEnv> {
   const trust = await resolveProjectTrust(cwd, { home: homedir(), interactive: false });
   const config = trust.trusted ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json")) : undefined;
   const user = await loadChildUserConfig(cwd);
   const env = await resolveChildEnvironment({ cwd, ...(user === undefined ? {} : { user }), validateProfile: true, ...(config === undefined ? {} : { project: config }), ...(profile === undefined ? {} : { profile }) });
+  const selected = profile ?? env.AGENTRIG_CHILD_PROFILE;
+  const effective = resolveConfig({ defaults: {}, ...(user === undefined ? {} : { user }), ...(config === undefined ? {} : { project: config }), ...(selected === undefined || selected === "recommended" ? {} : { profile: selected }) });
+  assertBuilderProvider(builderProvider, effective);
   assertReviewerHomes(config?.reviewers, env);
   return env;
 }

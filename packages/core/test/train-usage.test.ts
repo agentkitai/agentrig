@@ -1,8 +1,8 @@
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { SpendLedger, rollupTrainUsage, type SpendRecord } from "@agentkitai/agentrig-core";
+import { SessionStore, trainStatus, SpendLedger, rollupTrainUsage, type SpendRecord } from "@agentkitai/agentrig-core";
 it("joins calls before grouping two rows, nested children, session/model, unpriced tokens and incomplete calls", async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "row-usage-")));
   try {
@@ -30,5 +30,32 @@ it("joins calls before grouping two rows, nested children, session/model, unpric
     expect(ambiguous[2]!.coverageWarnings).toEqual([]);
     const overlap = rollupTrainUsage(records, [{ row: "one", sessions: ["parent"] }, { row: "two", sessions: ["child"] }], [{ parent: "child", child: "nested" }, { parent: "parent", child: "child" }]);
     expect(overlap.map(row => row.totals.input)).toEqual([10, 0]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it("builderProvider rollup reports observed child entries even without ledger calls, not row intent", () => {
+  const report = rollupTrainUsage([], [{ row: "one", sessions: ["root"] }], [
+    { parent: "root", child: "builder", builderProvider: "helper" },
+    { parent: "root", child: "reviewer", builderProvider: "default" },
+    { parent: "builder", child: "legacy" },
+  ])[0]!;
+  expect(report.sessions.map(({ session, builderProvider }) => [session, builderProvider])).toEqual([
+    ["builder", "helper"], ["legacy", null], ["reviewer", "default"], ["root", null],
+  ]);
+});
+
+it("builderProvider train status reads actual spawn evidence, including pre-call child failures", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "entry-status-")));
+  try {
+    for (const folder of ["queue", "active", "done", "halted", "logs"]) await mkdir(join(root, folder));
+    const row = { task: "Ship", authorization: "fixture", scope: ["src"], builderProvider: "requested",
+      environment: { checkout: root, repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"] } };
+    await writeFile(join(root, "done/one.json"), JSON.stringify(row));
+    await writeFile(join(root, "logs/one.state.json"), JSON.stringify({ row: "one.json", phase: "done", reason: null, pr: null, head: null, mergeCommit: null, sessionIds: ["parent"] }));
+    const store = new SessionStore({ root: join(root, "logs/sessions") });
+    await store.append("parent", { type: "subagent.spawn", id: "child", task: "fixture", builderProvider: "actual" });
+    const status = await trainStatus(root);
+    expect(status.usageError).toBeUndefined();
+    expect(status.usage?.[0]?.sessions.find(session => session.session === "child")).toMatchObject({ builderProvider: "actual", totals: { calls: 0 } });
   } finally { await rm(root, { recursive: true, force: true }); }
 });

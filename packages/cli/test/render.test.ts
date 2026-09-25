@@ -434,9 +434,10 @@ describe("renderEvent", () => {
 
   it("renders subagent.spawn and subagent.end, including how the child finished", () => {
     const spawned = renderEvent(
-      HarnessEvent.parse({ seq: 1, sessionId: "p", ts: 1, type: "subagent.spawn", id: "c1", task: "counting files" }),
+      HarnessEvent.parse({ seq: 1, sessionId: "p", ts: 1, type: "subagent.spawn", id: "c1", task: "counting files", builderProvider: "helper" }),
     );
     expect(spawned).toContain("subagent.spawn");
+    expect(spawned).toContain("builderProvider=helper");
     expect(spawned).toContain("c1");
     expect(spawned).toContain("counting files");
 

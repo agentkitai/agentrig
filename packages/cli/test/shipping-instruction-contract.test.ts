@@ -1,5 +1,5 @@
 import { readSkillText } from "../../../test/skill-text.js";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -289,3 +289,21 @@ for (const path of [".agentrig/skills/arbiter/SKILL.md", ".agentrig/skills/land/
     }
   });
 }
+
+it("ship pins builderProvider routing once and requires effective child inventory provenance", () => {
+  const ship = readSkillText(".agentrig/skills/ship/SKILL.md");
+  expect(ship).toContain("Use the run option `--builder-provider` for every builder and fixer spawn");
+  expect(ship).toContain("unless the row explicitly says otherwise");
+  expect(ship).toContain("Reviewers, arbiters and landers are unaffected");
+  expect(ship).toContain("effective `builderProvider` per child session in the PR body's child inventory");
+  expect(ship.match(/Use the run option `--builder-provider`/g)).toHaveLength(1);
+});
+
+it("builderProvider operator defaults and run boundary remain documented", () => {
+  const doc = readFileSync(new URL("../../../docs/TRAIN-OPERATIONS.md", import.meta.url), "utf8");
+  expect(doc).toContain('"builderProvider": "sol"');
+  expect(doc).toContain("doc/test/helper-scoped rows default to `sol`; product rows use the");
+  expect(doc).toContain("profile default (omit `builderProvider`)");
+  expect(doc).toContain("after ten Sol rows");
+  expect(doc).toContain("run --builder-provider <entry>");
+});

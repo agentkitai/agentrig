@@ -103,6 +103,15 @@ Use topic's **Review scratch cleanup** sequence for every initial and focused pa
 
 ## 1. Build
 
+Use the run option `--builder-provider` for every builder and fixer spawn
+(including continuations and repair rounds), passing its named entry as the subagent
+`provider`, unless the row explicitly says otherwise. When absent, retain the profile's
+configured child default. Reviewers, arbiters and landers are unaffected; never change
+main or global subagents role bindings to implement this workflow rule. Record the
+effective `builderProvider` per child session in the PR body's child inventory, together
+with session id, role, run option, any explicit row override and observed spawn entry;
+unknown historical entries are null, not inferred from the requested row field.
+
 Apply dogfood §1 to builders, continuation builders and fixers in every handoff: use an
 owned worktree created from `origin/main` for new work, or attach/reuse the existing branch's
 owned worktree for continuations and repairs. Never change the author checkout's branch.

@@ -111,3 +111,44 @@ it("M-C2-trusted-project: only trusted project profile names participate in vali
     expect((await resolveChildEnvironment({ cwd, home, env, profile: "work", explicitTrust: true })).CODEX_HOME).toBe("/inherited");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+it("builderProvider resolves only entries in the active safe profile before launch", async () => {
+  const { mkdtemp, mkdir, writeFile, rm, realpath } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { trainChildEnvironment, assertBuilderProvider } = await import("../src/child-env.js");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "builder-provider-")));
+  const cwd = join(dir, "project"), home = join(dir, "home");
+  const original = { ...process.env };
+  try {
+    for (const root of [cwd, home]) await mkdir(join(root, ".agentrig"), { recursive: true });
+    process.env.HOME = home; process.env.USERPROFILE = home; delete process.env.AGENTRIG_CHILD_PROFILE;
+    const entry = { provider: "openai", model: "fixture" };
+    await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: {
+      personal: { providers: { helper: entry } }, work: { providers: { other: entry } },
+    } }));
+    await expect(trainChildEnvironment(cwd, "personal", "helper")).resolves.toBeDefined();
+    await expect(trainChildEnvironment(cwd, "work", "helper")).rejects.toThrow(/BUILDER_PROVIDER_UNKNOWN/);
+    await expect(trainChildEnvironment(cwd, "personal", "missing")).rejects.toThrow(/BUILDER_PROVIDER_UNKNOWN/);
+    await expect(trainChildEnvironment(cwd, "personal")).resolves.toBeDefined();
+    process.env.AGENTRIG_CHILD_PROFILE = "personal";
+    await expect(trainChildEnvironment(cwd, undefined, "helper")).resolves.toBeDefined();
+    for (const name of ["", "default", "constructor", "a".repeat(129), "helper\r\n", '"helper"']) {
+      expect(() => assertBuilderProvider(name, {})).toThrow();
+    }
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in original)) delete process.env[key];
+    Object.assign(process.env, original);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+it("builderProviderTask preserves task bytes and exposes only validated routing data", async () => {
+  const { builderProviderTask } = await import("../src/child-env.js");
+  const config = { providers: { helper: { provider: "openai" as const, model: "fixture" } } };
+  for (const task of ["", "\n\r\n", 'prose mentions --builder-provider "other"', "quotes \" and \\ escapes"]) {
+    expect(builderProviderTask(task, undefined, config)).toBe(task);
+    expect(builderProviderTask(task, "helper", config)).toBe(`${task}\nShip run option: --builder-provider "helper". See the ship skill for routing and child inventory requirements.`);
+  }
+  expect(() => builderProviderTask("", "unknown", config)).toThrow(/BUILDER_PROVIDER_UNKNOWN/);
+});

@@ -496,6 +496,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
           binding.ready();
         }
         ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task,
+          ...(config.providerSelection === undefined ? {} : { builderProvider: config.providerSelection().entry }),
           ...(role === undefined ? {} : { role: { name: role.name, hash: role.hash, tools: [...(allowlist ?? [])],
             modelRole: role["model-role"], delegable: role.delegable && (allowlist?.includes(SUBAGENT_TOOL) ?? false) && depth + 1 < maxDepth,
             maxTurns: effectiveTurns } }) });

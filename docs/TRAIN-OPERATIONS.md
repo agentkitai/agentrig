@@ -120,7 +120,8 @@ Each row is a strict zod-validated object (unknown fields are refused):
 {
   "task": "Implement the one authorized roadmap row using ship",
   "authorization": "The human's exact scoped task/merge authorization quote",
-  "scope": ["packages/core/src", "packages/core/test"],
+  "scope": ["packages/core/test"],
+  "builderProvider": "sol",
   "environment": {
     "checkout": "/absolute/dedicated-checkout",
     "repository": "owner/repo",
@@ -130,6 +131,20 @@ Each row is a strict zod-validated object (unknown fields are refused):
   }
 }
 ```
+
+`builderProvider` is an optional named provider entry from the active profile (not a
+vendor/model id). Names are bounded to 128 lowercase letters/digits/hyphens, start
+with a letter, and cannot be reserved `default`. Unknown entries fail row validation
+before checkout commands; omit the field to retain the profile's configured child
+default. The train forwards it as `run --builder-provider <entry>`; this documented
+run-only option exposes routing data to the ship conductor, not a global provider
+override. Ship owns builder/fixer dispatch; reviewers, arbiters and landers keep their
+existing routing. Revalidation after fast-forward prevents stale configuration use.
+
+Operator rule: doc/test/helper-scoped rows default to `sol`; product rows use the
+profile default (omit `builderProvider`). Choose the field explicitly when preparing
+the queue, rather than inferring scope in the transport. Re-check cost and quality
+after ten Sol rows. This is operator policy, not an automatic scope classifier.
 
 `profile` is optional. `environment.sessionRoot` optionally selects an absolute
 session store; otherwise every row uses `<dir>/logs/sessions`. Optional
@@ -227,8 +242,13 @@ A JSON `train.status` is printed after every completed or halted row and by the
 read-only `agentrig train <dir> --status`. It includes `queue`, `active`, `done`,
 `halted`, `invalidEntries`, `usage` and `pricingNote`; accounting failures yield
 `usage: null` plus `usageError`, never misleading zero totals. Each `usage` row has
-`row`, `totals`, `sessions` (with per-session `totals` and provider/model `models`),
-and `coverageWarnings`. Totals expose `calls`, `input`, `output`, `cacheRead`,
+`row`, `totals`, `sessions` (with per-session `totals`, effective `builderProvider`, and provider/model `models`),
+and `coverageWarnings`. `builderProvider` is the actual named entry captured at
+subagent creation, for every child role (not an assertion that it was a builder).
+Root/historical/unknown or conflicting entries are null, never copied from row intent.
+Children with no ledger calls remain visible with zero calls and unknown cost.
+The ship PR child inventory records the same effective field and any row override.
+Totals expose `calls`, `input`, `output`, `cacheRead`,
 `cacheWrite`, `estimatedMicros`, `unpricedCalls` and `incompleteCalls`. Raw token
 counts include unpriced calls; `estimatedMicros` covers only the priced subset at
 historical configured rates, is not provider billing, and is null (not zero cost)
