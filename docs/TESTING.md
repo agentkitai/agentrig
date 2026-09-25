@@ -42,6 +42,33 @@ git-ai, which can write `refs/notes/ai` in fixture repositories and race teardow
 It does not disable `trace2.normalTarget` or `trace2.perfTarget`.
 This is separate from fixture ancestry and does not change the preflight check.
 
+## Project-store suite guard
+
+Every test file inherits `test/setup-no-ci.ts`, including the Windows lane. Before the file
+runs and again at teardown it takes read-only inventories of `.agentrig/raw/sessions` and
+`.agentrig/wiki` at the checkout root and under each of `packages/cli`, `packages/core`,
+`packages/memory`, and `packages/supervisor`. This is **not** whole-`.agentrig` coverage.
+Inventories include empty directories, nested artifacts, JSONL logs, snapshots and unexpected
+files; SHA-256 content hashes detect even same-size rewrites without printing private content.
+They record symlinks without following them. The guard never modifies or deletes store data.
+This catches fixtures accidentally using relative product defaults instead of isolated roots.
+The Windows include list runs the inventory, race, wiring and documentation regressions too.
+
+Keep these stores **quiescent** for the entire run. A concurrent legitimate AgentRig session
+writing to a guarded store can trip `test suite must leave project session stores untouched`
+just like a leaking fixture; parallel workers can report another test's write. A path disappearing
+after enumeration/stat fails closed with `project-store guard: removed-during-inventory` and
+the path, including during file, directory or symlink reads. Only a root absent at its initial
+stat is a valid absent inventory. Other I/O errors are fatal, not hidden.
+
+To remedy a failure, first stop or finish concurrent writers, or run tests in a separate checkout
+with quiescent stores (and a TMPDIR outside Git ancestry). Inspect the reported paths and fix
+leaking tests to use absolute `realpath(mkdtemp(...))` fixture roots for both sessions and memory.
+Preserve genuine session data and failure evidence: do not delete stores to make tests pass.
+There is no opt-out or bypass flag. Inventories compare persisted before/after state, not transient
+writes restored before teardown; they do not certify the rest of `.agentrig` or symlink targets.
+Large genuine stores cost extra time because the bytes are hashed twice per test file.
+
 ## The fixture preflight
 
 `test/fixture-preflight.mjs` runs before the suite in `pnpm test` and is silent unless it finds

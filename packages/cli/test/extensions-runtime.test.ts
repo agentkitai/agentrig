@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -31,7 +31,7 @@ async function build(f: Awaited<ReturnType<typeof fixture>>, flags: string[] = [
   let built: BuiltAgent | undefined;
   await buildProgram({ config: { cwd: f.cwd, home: f.home, env: {} }, run: async (_task, opts) => {
     built = await buildAgent(opts, { onNotice: message => notices.push(message) });
-  } }).parseAsync(["run", "fixture", "--root", join(f.root, "logs"), "--no-repo-map", "--max-turns", "4", ...flags], { from: "user" });
+  } }).parseAsync(["run", "fixture", "--root", join(f.root, "logs"), "--memory", join(f.root, "memory"), "--no-repo-map", "--max-turns", "4", ...flags], { from: "user" });
   return built!;
 }
 
@@ -113,6 +113,7 @@ it("registered extension hooks stay advisory and child agents inherit neither to
   const run = built.agent.run("fixture", { cwd: f.cwd });
   const events = []; for await (const event of run.events) events.push(event); await run.done;
   expect(events.some(e => e.type === "subagent.end")).toBe(true);
+  expect((await stat(join(f.root, "memory", "wiki"))).isDirectory()).toBe(true);
   const parent = requests.find(r => r.tools.some(t => t.name === "hello_tool"))!;
   expect(parent.systemContexts?.some(c => c.principal.startsWith("hook:ext:hello:") && c.authority === "advisory" && c.delegation === undefined)).toBe(true);
   const child = requests.find(r => !r.tools.some(t => t.name === "hello_tool"))!;

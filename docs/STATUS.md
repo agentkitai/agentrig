@@ -74,6 +74,20 @@ failures). Full-trio receipts and individual G1–G4 dispositions are in the PR
 ledger. Test-only scope plus this status entry; no skills changed. Review, exact-
 head CI, and any authorized landing remain conductor-owned; repair budget is 3/3.
 
+## Project-store guard follow-ups — issues #355, #356, #357, #364
+
+Test/docs maintenance only; no product discovery or roadmap changes. TESTING now documents
+suite-wide read-only session/wiki inventories, quiescence, concurrent legitimate sessions and
+safe troubleshooting without an opt-out. Windows includes inventory, deterministic race,
+wiring and documentation regressions. Removed-during-inventory errors name the vanished path
+for stat and read races; only an initially absent root is accepted. Other errors remain fatal.
+The extension-runtime child-agent fixture now selects an absolute temporary memory root and
+asserts the wiki really exists there. Shared setup also inventories checkout/package wiki paths;
+disposable-checkout probes pin all ten guarded paths. This is not whole-.agentrig coverage.
+The historical #313 record below now points to both §1 CI-staleness and §3 material-delta routing.
+Fail-first and named mutation receipts plus local trio results are in the draft PR; independent
+review and exact-head CI are pending. Repair round: 0/3. Replay authorization forbids merging.
+
 ## Isolate test session stores — issue #339, implemented pending review
 
 The CLI OTEL headless test now supplies the fixture session root to both telemetry-enabled
@@ -168,7 +182,8 @@ roadmap advancement; local proof is recorded in the PR, independent review and C
 Topic's rerun check still matches the CURRENT head SHA in the complete canonical heading.
 Recorded MAIN is historical provenance for the origin/main merge base reviewed, not an
 additional equality gate against current origin/main. Moved main follows the existing
-conflict/material-delta policy rather than causing a redundant initial pair. Instruction-contract
+shipping policy §3 conflict/material-delta routing and §1 CI-staleness for clean advances,
+rather than causing a redundant initial pair. Instruction-contract
 coverage pins this clarification at the operative rerun check and rejects removal, current-main
 equality, redundant-pair and lost-routing mutants. No heading, landing gate or runtime change;
 this maintenance task does not advance ROADMAP §5. Independent review and exact-head hosted

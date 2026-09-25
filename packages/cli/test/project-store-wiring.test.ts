@@ -7,7 +7,8 @@ import { expect, it } from "vitest";
 
 // Execute the real setup in a disposable checkout, never deliberately leak into this checkout.
 // Separate child runs prevent one store's leak from masking a missing path in the guard.
-it.each([null, "", "packages/cli/", "packages/core/", "packages/memory/", "packages/supervisor/"])(
+const bases = ["", "packages/cli/", "packages/core/", "packages/memory/", "packages/supervisor/"];
+it.each([null, ...bases.flatMap(base => ["raw/sessions", "wiki"].map(store => `${base}.agentrig/${store}`))])(
   "setup teardown detects only changed stores (store=%s)",
   (base) => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "agentrig-store-wiring-")));
@@ -22,7 +23,7 @@ it.each([null, "", "packages/cli/", "packages/core/", "packages/memory/", "packa
       writeFileSync(join(root, "vitest.config.mjs"), `export default { test: {
         include: ['probe.test.js'], setupFiles: ['./test/setup-no-ci.ts'],
       } };`);
-      const store = base === null ? null : join(root, base, ".agentrig/raw/sessions");
+      const store = base === null ? null : join(root, base);
       writeFileSync(join(root, "probe.test.js"), `
         import { it, expect } from 'vitest';
         import { mkdirSync } from 'node:fs';
