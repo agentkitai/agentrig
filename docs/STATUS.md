@@ -1,3 +1,17 @@
+## Lander command-form recovery — implementation; review/landing pending
+
+Current roadmap row: follow-up #586/#608, "Lander role: retry malformed non-merge commands instead of halting";
+next: conductor review and authorized landing. No new roadmap completion marker.
+
+The lander role and canonical land skill require every gh command to be a single
+literal invocation. A malformed non-merge hook refusal gets one corrected-form
+retry; a refused retry, bounded merge refusal, or failed land gate halts with its
+reason. No hook parser, ledger predicate, authorization or CI/review gate changes.
+Rejected: unlimited retries, retrying refused merges, and treating ledger/source
+refusals as syntax permission. Instruction contracts pin both recovery and halt
+paths, including CRLF skill-loader replay and named deletion/inversion mutants.
+R19 LOW observations and wording followups remain advisories, not residual issues.
+
 ## Builder pre-push checklist (#607) — implementation; review/landing pending
 
 Current roadmap row: issue #607, "Adopt the builder pre-push checklist";

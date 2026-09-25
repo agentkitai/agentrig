@@ -89,3 +89,11 @@ authority/CI/provenance or redispatch. The builder does not merge.
 Slice 3 retires superseded manual bookkeeping prose while preserving land review-resolution
 judgment. Its PR ledger leaves the first real guarded merge decision pending for the lander;
 builder fixture passes are not a live landing receipt.
+
+## Lander command-form recovery
+
+Run every `gh` command as one literal command without shell operators, pipes, or substitutions, including read-only commands. Prepare files and process output in separate tool calls.
+If the ship-pack hook refuses a malformed non-merge command, correct the command to the accepted literal form named in the refusal and retry once. If that retry is refused, halt and report the exact reason. This retry is only a command-form correction, not permission to bypass a ledger refusal or change evidence.
+If a bounded merge command is refused or any land gate fails, halt and report the exact reason; do not retry the merge or weaken the gate. Authorization, exact-head CI, dispatch binding, append-only ledger/source checks, review resolution, and post-merge CI remain required.
+
+This landing instruction is deliberately stricter than the parser’s read-only help exemption (#587); it changes no hook predicate or accepted parser syntax. LOW observations and wording followups remain advisories under R19, not residual issues.
