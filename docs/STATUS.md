@@ -1,5 +1,18 @@
 # Status
 
+## Finding-index prose and path-separator residuals (#450, #451, #453, #454)
+
+Inline grammar examples in ordinary prose no longer trigger the unsupported-finding
+fallback; actual unsupported ALL-CAPS headings still fail closed. Diagnostic tests
+use native path joins and simulate Windows separators. Review echoes are whitespace
+normalized, with blockquote, inline-code (including wrapped spans), fenced and
+indented citations allowed only in a finding paragraph. Blank lines or another
+section heading end that authority; fences retain their opening authority until
+closed. This deliberately conservative boundary avoids leaking into unheaded prose.
+No product code or roadmap markers changed. Controlled replay narrows authorization
+to a draft PR against checklist/145-base, repair round 0/3; no external review,
+issue actions or merge. Verification and restored-mutation receipts are in the PR.
+
 ## Reviewer-slot residuals, third batch (#441–445) — implemented, pending review
 
 Testing policy positively pins current declared-slot wording with the actual stale

@@ -1,9 +1,12 @@
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { readSkillText } from "../../../test/skill-text.js";
 
+function incompleteDiagnostic(skill: string, root: string, pathJoin = join) {
+  return `incomplete skills override: ${pathJoin(skill, "SKILL.md")} in ${root}`;
+}
 const owned: string[] = [];
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -28,7 +31,7 @@ it("does not silently fall back to checkout skills when the override is incomple
   const root = fixture();
   rmSync(join(root, "dogfood", "SKILL.md"));
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: dogfood/SKILL.md in ${root}`);
+  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(incompleteDiagnostic("dogfood", root));
 });
 
 it("keeps non-skill document bytes and paths unchanged", () => {
@@ -47,10 +50,15 @@ it("rejects an incomplete tree even when the requested skill exists", () => {
   const root = fixture();
   rmSync(join(root, "topic"), { recursive: true });
   vi.stubEnv("AGENTRIG_TEST_SKILLS_ROOT", root);
-  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(`incomplete skills override: topic/SKILL.md in ${root}`);
+  expect(() => readSkillText(".agentrig/skills/dogfood/SKILL.md")).toThrow(incompleteDiagnostic("topic", root));
 });
 it("preserves generated SKILL.md raw bytes including line-ending-only edits", () => {
   const path = join(fixture(), "SKILL.md");
   writeFileSync(path, "one\r\ntwo\r");
   expect(readSkillText(path)).toBe("one\r\ntwo\r");
+});
+
+it("M-posix-diagnostic: diagnostic assertions support Windows separators", () => {
+  const diagnostic = `incomplete skills override: ${win32.join("dogfood", "SKILL.md")} in C:\\proof`;
+  expect(() => { throw new Error(diagnostic); }).toThrow(incompleteDiagnostic("dogfood", "C:\\proof", win32.join));
 });

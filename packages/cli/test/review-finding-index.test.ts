@@ -72,3 +72,8 @@ it.each([
   const heading = "### LOW: Actual finding";
   expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
 });
+
+it("M-inline-grammar: ignores grammar examples in ordinary prose", () => {
+  const body = '- **#444** accepts `F1 — HIGH — title` and `### HIGH — title`, not `[P4]` findings.\n### LOW: Real';
+  expect(findingIndex(url, { html_url: url, body })).toEqual([{ comment: url, heading: "### LOW: Real" }]);
+});

@@ -29,18 +29,31 @@ export const instructionEchoSentences = [
   "Report which of the PR body's claims you verified, and any you could not.",
 ];
 export function assertReviewerVerdict(body) {
-  // Posting checks literal echoes, not live finding-index completeness or identity.
+  // Quotation authority is local to a finding paragraph, never inherited by a
+  // later unheaded section. Blank lines and non-finding headings end it.
   const headings = new Set(findingHeadings(body));
   let inFinding = false;
-  for (const line of body.split(/\r?\n/)) {
+  let fence;
+  const unquoted = [];
+  for (const line of body.replace(/(?<!`)(`{1,2})([^`]*?)\1(?!`)/g, match => match.replace(/\r?\n/g, " ")).split(/\r?\n/)) {
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) {
+      if (!fence.exempt) unquoted.push(line);
+      if (marker?.[0] === fence.marker[0] && marker.length >= fence.marker.length && line.trim() === marker) fence = undefined;
+      continue;
+    }
+    if (marker) { fence = { marker, exempt: inFinding }; unquoted.push(inFinding ? " " : line); continue; }
+    if (!line.trim()) inFinding = false;
     if (/^ {0,3}#{1,6} /.test(line)) inFinding = headings.has(line);
     else if (headings.has(line)) inFinding = true;
-    // Narrow escape hatch: a Markdown blockquote inside an indexed finding. The
-    // unquoted surrounding finding must still state the scenario and proposed fix.
-    if (inFinding && /^ {0,3}> /.test(line)) continue;
-    if (instructionEchoSentences.some(sentence => line.includes(sentence))) {
-      throw new Error("reviewer body echoes instructions; not a verdict");
-    }
+    if (inFinding && /^(?: {0,3}>| {4}|\t)/.test(line)) { unquoted.push(" "); continue; }
+    // Matching backtick runs only; ordinary prose around an inline citation is
+    // still checked. Newlines in code spans are Markdown whitespace.
+    unquoted.push(inFinding ? line.replace(/(`+)([^`]*?)\1/g, " ") : line.replace(/^ {0,3}> ?/, ""));
+  }
+  const normalized = unquoted.join(" ").replace(/\s+/g, " ");
+  if (instructionEchoSentences.some(sentence => normalized.includes(sentence))) {
+    throw new Error("reviewer body echoes instructions; not a verdict");
   }
 }
 
@@ -82,7 +95,7 @@ function findingHeadings(body, unsupported = () => {}) {
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
     if (finding) {
       findings.push(line);
-    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /^(?:\s*(?:#{1,6}\s+)?)(?:F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
       unsupported(line);
     }
   }
