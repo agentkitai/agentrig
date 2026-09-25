@@ -182,10 +182,10 @@ describe("train", () => {
   it("real argv adapter logs output and observes session events without a shell", async () => {
     const f = await fixture(); const sessions: string[] = [];
     const result = await trainCommand({ executable: process.execPath,
-      argv: ["-e", 'console.log(JSON.stringify({sessionId:"real-fixture"})); console.error("stderr-fixture"); console.log(process.argv[1]);', "; not a shell command"],
-      cwd: f.root, log: join(f.root, "adapter.log"), onSession: id => sessions.push(id) });
+      argv: ["-e", 'console.log(JSON.stringify({sessionId:"real-fixture"})); console.error("stderr-fixture"); console.log(process.env.CODEX_HOME); console.log(process.argv[1]);', "; not a shell command"],
+      cwd: f.root, env: { ...process.env, CODEX_HOME: "/chosen-account" }, log: join(f.root, "adapter.log"), onSession: id => sessions.push(id) });
     expect(result.code).toBe(0); expect(sessions).toEqual(["real-fixture"]);
-    expect(result.stdout).toContain("; not a shell command"); expect(result.stderr).toContain("stderr-fixture");
+    expect(result.stdout).toContain("/chosen-account"); expect(result.stdout).toContain("; not a shell command"); expect(result.stderr).toContain("stderr-fixture");
     expect(await readFile(join(f.root, "adapter.log"), "utf8")).toContain("real-fixture");
   });
 
@@ -340,4 +340,19 @@ it("rejects unbounded train budgets before starting the suite", async () => {
   const f = await fixture();
   expect(await runTrain(f.root, { command: f.command, testTimeout: async () => 120001 })).toBe("halted");
   expect(f.calls).not.toContain("test --testTimeout=120001");
+});
+
+it("profile environment is resolved before commands and carried to every train child", async () => {
+  const f = await fixture(); const calls: string[] = [];
+  expect(await runTrain(f.root, { profile: "personal", childEnvironment: async (checkout, profile) => {
+    expect(checkout).toBe(row.environment.checkout); expect(profile).toBe("personal");
+    calls.push("resolve"); return { CODEX_HOME: "/chosen" };
+  }, command: async request => {
+    expect(calls[0]).toBe("resolve"); expect(request.env?.CODEX_HOME).toBe("/chosen");
+    if (request.argv[0] === "run" && request.argv[1] !== "list") expect(request.argv).toContain("personal");
+    return f.command(request);
+  } })).toBe("empty");
+  const bad = await fixture();
+  expect(await runTrain(bad.root, { childEnvironment: async () => { throw new Error("set CODEX_HOME"); }, command: bad.command })).toBe("halted");
+  expect(bad.calls).toEqual([]);
 });

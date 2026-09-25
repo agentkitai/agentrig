@@ -877,6 +877,13 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+User-profile `childEnv` supplies non-secret child-process settings, including explicit reviewer
+CLI home paths. It is launch metadata, not provider configuration, and never comes from project
+profile overrides. CLI dispatch and train rows carry the environment through existing process
+and trust gates. Reviewer adapters require homes; doctor checks CLI login status separately from
+provider credentials. Provenance records the resolved path, not a billing identity attestation.
+See [profile environment contract](TRAIN-OPERATIONS.md#profile-scoped-child-environments-506).
+
 R16h adds startup-captured strict `tui` settings: fixed dark/light palettes and
 bounded permission/history/abort keys. NO_COLOR overrides TUI styling; fixed
 Ctrl+C/Escape and paste/protected-prompt guards remain. No runtime editor or

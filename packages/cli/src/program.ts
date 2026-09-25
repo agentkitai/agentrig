@@ -185,14 +185,14 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand); run commands also accept built-in recommended; other unknown names list available profiles (names only)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "web", "mcp-serve"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "web", "mcp-serve", "train"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
     // contract bash's background timeoutMs settled on).
     const profile = (actionCommand.optsWithGlobals() as { profile?: string }).profile;
     if (profile !== undefined && !PROFILE_AWARE.has(actionCommand.name()) && !(actionCommand.name() === "login" && actionCommand.parent?.name() === "mcp")) {
-      console.error(`note: --profile is ignored by \`${actionCommand.name()}\` — it does not read config profiles`);
+      console.error(`note: --profile is ignored by \`${actionCommand.name()}\` — it does not read runtime config profiles; user-profile childEnv still applies to CLI children`);
     }
   });
 

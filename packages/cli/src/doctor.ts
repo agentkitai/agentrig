@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { reviewerHome } from "./child-env.js";
 import { execFile } from "node:child_process";
 import { formatFeelBudgets } from "./feel-budgets.js";
 import { feelReference } from "./feel-reference.js";
@@ -40,6 +42,7 @@ export interface DoctorProbes {
   boundary(cwd: string, home: string): Promise<ProjectBoundary>;
   commandExists(command: string, env: NodeJS.ProcessEnv, cwd: string): Promise<boolean>;
   gitState(cwd: string): Promise<DoctorGitState>;
+  reviewerStatus(adapter: string, env: NodeJS.ProcessEnv, cwd: string): Promise<string>;
 }
 
 export interface DoctorOptions {
@@ -144,6 +147,17 @@ function defaultProbes(): DoctorProbes {
     boundary: resolveProjectBoundary,
     commandExists: defaultCommandExists,
     gitState: defaultGitState,
+    reviewerStatus: async (adapter, env, cwd) => {
+      if (adapter === "claude-cli") {
+        const { stdout } = await execFileAsync("claude", ["auth", "status", "--json"], { env, cwd, timeout: 10000, maxBuffer: 65536 });
+        const value: unknown = JSON.parse(stdout);
+        const status = z.object({ loggedIn: z.literal(true), email: z.string().max(320).optional() }).parse(value);
+        return status.email === undefined ? "logged in; account identity unavailable" : `logged in; account ${display(status.email)}`;
+      }
+      const { stdout, stderr } = await execFileAsync("codex", ["login", "status"], { env, cwd, timeout: 10000, maxBuffer: 65536 });
+      if (!/^Logged in using (?:ChatGPT|an API key)(?:[^\r\n]*)$/mu.test(stdout + stderr)) throw new Error("not logged in");
+      return "logged in; account identity unavailable from CLI login status";
+    },
   };
 }
 
@@ -443,6 +457,21 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       if (needsRoleCheck) {
         checks.push(...(await providerEntryChecks(effective, resolution!, env, home, now, probes)));
       }
+    }
+  }
+
+  if (!configInvalid) {
+    const childEnv = { ...env, ...(profile === undefined ? {} : user?.profiles?.[profile]?.childEnv) };
+    for (const [slot, binding] of Object.entries(project?.reviewers ?? {})) {
+      const label = `reviewers:${slot}`;
+      try {
+        const home = reviewerHome(binding.adapter, childEnv);
+        if (home === undefined) { checks.push(line("skip", label, "API adapter; see provider credential checks")); continue; }
+        let identity: string;
+        try { identity = await probes.reviewerStatus(binding.adapter, childEnv, cwd); }
+        catch { checks.push(line("fail", label, `home ${display(home)}; login status failed — log in with the reviewer CLI under this home`)); continue; }
+        checks.push(line("pass", label, `home ${display(home)}; ${identity}`));
+      } catch (error) { checks.push(line("fail", label, (error as Error).message)); }
     }
   }
 

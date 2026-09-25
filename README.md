@@ -9,7 +9,9 @@ Ctrl+V to stage a clipboard image. Reads remain permission-checked; see
 The [authenticated local reference web client](docs/WEB.md) uses the same ACP
 controller as the TUI, with explicit one-time permissions and structured questions.
 
-`agentrig doctor` stays offline/read-only. Explicit `agentrig doctor --probe` runs potentially
+`agentrig doctor` keeps provider diagnostics offline/read-only. Declared CLI reviewer slots also
+run bounded login-status commands under their profile-scoped homes; see
+[child environment and account diagnostics](docs/TRAIN-OPERATIONS.md#profile-scoped-child-environments-506). Explicit `agentrig doctor --probe` runs potentially
 billable bounded samples against the selected main provider, recording local configuration-bound
 observations used by advertised capabilities. Empirical tool/parallel/JSON/cache observations
 are not guarantees; native strict-format support stays unknown, and missing evidence retains

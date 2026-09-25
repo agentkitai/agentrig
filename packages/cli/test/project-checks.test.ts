@@ -148,6 +148,7 @@ it("train resolves the same profile budget and omission as conductor", async () 
     const step = (testTimeout: number) => ({ name: "test", command: "pnpm test", countsParser: "vitest", testTimeout });
     await writeFile(join(root, ".agentrig/config.json"), JSON.stringify({ checks: { bootstrap: "setup", steps: [step(15000)] }, profiles: { ci: { checks: { bootstrap: "setup", steps: [step(30000)] } }, none: { checks: { bootstrap: "setup", steps: [] } } } }));
     expect(await resolveTrainTestTimeout(root)).toBe(15000);
+    expect(await resolveTrainTestTimeout(root, "user-only")).toBe(15000);
     expect(await resolveTrainTestTimeout(root, "ci")).toBe(30000);
     expect(await resolveTrainTestTimeout(root, "none")).toBeUndefined();
     await writeFile(join(root, ".agentrig/config.json"), JSON.stringify({ checks: { bootstrap: "setup", steps: [step(15000), { ...step(30000), name: "second" }] } }));

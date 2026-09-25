@@ -49,6 +49,7 @@ function fixture(): Fixture {
     },
     async boundary() { return { projectRoot: ROOT, userStateSafe: true }; },
     async commandExists() { return true; },
+    async reviewerStatus() { return "logged in; account fixture@example.test"; },
     async gitState() { return { inside: true, branch: "feat/test", detached: false }; },
   };
   return {
@@ -638,4 +639,33 @@ it("prints all five measured feel references through ordinary doctor without pro
     expect(text).toContain(`feel:E1:${task}`);
   }
   expect(text).not.toContain("probe:usage");
+});
+
+it("reviewer diagnostics use user-profile home, report identity, and never read reviewer credentials", async () => {
+  const f = fixture();
+  f.files.set(USER_CONFIG, JSON.stringify({ profiles: { personal: { childEnv: { CODEX_HOME: "/personal" } } } }));
+  f.files.set(PROJECT_CONFIG, JSON.stringify({ reviewers: { slot: { adapter: "codex-cli", model: "pinned" } } }));
+  f.probes.reviewerStatus = async (adapter, env) => {
+    expect(adapter).toBe("codex-cli"); expect(env.CODEX_HOME).toBe("/personal");
+    return "logged in; account fixture@example.test";
+  };
+  const result = await diagnose({ ...f.options, cli: { profile: "personal" } });
+  expect(find(result.lines, "reviewers:slot")).toContain('home "/personal"; logged in; account fixture@example.test');
+  expect(f.reads.some(path => path.startsWith("/personal"))).toBe(false);
+  f.probes.reviewerStatus = async () => { throw new Error("secret stderr"); };
+  const failed = await diagnose({ ...f.options, cli: { profile: "personal" } });
+  expect(find(failed.lines, "reviewers:slot")).toContain("login status failed");
+  expect(failed.lines.join("\n")).not.toContain("secret stderr");
+  const missingHome = await diagnose(f.options);
+  expect(find(missingHome.lines, "reviewers:slot")).toContain("CODEX_HOME");
+});
+
+it("API reviewer slots skip CLI status and untrusted project slots are not opened", async () => {
+  const f = fixture();
+  f.files.set(PROJECT_CONFIG, JSON.stringify({ providers: { local: { provider: "openai", model: "pinned", baseUrl: "http://localhost:8000" } }, reviewers: { slot: { adapter: "api:local", model: "pinned" } } }));
+  f.probes.reviewerStatus = async () => { throw new Error("must not call a CLI"); };
+  expect(find((await diagnose(f.options)).lines, "reviewers:slot")).toContain("skip reviewers:slot");
+  f.files.delete(TRUST); f.reads.length = 0;
+  expect((await diagnose(f.options)).lines.some(value => value.includes("reviewers:slot"))).toBe(false);
+  expect(f.reads).not.toContain(PROJECT_CONFIG);
 });

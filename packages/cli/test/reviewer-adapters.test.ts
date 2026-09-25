@@ -97,7 +97,7 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ reviewers: { custom: { adapter, model: "pinned" } } }));
     const prompt = join(dir, "prompt"); writeFileSync(prompt, "source bundle; checks green");
-    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", CLAUDE_CODE_CHILD_SESSION: "child", CLAUDE_CODE_MESSAGING_SOCKET: "/parent/socket", CLAUDE_CODE_MESSAGING_TOKEN: "parent-token", CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge", CLAUDE_PID: "12345", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
+    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, CODEX_HOME: dir, CLAUDE_CONFIG_DIR: dir, CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", CLAUDE_CODE_CHILD_SESSION: "child", CLAUDE_CODE_MESSAGING_SOCKET: "/parent/socket", CLAUDE_CODE_MESSAGING_TOKEN: "parent-token", CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge", CLAUDE_PID: "12345", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
     const prefix = join(dir, "out");
     const run = invoke(prefix);
     expect(run.status, run.stderr).toBe(0);
@@ -106,7 +106,7 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     for (const name of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_BRIDGE_SESSION_ID", "CLAUDE_PID"]) expect(childEnv).not.toHaveProperty(name);
     expect(childEnv).toMatchObject({ PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" });
     const provenance = JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"));
-    expect(provenance).toMatchObject({ slot: "custom", adapter, model: "pinned", modelSource: cliAdapters[adapter].modelSource, cwd: dir, exit: 0 });
+    expect(provenance).toMatchObject({ slot: "custom", adapter, model: "pinned", modelSource: cliAdapters[adapter].modelSource, cwd: dir, resolvedHome: dir, exit: 0 });
     expect(provenance.verdict).toEqual(verdict);
     expect(readFileSync(`${prefix}.md`, "utf8")).toBe(reviewText);
     expect(adapter === "claude-cli" ? JSON.parse(readFileSync(`${prefix}.stdout`, "utf8")).result : readFileSync(`${prefix}.last`, "utf8")).toBe(reviewText);
@@ -155,4 +155,15 @@ it.each([
 it("M-overlong-head: no partial-token normalization", () => {
   const raw = `Reviewed head ${"a".repeat(41)}\nVERDICT: PASS\n`;
   expect(normalizeReviewerHead(raw)).toEqual({ text: raw, tolerances: [] });
+});
+
+it.each([["codex-cli", "CODEX_HOME"], ["claude-cli", "CLAUDE_CONFIG_DIR"]])("%s refuses missing home before vendor launch", (adapter, variable) => {
+  const dir = mkdtempSync(join(tmpdir(), "review-no-home-"));
+  try {
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ reviewers: { slot: { adapter, model: "pinned" } } }));
+    const env = { ...process.env, AGENTRIG_CHILD_PROFILE: "", [variable!]: "" };
+    const result = spawnSync(process.execPath, [runner, join(dir, "config.json"), "slot", join(dir, "absent-prompt"), dir, join(dir, "out")], { env, encoding: "utf8" });
+    expect(result.status).toBe(2); expect(result.stderr).toContain(`set ${variable}`);
+    expect(existsSync(join(dir, "out.stdout"))).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

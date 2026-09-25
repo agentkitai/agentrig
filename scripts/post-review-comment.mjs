@@ -2,6 +2,7 @@
 // Usage: node scripts/post-review-comment.mjs PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]
 // Validate the structured verdict and caller binding before any remote side effect.
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
@@ -51,16 +52,19 @@ try {
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");
   const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full`;
+  const provenance = provenanceFile ? JSON.parse(readFileSync(provenanceFile, "utf8")) : undefined;
+  if (provenance?.resolvedHome != null && (typeof provenance.resolvedHome !== "string" || !isAbsolute(provenance.resolvedHome) || provenance.resolvedHome.length > 4096 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(provenance.resolvedHome))) throw new Error("invalid resolved reviewer home in provenance");
+  const homeLine = provenance?.resolvedHome == null ? "" : `Transport model: ${model}; home: ${JSON.stringify(provenance.resolvedHome)}\n\n`;
   const payload = `${body}${proofFile === undefined ? "" : `\n${proof}`}`;
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;
-  const capacity = 60000 - heading.length - 2 - (2 * digits + 7);
+  const capacity = 60000 - heading.length - homeLine.length - 2 - (2 * digits + 7);
   const range = verdict ? verdictRange(body) : undefined;
   const blockStart = range?.start ?? -1;
   const blockEnd = range?.end ?? -1;
   if (verdict && blockEnd - blockStart > capacity) throw new Error("structured verdict block exceeds comment capacity");
   const pieces = [];
-  if (`${heading}\n\n${payload}`.length <= 60000) pieces.push(payload);
+  if (`${heading}\n\n${homeLine}${payload}`.length <= 60000) pieces.push(payload);
   else {
     for (let start = 0; start < payload.length;) {
       let end = Math.min(start + capacity, payload.length);
@@ -119,7 +123,7 @@ try {
     for (const [index, piece] of pieces.entries()) {
       const path = pieces.length === 1 ? outputFile : `${outputFile}.${index + 1}`;
       const marker = pieces.length === 1 ? "" : `(${index + 1}/${pieces.length})\n\n`;
-      const comment = `${heading}\n\n${marker}${piece}`;
+      const comment = `${heading}\n\n${homeLine}${marker}${piece}`;
       if (comment.length > 60000) throw new Error("review comment exceeds limit");
       writeFileSync(path, comment);
       // Assert the exact first line of EVERY emitted body immediately before posting.

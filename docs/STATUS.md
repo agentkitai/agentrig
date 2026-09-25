@@ -1,5 +1,15 @@
 # Status
 
+## Profile-scoped child environment (#506; implementation, review pending)
+
+User profiles can declare bounded non-secret childEnv settings. CLI launches and per-row train
+children carry tool homes; CLI reviewer slots fail fast without an explicit absolute home.
+Doctor runs bounded login-status commands and reports supported account identity without reading
+reviewer credential files. Adapter and posted-heading provenance include the resolved home path,
+not a billing-account attestation. User-only profiles retain base train checks. Existing receipts
+without home provenance remain readable. No roadmap row completion is claimed; independent
+review and hosted CI remain pending. Repair round: 0/3.
+
 ## Reviewer adapter usage and review-policy residuals (#505, #508, #510, #511; implementation, proof pending)
 
 Reviewer CLI argument-count and output-prefix mistakes now fail with EX_USAGE before launch without consuming a reviewer retry. Transport-proven numeric GPT major-family assertions cover suffixed minor pins while retaining exact transport proof. Shipping instructions distinguish dispatched fixer tasks from durable fixer pre-push handoffs and preserve the sole verbatim-human-authorization-quote exception to identifier bans in PR and squash bodies. Repair round: 0/3; review disposition pending; residuals none. No roadmap completion is claimed.

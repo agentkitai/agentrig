@@ -158,7 +158,7 @@ checkout; mixed assertions, malformed/incomplete reports, unsafe file names,
 unhandled errors and other timeout budgets fail closed. Original output and each
 isolated argv remain in the row log. Never retry the row itself.
 Git and pnpm must be available; landing verification uses authenticated `gh`.
-Children inherit the operator's environment, without git-ai PATH injection and with
+Children inherit the operator's environment with user-profile childEnv overrides (see below), without git-ai PATH injection and with
 `GIT_TRACE2_EVENT=0`. The command uses argv spawning, not shell interpolation.
 
 A JSON `train.status` is printed after every completed or halted row and by the
@@ -193,3 +193,44 @@ To continue a halted task, retain its evidence and enqueue a **new unique row id
 with explicit resume pointers and unchanged authorization bounds. Existing done or
 halted row ids and stale result receipts are never reused. Directory layout/name/
 lock errors are command errors before execution, not evidence of a landed row.
+
+## Profile-scoped child environments (#506)
+
+Store non-secret child settings in the **user** configuration, never in a project file:
+
+```json
+{"profiles":{"personal":{"childEnv":{"CODEX_HOME":"/absolute/personal-codex","CLAUDE_CONFIG_DIR":"/absolute/personal-claude"}}}}
+```
+
+`agentrig --profile personal ...` applies these values before dispatching CLI actions, so
+headless runs, tools, reviewer adapters and train children inherit the selected homes without
+shell exports. A train row's `environment.profile` overrides the train's `--profile`; each row
+resolves its own environment before any command and rechecks reviewer homes after fast-forward.
+User-only profiles use base project checks unless the project declares a matching checks profile.
+Project `childEnv` declarations never override user-owned login routing. Existing project trust,
+permissions, sandbox and train Git-environment protections are unchanged.
+
+`childEnv` is an optional string map (at most 64 entries; uppercase environment names up to
+128 characters and nonblank single-line values up to 4096 characters). Tool homes must be
+absolute paths; no tilde expansion or shell interpolation occurs. Other values are plain strings.
+Credential-like names/values, controls and reserved process-routing settings (including PATH,
+HOME and NODE_OPTIONS) are refused. This is not a secret detector: **never put secrets here**;
+use the CLI's own login/credential store. No credential file is read or printed by this feature.
+
+CLI reviewer slots refuse missing/relative `CODEX_HOME` or `CLAUDE_CONFIG_DIR` with a diagnostic
+naming the variable, even when a CLI would otherwise default to its usual home. API reviewer
+slots do not require CLI homes. `doctor --profile personal` adds `reviewers:<slot>` checks for
+the trusted project's slots: `codex login status` or `claude auth status --json` runs under the
+resolved home, with a ten-second timeout and bounded output. Only login state and the supported
+account-identity field are displayed; unsupported identity is explicitly unavailable. Failure
+output is not echoed. No provider request or credential-file inspection is added, but the
+external login-status CLI controls its own behavior; this is not an offline guarantee for that CLI.
+
+For direct standalone adapter invocation, export `AGENTRIG_CHILD_PROFILE=personal` to resolve
+the same user profile, or export the required tool homes explicitly. AgentRig CLI children
+carry the selected profile marker automatically. Keep the existing five positional adapter
+arguments unchanged. The adapter receipt records `resolvedHome` beside `transportModel` (null
+for API slots). Posting preserves the canonical first-line heading and adds
+`Transport model: <pin>; home: <JSON-quoted absolute path>` immediately below it. This path is
+routing provenance, **not proof of which account was billed**; no tokens or credential contents
+are included. Old receipts without the additive home field remain readable.

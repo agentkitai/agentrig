@@ -554,3 +554,19 @@ it("#490 quoted delimiter mentions do not redirect the protected posting range",
   expect(parsed).toEqual([value]);
   expect(result.posts.some(part => part.includes(mention))).toBe(true);
 });
+
+it.each(["/profile with spaces", "relative", "/bad\npath"])('review heading binds resolved home without credentials: %j', home => {
+  const dir = mkdtempSync(join(tmpdir(), "review-home-")); fixtureConfig(dir);
+  try {
+    const verdict = { version: 1, reviewedHead: head, assertedModel: "gpt-5.5", modelSource: "fixture", slot: "Codex", verdict: "PASS", findings: [] };
+    writeFileSync(join(dir, "body"), `Reviewed head: ${head}\n<!-- agentrig-verdict:v1 -->\n${JSON.stringify(verdict)}\n<!-- /agentrig-verdict -->`);
+    writeFileSync(join(dir, "model"), "gpt-5.5");
+    writeFileSync(join(dir, "provenance"), JSON.stringify({ verdict, reviewedHead: head, slot: "Codex", adapter: "codex-cli", model: "gpt-5.5", assertedModel: "gpt-5.5", transportModel: "gpt-5.5", resolvedHome: home, exit: 0 }));
+    writeFileSync(join(dir, "gh"), `#!/bin/sh\ncat "$5" > '${dir}/posted'\n`); chmodSync(join(dir, "gh"), 0o755);
+    const result = spawnSync(process.execPath, [helper, "372", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "out"), "--provenance", join(dir, "provenance")], { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    if (home === "/profile with spaces") {
+      expect(result.status, result.stderr).toBe(0);
+      expect(readFileSync(join(dir, "posted"), "utf8")).toContain(`${heading}\n\nTransport model: gpt-5.5; home: "/profile with spaces"`);
+    } else { expect(result.status).toBe(2); expect(existsSync(join(dir, "posted"))).toBe(false); }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

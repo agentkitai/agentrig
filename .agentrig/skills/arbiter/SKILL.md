@@ -43,6 +43,12 @@ not home config or runtime provider defaults. Missing `reviewers` or `{}` means 
 Config declares 0, 1 or 2 named slots, each with an adapter id and a pinned model; no check capability flag.
 Validate config before dispatch with `parseConfigText`; never replace project pins from local preferences.
 Use `scripts/reviewer-adapters.mjs` for CLI command templates, model extraction and failed/empty-run detection.
+Reviewer CLI homes must be explicit: select user-profile `childEnv` via the launching CLI
+`--profile` (direct adapters: `AGENTRIG_CHILD_PROFILE`) or export the adapter’s required
+tool-home variable listed in shipping policy. Missing homes refuse before launch. Run `doctor --profile <name>`
+for per-slot login-status/account diagnostics. Preserve adapter `resolvedHome` provenance and
+the transport-model/home line below the posted canonical heading; never copy credential contents.
+See shipping policy’s profile-scoped child environments section.
 An `api:<name>` adapter references the existing `providers.<name>` entry, whose model must equal
 the slot's pinned model; it duplicates no endpoints, credentials or routing. See shipping policy §3.
 
