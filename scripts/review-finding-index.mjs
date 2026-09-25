@@ -29,18 +29,47 @@ export const instructionEchoSentences = [
   "Report which of the PR body's claims you verified, and any you could not.",
 ];
 export function assertReviewerVerdict(body) {
-  // Posting checks literal echoes, not live finding-index completeness or identity.
+  // Citation permission ends at a blank paragraph, any new heading, setext
+  // underline, or thematic break. A fence owns its internal blank lines/headings.
   const headings = new Set(findingHeadings(body));
+  const lines = body.replace(/\r\n?/g, "\n").split("\n");
   let inFinding = false;
-  for (const line of body.split(/\r?\n/)) {
-    if (/^ {0,3}#{1,6} /.test(line)) inFinding = headings.has(line);
-    else if (headings.has(line)) inFinding = true;
-    // Narrow escape hatch: a Markdown blockquote inside an indexed finding. The
-    // unquoted surrounding finding must still state the scenario and proposed fix.
-    if (inFinding && /^ {0,3}> /.test(line)) continue;
-    if (instructionEchoSentences.some(sentence => line.includes(sentence))) {
-      throw new Error("reviewer body echoes instructions; not a verdict");
+  let fence;
+  let chunk = "";
+  let unchecked = "";
+  const flush = () => {
+    // Only paired inline code/quotation spans are citations. Keep a sentinel so
+    // removing a citation cannot concatenate otherwise separate instructions.
+    unchecked += inFinding
+      ? chunk.replace(/(`+)(?!`)([\s\S]*?)\1(?!`)|"[^"\n]*(?:\n[^"\n]*)*"/g, "\u0000")
+      : chunk;
+    chunk = "";
+  };
+  for (const line of lines) {
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) {
+      if (!inFinding) chunk += line + "\n";
+      if (marker?.[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+      continue;
     }
+    if (marker) {
+      fence = marker;
+      chunk += inFinding ? "\u0000" : line + "\n";
+      continue;
+    }
+    if (!line.trim() || /^ {0,3}(?:#{1,6}\s|(?:[-*_]\s*){3,}$|=+\s*$)/.test(line) || headings.has(line)) {
+      flush();
+      inFinding = headings.has(line);
+    }
+    if (inFinding && /^(?: {0,3}>| {4}|\t)/.test(line)) chunk += "\u0000";
+    else chunk += line + "\n";
+  }
+  flush();
+  // Strip blockquote presentation even outside findings; quoting an instruction
+  // outside a finding must not evade whitespace-normalized literal matching.
+  const normalized = unchecked.replace(/^ {0,3}> ?/gm, "").replace(/\s+/g, " ");
+  if (instructionEchoSentences.some(sentence => normalized.includes(sentence))) {
+    throw new Error("reviewer body echoes instructions; not a verdict");
   }
 }
 
@@ -82,7 +111,7 @@ function findingHeadings(body, unsupported = () => {}) {
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
     if (finding) {
       findings.push(line);
-    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /^(?:F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(candidate))) {
       unsupported(line);
     }
   }

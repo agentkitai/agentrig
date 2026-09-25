@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 // @ts-expect-error standalone helper
-import { findingIndex } from "../../../scripts/review-finding-index.mjs";
+import { findingIndex, instructionEchoSentences } from "../../../scripts/review-finding-index.mjs";
 
 function fixtureConfig(dir: string) {
   mkdirSync(join(dir, ".agentrig"), { recursive: true });
@@ -371,7 +371,8 @@ const echoPhrases = [
 ];
 it("M-contract-drift: pins literal echo phrases to current review skill", () => {
   const contract = readSkillText(new URL("../../../.agentrig/skills/review/SKILL.md", import.meta.url));
-  for (const phrase of echoPhrases) expect(contract).toContain(phrase);
+  expect(instructionEchoSentences).toEqual(echoPhrases);
+  for (const phrase of instructionEchoSentences) expect(contract).toContain(phrase);
 });
 it.each(echoPhrases)("M-echo-gate: rejects instruction echo before gh: %s", phrase => {
   const result = run(`VERDICT: PASS\nReviewed head ${head}\n${phrase}\n`);
@@ -439,4 +440,24 @@ it.each([
   expect(run(body + echoPhrases[0]).stderr).toContain("reviewer body echoes instructions; not a verdict");
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
+});
+
+it.each(['\n', '\r\n'])('M-wrapped-echo: rejects reflowed literals with %j', eol => {
+  for (const phrase of echoPhrases) {
+    const wrapped = phrase.split(' ').join(eol);
+    expect(run(`VERDICT: PASS${eol}${wrapped}`).stderr).toContain('echoes instructions');
+  }
+});
+it.each([
+  '> PHRASE', '`PHRASE`', '"PHRASE"', '```text\nPHRASE\n```', '    PHRASE',
+  '> PHRASE_WRAP', '`PHRASE_WRAP`', '~~~text\nPHRASE_WRAP\n~~~',
+])('M-citation-forms: accepts finding-local quotation %s only', form => {
+  const citation = form.replace('PHRASE_WRAP', echoPhrases[0].replace('record, ', 'record,\n' + (form.startsWith('>') ? '> ' : ''))).replace('PHRASE', echoPhrases[0]);
+  const finding = '### LOW: Missing contract evidence\nFix the receipt; contract says:\n';
+  expect(run(finding + citation).status).toBe(0);
+  expect(run(citation).stderr).toContain('echoes instructions');
+});
+it.each(['\n\nUnrelated summary\n', '\n## Summary\n', '\nSummary\n-------\n', '\n---\n'])('M-section-leak: ends citation permission at %j', boundary => {
+  const body = '### LOW: Missing evidence\nFix the receipt.' + boundary + '> ' + echoPhrases[0];
+  expect(run(body).stderr).toContain('echoes instructions');
 });

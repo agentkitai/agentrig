@@ -72,3 +72,12 @@ it.each([
   const heading = "### LOW: Actual finding";
   expect(findingIndex(url, { html_url: url, body: `${heading}\n${prose}` })).toEqual([{ comment: url, heading }]);
 });
+
+it.each([
+  '- **#444** permits inline `F1 — HIGH —` examples.',
+  'The sentence quotes `### HIGH — title` as grammar.',
+  'An inline [P4] example is ordinary prose.',
+])('M-inline-grammar: ignores prose %s', prose => {
+  const heading = '  ### LOW: Preserve `bytes`  exactly';
+  expect(findingIndex(url, { html_url: url, body: `${prose}\n${heading}` })).toEqual([{ comment: url, heading }]);
+});

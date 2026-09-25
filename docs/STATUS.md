@@ -1,5 +1,20 @@
 # Status
 
+## Finding prose and citation residuals (#450, #451, #453, #454) — implemented, pending review
+
+Live indexing anchors unsupported finding syntax at the opening, not examples in
+ordinary prose; exact heading bytes and delimiter-less ALL-CAPS ATX refusals remain.
+Override diagnostic assertions compare normalized separators and exercise simulated
+Windows paths without changing the loader. The posting echo guard normalizes whitespace
+and permits blockquote, paired inline code/double-quote, fenced, and indented citations
+inside findings. Citation permission ends at a blank paragraph, another heading, a
+setext underline, or thematic break; fence contents retain their own boundaries. This
+conservative paragraph boundary prevents unrelated unheaded sections inheriting permission.
+Literal denylist entries are pinned through the skill loader; LF/CRLF reflow regressions
+cover both echo rejection and legitimate citations. No product or roadmap changes.
+Fail-first, named mutation, entire-skill-tree CRLF, and declared-check receipts are in
+the draft PR. Repair round: 0/3; reviews pending; residuals none.
+
 ## Reviewer-slot residuals, third batch (#441–445) — implemented, pending review
 
 Testing policy positively pins current declared-slot wording with the actual stale
