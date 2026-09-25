@@ -53,6 +53,11 @@ function stub(program: Command): { run: (argv: string[]) => Promise<Captured | n
 }
 
 describe("argv parsing", () => {
+  it("keeps builder routing a run option without changing the conductor provider", async () => {
+    const result = await stub(buildProgram()).run(["run", "task", "--builder-provider", "sol"]);
+    expect(result?.opts.builderProvider).toBe("sol");
+    expect(result?.opts.provider).not.toBe("sol");
+  });
   it("M-CI2-portable-home: isolates both platform home selectors", () => {
     expect(process.env.HOME).toBe(profileHome);
     expect(process.env.USERPROFILE).toBe(profileHome);

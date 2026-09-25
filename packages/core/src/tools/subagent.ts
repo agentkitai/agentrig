@@ -114,6 +114,8 @@ export interface SubagentOptions {
   createAgent: (config: AgentConfig) => Agent;
   /** Supplied by the CLI when config defines named provider entries; absent otherwise. */
   providerChoices?: SubagentProviderChoices;
+  /** Effective configured child default for provenance even when no choices are offered. */
+  defaultProvider?: string;
   /** Turns before a child is cut off. Deliberately smaller than a parent's. */
   maxTurns?: number;
   /**
@@ -496,6 +498,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
           binding.ready();
         }
         ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task,
+          ...((entry ?? opts.providerChoices?.default ?? opts.defaultProvider) === undefined ? {} : { provider: entry ?? opts.providerChoices?.default ?? opts.defaultProvider }),
           ...(role === undefined ? {} : { role: { name: role.name, hash: role.hash, tools: [...(allowlist ?? [])],
             modelRole: role["model-role"], delegable: role.delegable && (allowlist?.includes(SUBAGENT_TOOL) ?? false) && depth + 1 < maxDepth,
             maxTurns: effectiveTurns } }) });

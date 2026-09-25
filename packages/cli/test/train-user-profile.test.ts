@@ -57,3 +57,22 @@ it("train --status wires profile validation without claiming the queued row", as
   expect(JSON.parse(output)).toMatchObject({ queue: 1, active: 0, halted: 0, invalidEntries: [expect.stringContaining('unknown config profile "missing"')] });
   expect(await readdir(join(queue, "queue"))).toEqual(["001.json"]);
 });
+
+it("refuses unknown builder entries before checkout and resolves active profile entries", async () => {
+  const { home, checkout, queue } = await fixture();
+  vi.stubEnv("AGENTRIG_CHILD_PROFILE", undefined);
+  await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: { personal: { providers: { sol: { provider: "openai", model: "fixture" } } } } }));
+  const path = join(queue, "queue/001.json");
+  const row = JSON.parse(await (await import("node:fs/promises")).readFile(path, "utf8"));
+  await writeFile(path, JSON.stringify({ ...row, builderProvider: "missing" }));
+  expect((await trainStatus(queue, options)).invalidEntries.join("\n")).toContain("unknown builder provider");
+  const command = vi.fn();
+  expect(await runTrain(queue, { ...options, command })).toBe("halted");
+  expect(command).not.toHaveBeenCalled();
+  expect(await readdir(join(queue, "queue"))).toEqual(["001.json"]);
+  await expect(trainChildEnvironment(checkout, "personal", "sol")).resolves.toBeDefined();
+  await expect(trainChildEnvironment(checkout, undefined, "sol")).rejects.toThrow("unknown builder provider");
+  await expect(trainChildEnvironment(checkout, "personal", "toString")).rejects.toThrow();
+  await expect(trainChildEnvironment(checkout, "personal", "default")).resolves.toBeDefined();
+  await expect(trainChildEnvironment(checkout, "recommended", "default")).resolves.toBeDefined();
+});

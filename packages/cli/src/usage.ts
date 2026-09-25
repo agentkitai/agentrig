@@ -34,7 +34,7 @@ export async function usageCommand(cwd: string, since: string, json: boolean, op
     if (row === undefined) throw new Error(`train row not found: ${options.row}; use --train-dir <queue-directory>`);
     const pricingNote = "Configured-rate estimates only. ChatGPT-login calls remain unpriced; raw tokens are reported. No calls is not evidence of free usage.";
     const format = (value: typeof row.totals) => `${value.input} input / ${value.output} output / ${value.cacheRead} cache-read / ${value.cacheWrite} cache-write tokens; ${value.estimatedMicros === null ? "unpriced" : `$${(value.estimatedMicros / 1_000_000).toFixed(6)} configured-rate estimate (priced subset)`}; ${value.unpricedCalls} unpriced / ${value.incompleteCalls} incomplete calls`;
-    console.log(json ? JSON.stringify({ ...row, pricingNote }) : [`Row ${row.row}: ${format(row.totals)}`, ...row.sessions.flatMap(session => [`Session ${session.session}: ${format(session.totals)}`, ...session.models.map(model => `  ${session.session} ${model.provider}/${model.model}: ${format(model)}`)]), pricingNote, ...row.coverageWarnings].join("\n"));
+    console.log(json ? JSON.stringify({ ...row, pricingNote }) : [`Row ${row.row}: ${format(row.totals)}`, ...row.sessions.flatMap(session => [`Session ${session.session}: ${format(session.totals)}; builder provider: ${session.builderProvider ?? "unknown"}`, ...session.models.map(model => `  ${session.session} ${model.provider}/${model.model}: ${format(model)}`)]), pricingNote, ...row.coverageWarnings].join("\n"));
     return;
   }
   const report = await new SpendLedger(await realpath(cwd)).report(since);

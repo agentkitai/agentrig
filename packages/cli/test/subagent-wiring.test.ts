@@ -284,5 +284,6 @@ describe("which provider a child runs on (R3.5a)", () => {
     });
     expect(withEntries.providerChoices).toEqual({ names: ["cloud", "local", "default"], default: "local", main: "cloud" });
     expect(wiring().providerChoices).toBeUndefined();
+    expect(wiring().defaultProvider).toBe("local");
   });
 });

@@ -101,6 +101,18 @@ Operative resource mapping: initial reviews remove one recorded owned tree per d
 
 Use topic's **Review scratch cleanup** sequence for every initial and focused pass, including failure/retry/staleness paths. The standalone dogfood author assumes conductor cleanup duties for its reviews. Builders/fixers record command exit codes, test counts, fail-first/mutation results and times in the PR body, join every proof job, verify restored tracked/index state, then, after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1; do not wait for hosted CI. Keep proof TMPDIR outside Git ancestry per docs/TESTING.md.
 
+## Builder provider routing
+
+The headless `run --builder-provider <entry>` option carries the train row's optional
+`builderProvider`. Use it as `provider` on every builder, continuation builder and fixer
+spawn unless the row explicitly overrides that choice for the child. When absent, retain
+the profile's configured child default. This is not a global provider override:
+reviewers, arbiters and landers are unaffected. Do not alter their role/config bindings.
+Record the effective builder provider (named entry, not model identity) for each child in
+the PR body's child inventory, alongside session id, role, outcome and handoff. Reconcile
+against `subagent.spawn.provider` and train usage; historical unknown entries stay unknown,
+never infer an effective choice from the row's requested value alone.
+
 ## 1. Build
 
 Apply dogfood §1 to builders, continuation builders and fixers in every handoff: use an

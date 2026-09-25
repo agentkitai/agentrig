@@ -1,3 +1,4 @@
+import { builderProviderContext } from "./builder-provider.js";
 import { createInterface } from "node:readline/promises";
 import {
   createAgent,
@@ -61,6 +62,7 @@ export const RUN_NUMERIC_DEFAULTS = {
 } as const;
 
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
+  builderProvider?: string;
   /** Validated schedule CLI/config option; not a provider option. */
   heartbeatMaxTurns?: string | number;
   outputSchema?: string;
@@ -444,10 +446,12 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
 
   const interactive = opts.headless !== true && process.stdin.isTTY === true;
 
+  let routingContext: string[];
   let built;
   let maintenanceFailed = false;
   const scheduledUsage = dependencies.accounting ?? (opts.scheduled === undefined ? undefined : new ScheduledUsage(opts.memory !== undefined && opts.ingestOnEnd === true, opts.dreamOnEnd === true));
   try {
+    routingContext = builderProviderContext(opts.builderProvider, opts);
     if (opts.outputMode !== undefined && opts.outputSchema === undefined) throw new Error("--output-mode requires --output-schema");
     if (opts.outputMode !== undefined && opts.outputMode !== "prompted" && opts.outputMode !== "native") throw new Error("--output-mode must be prompted or native");
     if (opts.outputMode === "native") {
@@ -481,7 +485,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
   const session: Session = agent.run(
     task,
     { ...(opts.resume === undefined ? { cwd: process.cwd(), ...(opts.scheduled === undefined ? {} : { scheduled: opts.scheduled }) } : { resume: opts.resume }),
-      ...(dependencies.advisoryContext === undefined ? {} : { advisoryContext: dependencies.advisoryContext }) },
+      ...(routingContext.length === 0 ? (dependencies.advisoryContext === undefined ? {} : { advisoryContext: dependencies.advisoryContext }) : { advisoryContext: [...(dependencies.advisoryContext ?? []), ...routingContext] }) },
   );
 
   // PLAN §4.4: an out-of-band observer over the same event stream.

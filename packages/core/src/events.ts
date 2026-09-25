@@ -506,6 +506,8 @@ export const EventPayload = z.discriminatedUnion("type", [
     generated: z.literal(true).optional(),
   }),
   z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string(),
+    /** Effective named child entry; absent on historical logs or unknown SDK defaults. */
+    provider: z.string().optional(),
     role: z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/), hash: z.string().regex(/^[a-f0-9]{64}$/),
       tools: z.array(z.string().max(128)).max(64), modelRole: z.enum(["main", "supervisor", "memory", "subagents"]),
       delegable: z.boolean(), maxTurns: z.number().int().positive() }).strict().optional() }),

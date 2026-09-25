@@ -427,3 +427,39 @@ it("keeps profile selection in the run child, never the declared checks", async 
     expect(env?.LAUNCHER_ONLY).toBe("kept"); expect(env?.CODEX_HOME).toBe("/profile/codex");
   }
 });
+
+it("builderProvider schema bounds and fake run forwarding", async () => {
+  for (const value of ["", " ", "x\n", "UPPER", "x_y", "x".repeat(129), "__proto__", "quoted\"", "two words"]) {
+    expect(TrainRowSchema.safeParse({ ...row, builderProvider: value }).success).toBe(false);
+  }
+  expect(TrainRowSchema.parse({ ...row, builderProvider: "sol" }).builderProvider).toBe("sol");
+  const f = await fixture();
+  await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "sol" }));
+  const childEnvironment = vi.fn(async () => ({}));
+  expect(await runTrain(f.root, { command: f.command, childEnvironment })).toBe("empty");
+  expect(childEnvironment).toHaveBeenCalledWith(row.environment.checkout, undefined, "sol");
+  expect(f.calls.find(call => call.startsWith("run --headless"))).toContain("--builder-provider sol");
+});
+
+it("builderProvider requires a profile-aware resolver before checkout", async () => {
+  const f = await fixture();
+  await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "sol" }));
+  expect(await runTrain(f.root, { command: f.command })).toBe("halted");
+  expect(f.calls).toEqual([]);
+  expect((await trainStatus(f.root)).invalidEntries.join("\n")).toContain("profile-aware");
+});
+
+it("revalidates builder entry after fast-forward before launching or checks", async () => {
+  const f = await fixture();
+  await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "sol" }));
+  let calls = 0;
+  const childEnvironment = vi.fn(async (_checkout: string, _profile?: string, provider?: string) => {
+    expect(provider).toBe("sol");
+    if (++calls === 3) throw new Error("unknown builder provider after fast-forward");
+    return {};
+  });
+  expect(await runTrain(f.root, { command: f.command, childEnvironment })).toBe("halted");
+  expect(f.calls.some(call => call.startsWith("run --headless"))).toBe(false);
+  expect(f.calls.some(call => call === "build")).toBe(false);
+  expect(await readFile(join(f.root, "logs/1.halt.json"), "utf8")).toContain("unknown builder provider after fast-forward");
+});

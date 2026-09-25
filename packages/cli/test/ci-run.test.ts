@@ -295,3 +295,14 @@ it("CI abort restores capture bytes and truncation without removing earlier turn
   expect(report).toContain("completed"); expect(report).toContain("recovered");
   expect(report).not.toContain("discarded"); expect(report).not.toContain("omitted remainder");
 });
+it("carries builder routing through headless run as advisory data without changing main provider", async () => {
+  const root = await fixture();
+  const result = await actual(root, ["--task-file", "task.txt", "--report", "report.md", "--builder-provider", "default"], { content: "done" });
+  expect(result.code, result.stderr).toBe(0);
+  expect(JSON.stringify(result.bodies)).toContain('builderProvider=\\"default\\"');
+  const logs = await readdir(join(root, "logs"));
+  const text = await readFile(join(root, "logs", logs.find(name => name.endsWith(".jsonl"))!), "utf8");
+  const start = text.trim().split("\n").map(line => JSON.parse(line)).find(event => event.type === "session.start");
+  expect(start.provider).toBe("openai-compatible");
+  expect(start.advisoryContext.join(" ")).toContain('builderProvider="default"');
+}, 30_000);

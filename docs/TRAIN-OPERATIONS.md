@@ -120,7 +120,8 @@ Each row is a strict zod-validated object (unknown fields are refused):
 {
   "task": "Implement the one authorized roadmap row using ship",
   "authorization": "The human's exact scoped task/merge authorization quote",
-  "scope": ["packages/core/src", "packages/core/test"],
+  "scope": ["docs"],
+  "builderProvider": "sol",
   "environment": {
     "checkout": "/absolute/dedicated-checkout",
     "repository": "owner/repo",
@@ -130,6 +131,22 @@ Each row is a strict zod-validated object (unknown fields are refused):
   }
 }
 ```
+
+`builderProvider` is optional: a named provider entry from the resolved active profile
+(or `default`, the reserved flat provider/model entry). It is bounded to 128 characters
+and lowercase entry-name syntax. Unknown entries refuse during read-only row validation,
+before claim or checkout, and are revalidated after fast-forward. The SDK requires a
+profile-aware `childEnvironment` resolver when this field is supplied. Train forwards it
+as `run --builder-provider <entry>`; direct headless runs accept the same validated option.
+It supplies advisory routing data to ship, not a conductor-provider override or permission
+change. Ship applies it to builders/continuations/fixers unless explicitly overridden for
+a child; reviewers, arbiters and landers retain their existing selection. Record each
+child's effective named entry in the PR child inventory, not merely the requested row value.
+
+Operator rule: doc/test/helper-scoped rows default to `sol` (set `builderProvider: "sol"`
+in those rows); product rows use the profile default (omit the field). This is an operator
+classification, not task-prose guessing in code. Reassess cost and quality after ten Sol
+rows before extending the rule.
 
 `profile` is optional. `environment.sessionRoot` optionally selects an absolute
 session store; otherwise every row uses `<dir>/logs/sessions`. Optional
@@ -228,7 +245,13 @@ read-only `agentrig train <dir> --status`. It includes `queue`, `active`, `done`
 `halted`, `invalidEntries`, `usage` and `pricingNote`; accounting failures yield
 `usage: null` plus `usageError`, never misleading zero totals. Each `usage` row has
 `row`, `totals`, `sessions` (with per-session `totals` and provider/model `models`),
-and `coverageWarnings`. Totals expose `calls`, `input`, `output`, `cacheRead`,
+and `coverageWarnings`. Each session includes `builderProvider`: the effective named
+entry observed in its parent's `subagent.spawn.provider`, including child-specific overrides
+and nested children, not a guess from the row request. This field covers all observed children
+without classifying their workflow role; join the PR child inventory for builder-only comparisons.
+Legacy/unknown/conflicting evidence is null. Children with no metered calls remain visible
+with zero totals; top-level sessions have no parent spawn and thus null provenance.
+Totals expose `calls`, `input`, `output`, `cacheRead`,
 `cacheWrite`, `estimatedMicros`, `unpricedCalls` and `incompleteCalls`. Raw token
 counts include unpriced calls; `estimatedMicros` covers only the priced subset at
 historical configured rates, is not provider billing, and is null (not zero cost)

@@ -32,3 +32,14 @@ it("joins calls before grouping two rows, nested children, session/model, unpric
     expect(overlap.map(row => row.totals.input)).toEqual([10, 0]);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it("records per-child effective entries without calls; conflicts and legacy entries are unknown", () => {
+  const rows = rollupTrainUsage([], [{ row: "r", sessions: ["p"] }], [
+    { parent: "p", child: "a", provider: "sol" }, { parent: "a", child: "b", provider: "default" },
+    { parent: "p", child: "legacy" }, { parent: "p", child: "conflict", provider: "sol" },
+    { parent: "p", child: "conflict", provider: "other" },
+  ]);
+  expect(rows[0]!.sessions.map(s => [s.session, s.builderProvider, s.totals.calls])).toEqual([
+    ["a", "sol", 0], ["b", "default", 0], ["conflict", null, 0], ["legacy", null, 0],
+  ]);
+});

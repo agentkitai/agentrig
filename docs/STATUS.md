@@ -1,5 +1,14 @@
 # Status
 
+## Pending review — issue #517, per-row builder provider routing
+
+Optional validated train routing now reaches headless ship without altering other roles.
+Child spawn provenance feeds R18e status accounting, including unmetered children and
+unknown legacy entries; ship requests effective entries in the PR child inventory.
+Operator doc/test/helper routing and the ten-row reassessment are documented. This
+controlled replay targets checklist/009d-base only; no ROADMAP completion marker,
+merge, or claim of the R18 live-train acceptance. Independent review remains pending.
+
 ## Pending review — issue #522, train declared-check environment
 
 Between-row checks use the pre-profile launcher environment plus tool homes and

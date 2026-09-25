@@ -737,3 +737,8 @@ it("renders provider slot waits in trace and conversation", () => {
   expect(renderEvent(wait)).toContain('waiting for provider entry="login" maxConcurrent=1');
   expect(renderChatEvent(wait)).toBe("Waiting for provider entry login (maxConcurrent=1)");
 });
+
+it("renders effective child entry while retaining legacy spawn rendering", () => {
+  expect(renderEvent(event({ type: "subagent.spawn", id: "c", task: "t", provider: "sol" }))).toContain("provider=sol");
+  expect(renderEvent(event({ type: "subagent.spawn", id: "c", task: "t" }))).not.toContain("provider=");
+});

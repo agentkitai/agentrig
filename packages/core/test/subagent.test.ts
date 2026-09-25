@@ -1328,10 +1328,12 @@ describe("provider choice on the spawn tool", () => {
       },
       createAgent,
     });
-    const ctx = { cwd: root, sessionId: "parent", emit: () => {}, signal: new AbortController().signal };
+    const emitted: Array<{ type: string; provider?: string }> = [];
+    const ctx = { cwd: root, sessionId: "parent", emit: (e: { type: string; provider?: string }) => { emitted.push(e); }, signal: new AbortController().signal };
     await tool.execute({ task: "a", provider: "cloud" }, ctx);
     await tool.execute({ task: "b" }, ctx);
     expect(seen).toEqual(["cloud", undefined]);
+    expect(emitted.filter(e => e.type === "subagent.spawn").map(e => e.provider)).toEqual(["cloud", "local"]);
   });
 
   it("threads the choice through the depth re-wrap, so a grandchild's spawn still offers it (I4a)", async () => {
