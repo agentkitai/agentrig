@@ -21,8 +21,11 @@ export function mergeIntent(command) {
         // Only this invocation's literal help flag exempts it. A flag after
         // -- is positional data; another shell segment never exempts a merge.
         const rest = args.slice(i + 2);
-        const stop = rest.indexOf("--");
-        if (!rest.slice(0, stop < 0 ? undefined : stop).some(arg => arg === "--help" || arg === "-h")) return true;
+        const help = arg => arg === "--help" || arg === "-h";
+        const targets = rest.filter(arg => !help(arg));
+        // Do not mistake the value of --subject/--body/etc. for a help flag.
+        // Only the bounded help-only form (plus one explicit target) is exempt.
+        if (!rest.some(help) || targets.length > 1 || targets.some(arg => !/^[1-9]\d*$|^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*$/u.test(arg))) return true;
       }
       if ((args.includes("api") || args.some(arg => /^(?:.*\/)?curl$/u.test(arg))) && /^\S*\bpulls\/[^\s/]+\/merge$/u.test(args[i])) return true;
     }

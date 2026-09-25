@@ -1,4 +1,32 @@
 // Bounded lexical view for hook intent detection, not shell execution.
+// Each nested substitution has its own quote context; quoted/escaped closing
+// parentheses are data. An unfinished substitution conservatively owns the tail.
+function substitutionEnd(command, start, backtick) {
+  const stack = [{ quote: undefined, close: backtick ? "`" : ")" }];
+  for (let i = start; i < command.length; i++) {
+    const frame = stack.at(-1), ch = command[i];
+    if (frame.quote === "'") { if (ch === "'") frame.quote = undefined; continue; }
+    if (ch === "\\") { i++; continue; }
+    if (ch === "`" && frame.close === "`" && !frame.quote) {
+      stack.pop(); if (!stack.length) return i; continue;
+    }
+    if (ch === "`" || (ch === "$" && command[i + 1] === "(")) {
+      stack.push({ quote: undefined, close: ch === "`" ? "`" : ")" });
+      if (ch === "$") i++;
+      continue;
+    }
+    if (ch === '"') { frame.quote = frame.quote ? undefined : ch; continue; }
+    if (frame.quote) continue;
+    if (ch === "'") { frame.quote = ch; continue; }
+    if (ch === "#" && (i === start || /[\s;|&()]/u.test(command[i - 1]))) {
+      while (i + 1 < command.length && command[i + 1] !== "\n") i++;
+      continue;
+    }
+    if (ch === "(") stack.push({ quote: undefined, close: ")" });
+    else if (ch === frame.close) { stack.pop(); if (!stack.length) return i; }
+  }
+  return command.length;
+}
 export function shellIntentParts(command) {
   const segments = [[]], substitutions = [];
   let value = "", active = false, quote;
@@ -15,8 +43,11 @@ export function shellIntentParts(command) {
     // Substitutions execute even inside double-quoted data. Inspect their
     // literal contents conservatively; never exempt a surrounding help flag.
     if (ch === "`" || (ch === "$" && command[i + 1] === "(")) {
-      const end = command.indexOf(ch === "`" ? "`" : ")", i + (ch === "`" ? 1 : 2));
-      substitutions.push(command.slice(i + (ch === "`" ? 1 : 2), end < 0 ? undefined : end));
+      const start = i + (ch === "`" ? 1 : 2);
+      const end = substitutionEnd(command, start, ch === "`");
+      substitutions.push(command.slice(start, end));
+      // Expansion is one opaque part of the outer word, not outer quote syntax.
+      value += "$(...)"; active = true; i = end; continue;
     }
     if (ch === "\\") {
       const next = command[++i];
@@ -34,5 +65,5 @@ export function shellIntentParts(command) {
 }
 
 export function shellWrapper(args) {
-  return args.some(arg => /^(?:.*\/)?(?:sh|bash|dash|zsh|ksh|eval)$/u.test(arg));
+  return args.some(arg => /^(?:.*\/)?(?:sh|bash|dash|zsh|ksh|csh|tcsh|fish|eval)$/u.test(arg));
 }

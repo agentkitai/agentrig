@@ -49,7 +49,7 @@ export function ledgerEditIntent(command) {
   const { segments, substitutions } = shellIntentParts(command);
   return substitutions.some(ledgerEditIntent) || segments.some(args =>
     args.some((arg, i) => arg === "pr" && args[i + 1] === "edit") ||
-    (args.includes("api") && args.some(arg => /^\/?repos\/[^\s]+\/pulls(?:\/|$)/u.test(arg))) ||
+    (args.includes("api") && args.some(arg => /^(?:https?:\/\/[^\s]+\/|\/?)repos\/[^\s]+\/pulls(?:\/|$)/u.test(arg))) ||
     (shellWrapper(args) && args.some(arg => /\s/u.test(arg) && ledgerEditIntent(arg))) ||
     (args.some(arg => /^(?:.*\/)?(?:python[\d.]*|node|ruby|perl)$/u.test(arg)) &&
       args.some(arg => /\bpr\s+edit\b|\bapi\b[\s\S]*\bpulls(?:\/|\b)/u.test(arg))));
@@ -80,7 +80,7 @@ async function candidate(command, cwd) {
     const method = option(args, ["--method", "-X"]);
     const hasFields = args.some(arg => /^(?:--input|--field|--raw-field)(?:=|$)|^-[fF]$/u.test(arg));
     if ((method === undefined && !hasFields) || method === "GET" || method === "HEAD") return undefined;
-    const endpoint = args.find(arg => /^\/?repos\//u.test(arg))?.replace(/^\//u, "");
+    const endpoint = args.find(arg => /^(?:https?:\/\/[^\s]+\/|\/?)repos\//u.test(arg))?.replace(/^\//u, "");
     const match = /^repos\/([\w.{}-]+\/[\w.{}-]+)\/pulls\/([1-9]\d*)$/u.exec(endpoint ?? "");
     if (!match) {
       // Pull creation, review/comment operations are not edits to a PR's body.
