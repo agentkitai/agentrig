@@ -1,6 +1,29 @@
 # Status
 
-Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
+Current roadmap row: user-directed project-store guard follow-ups (#355, #356, #357, #364), implemented pending independent review. No roadmap advancement or next row authorized; continuation order remains ROADMAP §5.
+
+## Project-store guard follow-ups — #355, #356, #357, #364
+
+Test/documentation-only maintenance. TESTING now documents the suite-wide read-only
+session/wiki inventories, quiescent-store requirement (including legitimate concurrent
+AgentRig sessions), bounded coverage, and troubleshooting without opt-outs. Windows
+includes both inventory and real setup-wiring regression files. The inventory fails with
+path-specific removed-during-inventory diagnostics for ENOENT at stat, directory read,
+file read and link read; only initially absent roots remain acceptable. Deterministic IO
+injection tests pin races without timing-dependent deletion or printing session contents.
+
+The extensions-runtime CLI fixture ran sessions with the relative default memory path,
+creating an empty checkout `.agentrig/wiki` during session-end processing. It now supplies
+an absolute tmpdir memory root and asserts builder placement. A separate suite-wide wiki
+inventory covers root and four package stores; disposable-checkout wiring tests pin all
+five paths, while deliberately leaving other `.agentrig` state outside the guard. The
+unfixed fixture failed first on this replay base with six test bodies passing and the wiki
+teardown failing. No product discovery or source code changed. The historical #313 summary
+below now links clean-main advances to shipping policy §1 alongside conflict/delta §3.
+
+Fail-first and named mutation results plus full-trio receipts are in the draft PR body.
+Independent reviews and hosted exact-head CI remain pending; replay authorization forbids
+landing. Repair round: 0/3.
 
 ## Review and cleanup skill wording sweep (#341, #342, #348, #349, #351, #365)
 
@@ -168,7 +191,8 @@ roadmap advancement; local proof is recorded in the PR, independent review and C
 Topic's rerun check still matches the CURRENT head SHA in the complete canonical heading.
 Recorded MAIN is historical provenance for the origin/main merge base reviewed, not an
 additional equality gate against current origin/main. Moved main follows the existing
-conflict/material-delta policy rather than causing a redundant initial pair. Instruction-contract
+conflict/material-delta policy (§3 of `docs/SHIPPING-WORKFLOW.md`) rather than causing a
+redundant initial pair; clean main advances follow §1 CI-staleness routing in that policy. Instruction-contract
 coverage pins this clarification at the operative rerun check and rejects removal, current-main
 equality, redundant-pair and lost-routing mutants. No heading, landing gate or runtime change;
 this maintenance task does not advance ROADMAP §5. Independent review and exact-head hosted

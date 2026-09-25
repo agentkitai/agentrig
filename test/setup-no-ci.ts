@@ -23,7 +23,15 @@ import { snapshotStore } from "./project-store.js";
 
 const projectStores = ["", "packages/cli/", "packages/core/", "packages/memory/", "packages/supervisor/"]
   .map((base) => fileURLToPath(new URL(`../${base}.agentrig/raw/sessions`, import.meta.url)));
-const before = projectStores.map(snapshotStore);
+const before = projectStores.map((path) => snapshotStore(path));
 afterAll(() => {
-  expect(projectStores.map(snapshotStore), "test suite must leave project session stores untouched").toEqual(before);
+  expect(projectStores.map((path) => snapshotStore(path)), "test suite must leave project session stores untouched").toEqual(before);
+});
+
+// Wiki creation is a separate invariant, not a claim to cover all .agentrig state.
+const projectWikis = ["", "packages/cli/", "packages/core/", "packages/memory/", "packages/supervisor/"]
+  .map((base) => fileURLToPath(new URL(`../${base}.agentrig/wiki`, import.meta.url)));
+const wikisBefore = projectWikis.map((path) => snapshotStore(path));
+afterAll(() => {
+  expect(projectWikis.map((path) => snapshotStore(path)), "test suite must leave project wikis untouched").toEqual(wikisBefore);
 });

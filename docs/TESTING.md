@@ -65,6 +65,37 @@ The preflight does not repair anything, and nothing in the product changes becau
 - Discovery is not being taught to ignore `.git`. Fail-closed trust discovery is the correct
   behavior; the environment is what is wrong.
 
+## Read-only project-store guard
+
+Every test file inherits `test/setup-no-ci.ts` (including Windows and web). It inventories
+`.agentrig/raw/sessions` and `.agentrig/wiki` at the checkout root and under each of
+`packages/cli`, `packages/core`, `packages/memory`, and `packages/supervisor`, before
+and after the file runs. Paths are anchored to the setup file, not a test's changing cwd.
+This is **not** whole-`.agentrig` coverage: config, skills and other stores are outside it.
+The Windows include list also runs the dedicated `project-store.test.ts` inventory and
+`project-store-wiring.test.ts` setup regressions.
+
+Inventories include empty directories, unexpected files, JSONL logs and snapshots;
+files are SHA-256 hashed to detect even same-size rewrites, and symlink targets are
+recorded without traversing them. Diagnostics do not print session contents. The guard
+is read-only: it never repairs or deletes a leak. This prevents fixtures from mixing with
+real sessions or silently mutating pre-existing data. Hashing costs scale with store bytes
+and test-file count; run proof in an isolated checkout rather than weakening this check.
+
+Stores must remain quiescent for the entire run. A **legitimate concurrent AgentRig
+session in the same checkout trips the guard** too: it cannot attribute writes to a test
+versus a real session. `test suite must leave project session stores untouched` or
+`test suite must leave project wikis untouched` means a before/after inventory changed.
+`project-store guard: path removed during inventory: <path>` means an entry disappeared
+while scanning; this fails closed rather than accepting a partial inventory. Only a root
+absent at its initial stat is a valid empty inventory. Other IO errors remain errors.
+
+To troubleshoot, preserve the paths/evidence, identify concurrent writers and stop or
+finish them, or run in a separate worktree with quiescent stores. Keep fixture memory and
+session roots in realpath-resolved temporary directories outside Git ancestry (as required
+by the preflight above). Rerun the affected file and then the suite. Do not delete genuine
+sessions, disable the setup, narrow its inventory, or add opt-outs to make a run green.
+
 ## Known sandbox limitation
 
 In the controlled Codex `workspace-write` experiment, empty, mode-0555 `.git` directories appeared

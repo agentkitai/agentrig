@@ -50,3 +50,32 @@ it("includes nested artifacts but does not traverse symlinks outside the store",
   writeFileSync(join(root, "nested", "artifact"), "modified");
   expect(snapshotStore(root)).not.toEqual(before);
 });
+
+it.each(["lstatSync", "readdirSync", "readFileSync", "readlinkSync"] as const)(
+  "reports paths removed during %s rather than certifying a partial inventory", async (operation) => {
+    const fs = await import("node:fs");
+    const root = fixture();
+    const target = join(root, "vanishing");
+    if (operation === "readdirSync") mkdirSync(target);
+    else if (operation === "readlinkSync") symlinkSync(fixture(), target, process.platform === "win32" ? "junction" : "dir");
+    else writeFileSync(target, "private content");
+    let removed = false;
+    const io = { ...fs, [operation]: (...args: unknown[]) => {
+      if (args[0] === target) { rmSync(target, { recursive: true }); removed = true; }
+      return (fs[operation] as (...args: unknown[]) => unknown)(...args);
+    } };
+    expect(() => snapshotStore(root, io)).toThrow(`project-store guard: path removed during inventory: ${target}`);
+    expect(removed).toBe(true);
+  },
+);
+
+it("reports disappearance of an already observed root and preserves other IO errors", async () => {
+  const fs = await import("node:fs");
+  const root = fixture();
+  expect(() => snapshotStore(root, { ...fs, readdirSync: (() => {
+    rmSync(root, { recursive: true });
+    return fs.readdirSync(root);
+  }) as typeof fs.readdirSync })).toThrow(`path removed during inventory: ${root}`);
+  const denied = Object.assign(new Error("denied"), { code: "EACCES" });
+  expect(() => snapshotStore(root, { ...fs, lstatSync: () => { throw denied; } })).toThrow(denied);
+});
