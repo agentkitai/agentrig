@@ -52,6 +52,23 @@ is also the backstop against check results changing after the final read. Ordina
 reads and unrelated tools remain unchanged. The API/CLI fetch budget is 25s,
 below the registered 30s hook deadline.
 
+## Read-only text and refusal rules (#587)
+
+Literal `gh pr merge --help` and `-h` are reads, including in compound commands.
+Help belongs to that invocation only: a later real merge is still guarded, and a
+flag after `--` is not a help option. Quoted comment/printf text is data, not a
+merge command. Quoting individual executable words does not hide a real merge.
+Shell program arguments, command substitutions and recognized interpreter/API
+mutation payloads remain executable data; compound and wrapped real merges must
+still use the standalone literal form above. This lexical distinction does not
+extend the gate into a general shell or programming-language interpreter.
+
+Refusals identify `merge guard` or `ledger integrity` separately and include the
+respective accepted literal form (`gh pr merge NUMBER --squash --match-head-commit
+FULL_HEAD` or `gh pr edit NUMBER --body-file FILE`). The shared literal-word parser
+no longer labels merge syntax errors as body edits. Accepted syntax does not waive
+authorization, head/CI verification, or append-only ledger/source checks.
+
 ## Slice-2 boundary and landing correction
 
 The slice-2 guard is a textual command backstop, not a shell sandbox or a payload interpreter. It guards recognized literal merge commands; constructed commands and merge operations hidden in file-referenced API payloads are not inspected. It does not promise universal GraphQL or arbitrary-shell merge interception. This limitation is explicit; review resolution and remote branch protection remain separate controls.

@@ -1,3 +1,4 @@
+import { shellIntentParts, shellWrapper } from "./shell-intent.mjs";
 import { assignedFindings, operativeLines } from "../scripts/review-ledger.mjs";
 import { hasVerdictBlock } from "../scripts/review-verdict.mjs";
 import { findingHeadings } from "../scripts/review-finding-index.mjs";
@@ -8,14 +9,14 @@ import { resolve } from "node:path";
 
 // Deliberately not a shell interpreter. Body writes must be a single literal gh
 // command; shell expansion, pipelines and stdin cannot be verified before execution.
-export function words(command) {
+export function words(command, rule = "ledger integrity") {
   const out = []; let value = "", quote, active = false;
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
     if (quote === "'") { if (ch === "'") quote = undefined; else value += ch; continue; }
     if (ch === "'" && !quote) { quote = ch; active = true; continue; }
     if (ch === '"') { quote = quote ? undefined : ch; active = true; continue; }
-    if (ch === "$" || ch === "`" || (!quote && /[;&|<>\n\r()]/u.test(ch))) throw new Error("use a single literal gh command (no shell expansion or operators) for body edits");
+    if (ch === "$" || ch === "`" || (!quote && /[;&|<>\n\r()]/u.test(ch))) throw new Error(`${rule} requires a single literal gh command (no shell expansion or operators)`);
     if (ch === "\\") {
       if (++i >= command.length) throw new Error("incomplete shell escape");
       const next = command[i];
@@ -45,8 +46,11 @@ function option(args, names) {
 }
 export function ledgerEditIntent(command) {
   if (typeof command !== "string") return false;
-  const visible = command.replace(/\\\r?\n/gu, "").replaceAll("'", "").replaceAll('"', "").replace(/\\(?=[a-z])/gu, "");
-  return /\bpr\s+edit\b/u.test(visible) || /\bapi\b[\s\S]*\bpulls(?:\/|\b)/u.test(visible);
+  const { segments, substitutions } = shellIntentParts(command);
+  return substitutions.some(ledgerEditIntent) || segments.some(args =>
+    args.some((arg, i) => arg === "pr" && args[i + 1] === "edit") ||
+    (args.includes("api") && args.some(arg => /^\/?repos\/[^\s]+\/pulls(?:\/|$)/u.test(arg))) ||
+    (shellWrapper(args) && args.some(arg => /\s/u.test(arg) && ledgerEditIntent(arg))));
 }
 async function candidate(command, cwd) {
   const args = words(command).flatMap(word => /^-[bFRfX]./u.test(word) && !word.startsWith("--") ? [word.slice(0, 2), word.slice(2)] : [word]);
@@ -162,6 +166,6 @@ export function createLedgerHook({ gh = "gh", budgetMs = 25_000 } = {}) {
         }
       }
       return { action: "continue" };
-    } catch (error) { return { action: "deny", reason: `ledger integrity failed: ${error.message}` }; }
+    } catch (error) { return { action: "deny", reason: `ledger integrity failed: ${error.message}. Accepted literal form: gh pr edit NUMBER --body-file FILE` }; }
   };
 }

@@ -1,3 +1,4 @@
+import { shellIntentParts, shellWrapper } from "./shell-intent.mjs";
 import { execFile } from "node:child_process";
 import { z } from "zod";
 import { words } from "./ledger-integrity.mjs";
@@ -8,16 +9,41 @@ const required = z.array(z.object({ name: z.string().min(1), bucket: z.literal("
 const runs = z.object({ total_count: z.number().int().nonnegative().max(100), check_runs: z.array(z.object({ name: z.string(), head_sha: sha, status: z.string(), conclusion: z.string().nullable() })) });
 const statuses = z.object({ sha, total_count: z.number().int().nonnegative().max(100), statuses: z.array(z.object({ context: z.string(), state: z.string() })) });
 
+// Preserve shell word boundaries: quoted prose is one data argument, not a
+// sequence of executable words. This remains a bounded recognizer, not a shell.
 export function mergeIntent(command) {
   if (typeof command !== "string") return false;
-  const visible = command.replace(/\\\r?\n/gu, "").replaceAll("'", "").replaceAll('"', "").replace(/\\(?=[a-z])/gu, "");
-  return /\bpr\s+merge\b|\bpulls\/[^\s/]+\/merge\b|\bmergePullRequest\b/u.test(visible);
+  const { segments, substitutions } = shellIntentParts(command);
+  if (substitutions.some(mergeIntent)) return true;
+  return segments.some(args => {
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === "pr" && args[i + 1] === "merge") {
+        // Only this invocation's literal help flag exempts it. A flag after
+        // -- is positional data; another shell segment never exempts a merge.
+        const rest = args.slice(i + 2);
+        const stop = rest.indexOf("--");
+        if (!rest.slice(0, stop < 0 ? undefined : stop).some(arg => arg === "--help" || arg === "-h")) return true;
+      }
+      if (/^\S*\bpulls\/[^\s/]+\/merge$/u.test(args[i])) return true;
+    }
+    // Quoted shell programs and API mutation payloads are executable data,
+    // unlike quoted comment/printf text. Retain the previous bounded backstop.
+    if (shellWrapper(args)) {
+      if (args.some(arg => /\s/u.test(arg) && mergeIntent(arg))) return true;
+    }
+    if (args.some(arg => /^(?:.*\/)?(?:python[\d.]*|node|ruby|perl)$/u.test(arg))) {
+      // These payloads are programs, not shell words. Retain conservative
+      // literal recognition without claiming to interpret those languages.
+      if (args.some(arg => /\bpr\s+merge\b|\bpulls\/[^\s/]+\/merge\b|\bmergePullRequest\b/u.test(arg))) return true;
+    }
+    return args.includes("graphql") && args.includes("api") && args.some(arg => /\bmergePullRequest\b/u.test(arg));
+  });
 }
 
 // Like ledger edits, merges must be a literal, stand-alone gh invocation. This
 // is a tool gate, not a shell sandbox: arbitrary scripts are outside its parser.
 export function mergeTarget(command) {
-  const args = words(command).flatMap(word => /^-[RXfF]./u.test(word) && !word.startsWith("--") ? [word.slice(0, 2), word.slice(2)] : [word]);
+  const args = words(command, "merge guard").flatMap(word => /^-[RXfF]./u.test(word) && !word.startsWith("--") ? [word.slice(0, 2), word.slice(2)] : [word]);
   if (!/^(?:.*\/)?gh$/u.test(args.shift() ?? "")) throw new Error("merge must invoke a single literal gh command");
   const option = (names) => {
     const values = [];
@@ -90,7 +116,7 @@ export function createMergeGuard({ gh = "gh", budgetMs = 25_000, grantForSession
       if (live.headRefOid !== pr.headRefOid || live.body !== pr.body || live.url !== pr.url) throw new Error("PR changed during merge verification; retry");
       return { action: "continue" };
     } catch (error) {
-      return { action: "deny", reason: `merge guard: ${error instanceof Error ? error.message : String(error)}` };
+      return { action: "deny", reason: `merge guard: ${error instanceof Error ? error.message : String(error)}. Accepted literal form: gh pr merge NUMBER --squash --match-head-commit FULL_HEAD` };
     }
   };
 }
