@@ -702,3 +702,15 @@ describe("providers and roles (R3.5a)", () => {
     }
   });
 });
+
+it("M-profile-launch: trusted profile env reaches CLI children, untrusted project cannot override home", async () => {
+  const { cwd, home } = await fixture();
+  await configAt(home, { profiles: { personal: { childEnv: { CODEX_HOME: "/user/tool" } } } });
+  await configAt(cwd, { profiles: { personal: { childEnv: { CODEX_HOME: "/project/tool" } } } });
+  const env = { CODEX_HOME: "/shell/tool" };
+  await loadRunConfig(new Command("run"), { profile: "personal" }, { cwd, home, env, interactive: false });
+  expect(env.CODEX_HOME).toBe("/project/tool");
+  await writeFile(join(home, ".agentrig", "trust.json"), JSON.stringify({ projects: {} }));
+  await loadRunConfig(new Command("run"), { profile: "personal" }, { cwd, home, env, interactive: false });
+  expect(env.CODEX_HOME).toBe("/user/tool");
+});

@@ -16,7 +16,7 @@ function fixtureConfig(dir: string) {
 const helper = fileURLToPath(new URL("../../../scripts/post-review-comment.mjs", import.meta.url));
 const head = "a".repeat(40), main = "b".repeat(40);
 const heading = `## External review — Codex (gpt-5.5) — head ${head} — merged with origin/main ${main} — full`;
-function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?: string, damage = false, ghExit = 0, reviewer = "Codex", reviewers?: object, sizeReason?: string) {
+function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?: string, damage = false, ghExit = 0, reviewer = "Codex", reviewers?: object, sizeReason?: string, provenance?: object) {
   const dir = mkdtempSync(join(tmpdir(), "post-review-"));
   fixtureConfig(dir);
   if (sizeReason !== undefined) writeFileSync(join(dir, "size-ledger"), sizeReason);
@@ -31,7 +31,8 @@ function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?
       chmodSync(join(dir, "head"), 0o755);
     }
     if (source !== undefined) writeFileSync(join(dir, "helper.mjs"), source.replaceAll('"./review-verdict.mjs"', JSON.stringify(new URL("../../../scripts/review-verdict.mjs", import.meta.url).href)).replaceAll('"./review-finding-index.mjs"', JSON.stringify(new URL("../../../scripts/review-finding-index.mjs", import.meta.url).href)));
-    const result = spawnSync(process.execPath, [source === undefined ? helper : join(dir, "helper.mjs"), "372", reviewer, join(dir, "model"), join(dir, "body"), sha, base, join(dir, "comment")], {
+    if (provenance) writeFileSync(join(dir, "provenance.json"), JSON.stringify(provenance));
+    const result = spawnSync(process.execPath, [source === undefined ? helper : join(dir, "helper.mjs"), "372", reviewer, join(dir, "model"), join(dir, "body"), sha, base, join(dir, "comment"), ...(provenance ? ["--provenance", join(dir, "provenance.json")] : [])], {
       cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: sizeReason === undefined ? "" : join(dir, "size-ledger"), PATH: `${dir}:${process.env.PATH}` },
     });
     return { status: result.status, stderr: result.stderr,
@@ -553,4 +554,16 @@ it("#490 quoted delimiter mentions do not redirect the protected posting range",
   });
   expect(parsed).toEqual([value]);
   expect(result.posts.some(part => part.includes(mention))).toBe(true);
+});
+
+it("M-post-home: posted canonical heading carries adapter-attested home beside model/head", () => {
+  const verdict = { version: 1, reviewedHead: head, assertedModel: "gpt-5.5", modelSource: "fixture", slot: "Codex", verdict: "PASS", findings: [] };
+  const body = `Reviewed head: ${head}\n<!-- agentrig-verdict:v1 -->\n${JSON.stringify(verdict)}\n<!-- /agentrig-verdict -->`;
+  const provenance = { verdict, reviewedHead: head, slot: "Codex", adapter: "codex-cli", model: "gpt-5.5", assertedModel: "gpt-5.5", transportModel: "gpt-5.5", exit: 0, home: { variable: "CODEX_HOME", path: "/owned/review home" } };
+  const result = run(body, undefined, undefined, undefined, undefined, false, 0, "Codex", undefined, undefined, provenance);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted?.split("\n")[0]).toBe(`${heading} — home CODEX_HOME="/owned/review home"`);
+  const invalid = run(body, undefined, undefined, undefined, undefined, false, 0, "Codex", undefined, undefined, { ...provenance, home: { variable: "WRONG", path: "/owned" } });
+  expect(invalid.status).not.toBe(0);
+  expect(invalid.args).toBeUndefined();
 });

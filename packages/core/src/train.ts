@@ -27,6 +27,7 @@ export const TrainRowSchema = z.object({
 }).strict();
 export type TrainRow = z.infer<typeof TrainRowSchema>;
 export interface TrainRequest {
+  env?: NodeJS.ProcessEnv | undefined;
   executable: string;
   argv: string[];
   cwd: string;
@@ -44,6 +45,7 @@ export interface TrainOptions {
   status?: (status: TrainStatus) => void;
   sleep?: () => Promise<void>;
   /** Resolve the project-declared Vitest per-test budget after each fast-forward. */
+  childEnvironment?: (checkout: string, profile?: string) => Promise<NodeJS.ProcessEnv>;
   testTimeout?: (checkout: string, profile?: string) => Promise<number | undefined>;
 }
 const PR = z.object({ number: z.number().int().positive(), state: z.string(), body: z.string(), baseRefName: z.string(), headRefOid: sha, mergeCommit: z.object({ oid: sha }).nullable() });
@@ -138,9 +140,10 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         state.pr = row.resume?.pr ?? null;
         if (row.resume !== undefined) state.sessionIds.push(row.resume.session);
         const env = row.environment;
+        let childEnvironment = await options.childEnvironment?.(env.checkout, env.profile);
         const exec = async (executable: string, argv: string[], retry = false, testTimeout?: number): Promise<string> => {
           await appendFile(log, JSON.stringify({ ts: new Date().toISOString(), phase: state.phase, executable, argv, ...(testTimeout === undefined ? {} : { testTimeout }) }) + "\n");
-          let result = await command({ executable, argv, cwd: env.checkout, log });
+          let result = await command({ executable, argv, cwd: env.checkout, env: childEnvironment, log });
           if (result.code !== 0 && retry && executable === "pnpm" && argv.length === 1 && argv[0] === "test") {
             const files = vitestTimeoutFiles(result);
             if (files.length > 0) {
@@ -148,7 +151,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
               for (const file of files) {
                 const isolated = ["exec", "vitest", "run", "--no-file-parallelism", file];
                 await appendFile(log, JSON.stringify({ ts: new Date().toISOString(), phase: state.phase, executable, argv: isolated }) + "\n");
-                const rerun = await command({ executable, argv: isolated, cwd: env.checkout, log });
+                const rerun = await command({ executable, argv: isolated, cwd: env.checkout, env: childEnvironment, log });
                 if (rerun.code !== 0) throw new Error(`isolated Vitest retry failed: ${file}; see row log`);
               }
               return "";
@@ -156,7 +159,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
           }
           if (result.code !== 0 && retry && infrastructure(result)) {
             await appendFile(log, "infrastructure retry 1/1\n");
-            result = await command({ executable, argv, cwd: env.checkout, log });
+            result = await command({ executable, argv, cwd: env.checkout, env: childEnvironment, log });
           }
           if (result.code !== 0) throw new Error(`${executable} ${argv[0]} exited ${result.code}; see row log`);
           return result.stdout.trim();
@@ -174,6 +177,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         await exec("git", ["merge", "--ff-only", `origin/${env.baseBranch}`], true);
         const startingBase = sha.parse(await exec("git", ["rev-parse", "HEAD"]));
         if (startingBase !== await exec("git", ["rev-parse", `origin/${env.baseBranch}`])) throw new Error("checkout is ahead of origin base");
+        childEnvironment = await options.childEnvironment?.(env.checkout, env.profile);
         const declaredBudget = await options.testTimeout?.(env.checkout, env.profile);
         const testTimeout = z.number().int().min(1).max(120_000).optional().parse(declaredBudget);
         for (const argv of [["install", "--frozen-lockfile"], ["build"], ["typecheck"]]) await exec("pnpm", argv, true);
@@ -189,7 +193,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         if (row.resume !== undefined) argv.push("--resume", row.resume.session);
         argv.push(prompt);
         let sessionWrites = Promise.resolve();
-        const result = await command({ executable: process.execPath, argv: options.cli === undefined ? argv : [options.cli, ...argv], cwd: env.checkout, log, resultPath,
+        const result = await command({ executable: process.execPath, argv: options.cli === undefined ? argv : [options.cli, ...argv], cwd: env.checkout, env: childEnvironment, log, resultPath,
           onSession: id => {
             if (!state.sessionIds.includes(id)) {
               state.sessionIds.push(id);
@@ -217,7 +221,7 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
         if (!pinnedResume) {
           const argv = ["merge-base", "--is-ancestor", pr.mergeCommit.oid, startingBase];
           await appendFile(log, JSON.stringify({ phase: state.phase, executable: "git", argv }) + "\n");
-          const ancestry = await command({ executable: "git", argv, cwd: env.checkout, log });
+          const ancestry = await command({ executable: "git", argv, cwd: env.checkout, env: childEnvironment, log });
           if (ancestry.code !== 1) throw new Error(ancestry.code === 0 ? "PR was already in base before this row" : "cannot verify PR ancestry");
         }
         state.phase = "ci"; await persist();
@@ -241,7 +245,8 @@ export async function runTrain(directory: string, options: TrainOptions = {}): P
 
 /** No shell interpolation, no permission bypass; inherit the operator's normal run configuration. */
 export const trainCommand: TrainCommand = async request => {
-  const env = { ...process.env, GIT_TRACE2_EVENT: "0", PATH: (process.env["PATH"] ?? "").split(delimiter).filter(part => !/[\\/]\.git-ai[\\/]bin[\\/]?$/u.test(part)).join(delimiter) };
+  const inherited = { ...process.env, ...request.env };
+  const env = { ...inherited, GIT_TRACE2_EVENT: "0", PATH: (inherited["PATH"] ?? "").split(delimiter).filter(part => !/[\\/]\.git-ai[\\/]bin[\\/]?$/u.test(part)).join(delimiter) };
   return new Promise((resolveResult, reject) => {
     const child = spawn(request.executable, request.argv, { cwd: request.cwd, env, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "", stderr = "", pending = "";

@@ -52,7 +52,7 @@ it.each(["gpt-5", "gpt-4.1", "claude-opus-5"])("adapter transport and receipt in
     writeFileSync(join(dir, "prompt"), "source bundle and checks green");
     const prefix = join(dir, "out");
     const runner = fileURLToPath(new URL("../../../scripts/reviewer-adapters.mjs", import.meta.url));
-    const result = spawnSync(process.execPath, [runner, join(dir, "config.json"), "Codex", join(dir, "prompt"), dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } });
+    const result = spawnSync(process.execPath, [runner, join(dir, "config.json"), "Codex", join(dir, "prompt"), dir, prefix], { encoding: "utf8", env: { ...process.env, CODEX_HOME: join(dir, "tool-home"), PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, GIT_TRACE2_EVENT: "0" } });
     if (asserted !== "gpt-5") {
       expect(result.status).not.toBe(0);
       expect(existsSync(`${prefix}.provenance.json`)).toBe(false);

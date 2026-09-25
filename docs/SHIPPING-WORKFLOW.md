@@ -276,3 +276,24 @@ Posting supplies `--provenance <PREFIX>.provenance.json`. Land retrieves the sam
 and runs `node scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`
 on the reassembled canonical body. Never reconstruct a receipt from the configured pin
 or reviewer prose; missing or mismatched artifacts require recovery or an adapter rerun.
+
+### Reviewer launch environment (#506)
+
+Use the selected profile's non-secret `childEnv` map to route CLI login homes (see
+[train operations](TRAIN-OPERATIONS.md#profile-scoped-cli-homes-506)). When invoking
+`scripts/reviewer-adapters.mjs CONFIG SLOT PROMPT WT PREFIX`, append
+`--profile PROFILE` if selecting a profile in that explicit config. Otherwise the
+adapter inherits the launching CLI environment. It does not read personal config
+or credentials. A CLI slot refuses launch without an explicit absolute
+`CODEX_HOME` / `CLAUDE_CONFIG_DIR` in the resolved environment; API slots are exempt.
+Do not silently fill the default home. Run `agentrig doctor --profile PROFILE`
+and inspect each `reviewers:<slot>` login-status identity before dispatch.
+
+Adapter provenance records `home: {variable, path}` next to `transportModel`
+(`null` for API slots). Preserve that adapter-owned artifact with the verdict.
+Posting with `--provenance` requires the CLI home and appends
+` — home VARIABLE="/resolved/path"` to the canonical initial review heading,
+after ` — full`. Keep this suffix when checking complete headings/chunks; the
+existing model/head/base/full binding is unchanged. The path identifies login
+routing, not account ownership or billing entitlement. Legacy prose posting
+without provenance remains legacy evidence, not a current adapter receipt.

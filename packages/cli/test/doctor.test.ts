@@ -639,3 +639,19 @@ it("prints all five measured feel references through ordinary doctor without pro
   }
   expect(text).not.toContain("probe:usage");
 });
+
+it.each(["codex-cli", "claude-cli"])("reviewers:slot login status uses the resolved %s home and displays identity", async adapter => {
+  const f = fixture();
+  const variable = adapter === "codex-cli" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR";
+  f.files.set(PROJECT_CONFIG, JSON.stringify({ profiles: { personal: { childEnv: { [variable]: "/owned/tool-home" } } }, reviewers: { slot: { adapter, model: "pinned" } } }));
+  f.options.cli = { profile: "personal" };
+  const calls: unknown[] = [];
+  f.probes.reviewerLogin = async (command, args, env) => { calls.push({ command, args, home: env[variable] }); return { stdout: "Logged in as fixture@example.test", stderr: "" }; };
+  const result = await diagnose(f.options);
+  expect(calls).toEqual([{ command: adapter === "codex-cli" ? "codex" : "claude", args: adapter === "codex-cli" ? ["login", "status"] : ["auth", "status"], home: "/owned/tool-home" }]);
+  expect(result.lines.join("\n")).toMatch(/reviewers:slot.*owned\/tool-home.*fixture@example.test/);
+  delete f.options.cli;
+  const missing = await diagnose(f.options);
+  expect(missing.lines.join("\n")).toMatch(new RegExp(`FAIL.*reviewers:slot.*${variable}`, "i"));
+  expect(calls).toHaveLength(1);
+});

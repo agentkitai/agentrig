@@ -1,5 +1,18 @@
 # Status
 
+## Profile-scoped child environment (#506; implementation, independent review pending)
+
+Selected trusted profiles now carry a zod-validated non-secret `childEnv` string
+map. CLI descendants inherit the overlay; train isolates it per row and checks
+reviewer homes before launch and after fast-forward. CLI reviewer adapters refuse
+missing explicit homes, doctor reports CLI login status under those homes, and
+adapter provenance/posting retain the resolved home alongside transport identity.
+Map replacement follows config precedence; no shell/path expansion and no default
+CLI-home fallback. Legacy unproven posting is not upgraded to current provenance.
+Fail-first schema and targeted launch/doctor/provenance mutation proof accompanies
+the PR. Repair round: 0/3. No roadmap marker or merge claimed; controlled replay
+stops after initial independent reviews. Subsequent roadmap order is unchanged.
+
 ## Reviewer adapter usage and review-policy residuals (#505, #508, #510, #511; implementation, proof pending)
 
 Reviewer CLI argument-count and output-prefix mistakes now fail with EX_USAGE before launch without consuming a reviewer retry. Transport-proven numeric GPT major-family assertions cover suffixed minor pins while retaining exact transport proof. Shipping instructions distinguish dispatched fixer tasks from durable fixer pre-push handoffs and preserve the sole verbatim-human-authorization-quote exception to identifier bans in PR and squash bodies. Repair round: 0/3; review disposition pending; residuals none. No roadmap completion is claimed.

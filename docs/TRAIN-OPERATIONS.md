@@ -193,3 +193,33 @@ To continue a halted task, retain its evidence and enqueue a **new unique row id
 with explicit resume pointers and unchanged authorization bounds. Existing done or
 halted row ids and stale result receipts are never reused. Directory layout/name/
 lock errors are command errors before execution, not evidence of a landed row.
+
+### Profile-scoped CLI homes (#506)
+
+Reviewer billing/login state is independent of the agent provider. Pin non-secret
+child environment in the selected trusted profile, for example:
+
+```json
+{"profiles":{"personal":{"childEnv":{"CODEX_HOME":"/absolute/tool-homes/codex","CLAUDE_CONFIG_DIR":"/absolute/tool-homes/claude"}}}}
+```
+
+`childEnv` is profile-only: a validated environment-name/string map, not a secret
+store. Do not put tokens, keys, passwords or credentials in it. Secret-bearing key
+names and control characters are refused; values are literal (no `~`, variable or
+shell expansion). CLI homes must be absolute paths. Other values may be plain
+strings. The project profile map replaces the user profile map; selected entries
+override the inherited environment. Existing project trust gates still apply.
+A CLI launch applies this overlay to its process environment so every descendant
+(tool, hook, headless run and nested child) inherits it. Embedders may give config
+loading a private `env` object instead. Use separate CLI processes for profiles.
+
+Train resolves an isolated environment for every row, validates required reviewer
+homes before checkout commands/children, and refreshes after the fast-forward.
+It never adds consent. Declared CLI reviewers require `CODEX_HOME` (codex-cli) or
+`CLAUDE_CONFIG_DIR` (claude-cli), from childEnv or an explicit inherited environment;
+there is no silent default-home fallback. API slots do not require CLI homes.
+A refusal names the exact missing variable. An absolute home is routing evidence,
+not proof of a funded account: run `agentrig doctor --profile personal` first.
+Its `reviewers:<slot>` lines execute `codex login status` / `claude auth status`
+under the resolved home and display the visible identity/status. No credential
+file is opened by these probes; login commands are bounded to ten seconds.

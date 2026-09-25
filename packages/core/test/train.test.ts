@@ -341,3 +341,21 @@ it("rejects unbounded train budgets before starting the suite", async () => {
   expect(await runTrain(f.root, { command: f.command, testTimeout: async () => 120001 })).toBe("halted");
   expect(f.calls).not.toContain("test --testTimeout=120001");
 });
+
+it("M-train-home-admission: missing reviewer home halts before checkout commands or child", async () => {
+  const f = await fixture();
+  expect(await runTrain(f.root, { command: f.command, childEnvironment: async () => { throw new Error("reviewers:slot: CODEX_HOME missing"); } })).toBe("halted");
+  expect(f.calls).toEqual([]);
+  expect(await readFile(join(f.root, "logs/1.halt.json"), "utf8")).toContain("CODEX_HOME");
+});
+it("M-train-env-forwarding: all train processes use resolved environment refreshed after fetch", async () => {
+  const f = await fixture(); let resolutions = 0; const seen: unknown[] = [];
+  expect(await runTrain(f.root, {
+    childEnvironment: async () => ({ CODEX_HOME: `/tool/${++resolutions}` }),
+    command: async request => { seen.push(request.env?.CODEX_HOME); return f.command(request); },
+  })).toBe("empty");
+  expect(resolutions).toBe(2);
+  expect(seen[0]).toBe("/tool/1");
+  expect(seen.at(-1)).toBe("/tool/2");
+  expect(seen.every(home => home === "/tool/1" || home === "/tool/2")).toBe(true);
+});

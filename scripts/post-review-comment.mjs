@@ -50,7 +50,14 @@ try {
   }
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");
-  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full`;
+  const provenance = provenanceFile ? JSON.parse(readFileSync(provenanceFile, "utf8")) : null;
+  let homeLabel = "";
+  if (provenance && ["codex-cli", "claude-cli"].includes(slots[reviewer].adapter)) {
+    const { reviewerHome } = await import("../packages/cli/dist/child-env.js");
+    const home = reviewerHome(reviewer, slots[reviewer], { [provenance.home?.variable]: provenance.home?.path });
+    if (home) homeLabel = ` — home ${home.variable}=${JSON.stringify(home.path)}`;
+  }
+  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full${homeLabel}`;
   const payload = `${body}${proofFile === undefined ? "" : `\n${proof}`}`;
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;

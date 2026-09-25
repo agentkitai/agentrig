@@ -1,3 +1,4 @@
+import { profileChildEnv, reviewerHome } from "./child-env.js";
 import { execFile } from "node:child_process";
 import { formatFeelBudgets } from "./feel-budgets.js";
 import { feelReference } from "./feel-reference.js";
@@ -39,6 +40,7 @@ export interface DoctorProbes {
   stat(path: string): Promise<DoctorFileInfo>;
   boundary(cwd: string, home: string): Promise<ProjectBoundary>;
   commandExists(command: string, env: NodeJS.ProcessEnv, cwd: string): Promise<boolean>;
+  reviewerLogin?(command: string, args: string[], env: NodeJS.ProcessEnv, cwd: string): Promise<{ stdout: string; stderr: string }>;
   gitState(cwd: string): Promise<DoctorGitState>;
 }
 
@@ -144,6 +146,7 @@ function defaultProbes(): DoctorProbes {
     boundary: resolveProjectBoundary,
     commandExists: defaultCommandExists,
     gitState: defaultGitState,
+    reviewerLogin: (command, args, env, cwd) => execFileAsync(command, args, { env, cwd, timeout: 10_000, maxBuffer: 64 * 1024, windowsHide: true }),
   };
 }
 
@@ -409,6 +412,22 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       cli,
       ...(profile === undefined ? {} : { profile }),
     });
+    const childEnv = { ...env, ...profileChildEnv(user, project, profile) };
+    for (const [slot, binding] of Object.entries(project?.reviewers ?? {})) {
+      try {
+        const home = reviewerHome(slot, binding, childEnv);
+        if (home === null) { checks.push(line("skip", `reviewers:${slot}`, "API slot; see provider credential diagnostics")); continue; }
+        const command = binding.adapter === "codex-cli" ? "codex" : "claude";
+        const args = command === "codex" ? ["login", "status"] : ["auth", "status"];
+        const result = await probes.reviewerLogin!(command, args, childEnv, cwd);
+        const status = (result.stdout + "\n" + result.stderr).trim();
+        checks.push(line(status ? "pass" : "fail", `reviewers:${slot}`, `${home.variable}=${display(home.path)}; ${display(status || "empty login status")}`));
+      } catch (error) {
+        const variable = binding.adapter === "codex-cli" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR";
+        // Never echo arbitrary failed-process output, which can contain credential material.
+        checks.push(line("fail", `reviewers:${slot}`, `${variable}: login-status unavailable or home missing/invalid; set an absolute home in childEnv or environment and log in with that CLI`));
+      }
+    }
     const provider = String(effective.provider ?? "anthropic");
     const model = String(effective.model ?? DEFAULT_ANTHROPIC_MODEL);
     const providerSource = sourceOf("provider", user, project, profile, env, cli);
