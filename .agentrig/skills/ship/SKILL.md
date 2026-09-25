@@ -403,6 +403,12 @@ are refused. It parses structured findings and compares exact decoded strings, n
 surrounding-prose approximations. Legacy exact heading/source records remain
 supported. Append source identities and resolution evidence; do not collapse them.
 
+Initial builder tasks may request `Initialize Repair round: 0/3, Review disposition, Residuals`
+without a live PR. Round zero and ledger-initialization prose are not repair receipts.
+Positive repair rounds (N >= 1), including inline/quoted, split-line or malformed receipts,
+and Pre-dispatch read-back markers still trigger strict live-PR receipt validation;
+a zero-round mention never exempts another repair receipt in the same task.
+
 ## Typed builder/fixer handoffs
 
 BUILDER and FIXER children return exactly one JSON object, not a prose success claim:

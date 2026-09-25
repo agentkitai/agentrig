@@ -249,3 +249,9 @@ structured review with findings requires explicit identities; prose-only substit
 are refused. It parses structured findings and compares exact decoded strings, never JSON-line or
 surrounding-prose approximations. Legacy exact heading/source records remain
 supported. Append source identities and resolution evidence; do not collapse them.
+
+Initial builder tasks may request `Initialize Repair round: 0/3, Review disposition, Residuals`
+without a live PR. Round zero and ledger-initialization prose are not repair receipts.
+Positive repair rounds (N >= 1), including inline/quoted, split-line or malformed receipts,
+and Pre-dispatch read-back markers still trigger strict live-PR receipt validation;
+a zero-round mention never exempts another repair receipt in the same task.

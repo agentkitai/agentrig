@@ -377,6 +377,57 @@ it('read-back round cannot disagree with standalone round', async () => {
   expect((await repairProbe('ok', repairTask.replace('read-back: Repair round: 1/3', 'read-back: Repair round: 2/3'))).result.action).toBe('deny');
 });
 
+it.each([
+  'Initialize Repair round: 0/3, Review disposition, Residuals',
+  'Repair round: 0/3',
+  '\r\n\r\nInitialize Repair round: 0/3, Review disposition, Residuals\r\n',
+  'Initialize "Repair round: 0/3" and `Review disposition`.',
+  'Initialize Repair round and Review disposition ledgers.',
+  'Initialize Repair round ledger with 3 sections.',
+  'Initialize \"Repair round: 0/3\" ledger.',
+  '',
+])('#610 initial ledger context without a PR passes: %s', async task => {
+  const p = await probe('no-pr', 'subagent', undefined, undefined, false, '', undefined, task);
+  expect(p.result.action).toBe('continue');
+});
+it.each([
+  'Repair round: 1/3',
+  'Inline Repair round: 1/3.',
+  'Review `Repair round: 1/3` handling.',
+  '\r\n> Repair round: 1/3\r\n',
+  'Repair round 1/3',
+  'Repair round = 01/broken',
+  'Repair round: 999999999999999999999999999999/3',
+  'Repair round: 0/3\nRepair round: 1/broken',
+  'Pre-dispatch read-back:',
+  'Repair round: 0/3\nInline Pre-dispatch read-back: broken',
+])('#610 actual or malformed positive repair receipt without a PR denies: %s', async task => {
+  const p = await probe('no-pr', 'subagent', undefined, undefined, false, '', undefined, task);
+  expect(p.result.action).toBe('deny');
+  expect(p.result.reason).toContain('standalone');
+});
+
+describe.each(['no-pr', 'ok'])('#610 X1 split receipts with %s', mode => {
+  it.each(['\n', '\r\n', '\n\n'])('positive numerator across %j enters strict validation', async newline => {
+    const p = await repairProbe(mode, `Repair round:${newline}1/3`);
+    expect(p.result.action).toBe('deny');
+    expect(p.result.reason).toContain(mode === 'no-pr' ? 'requires a live PR' : 'malformed repair intent');
+    expect(p.result.reason).toContain('standalone');
+    if (mode === 'no-pr') expect(p.calls).not.toContain('POST');
+    else {
+      expect(p.calls).toContain('"pr","view","7"');
+      expect(p.body).toContain('Pre-edit comparison: FAIL');
+    }
+  });
+  it.each(['Repair round:\n0/3', 'Repair round:\r\n0/3', 'Initialize Repair round:\nledger with 3 sections.'])('zero and ledger prose stay initial: %s', async task => {
+    const p = await repairProbe(mode, task);
+    expect(p.result.action).toBe('continue');
+    expect(p.body).not.toContain('Pre-edit comparison: PASS');
+    if (mode === 'no-pr') expect(p.calls).not.toContain('POST');
+    else expect(p.calls).toContain('POST');
+  });
+});
+
 it('repair intent without a live PR cannot take initial-builder bypass', async () => {
   const p = await probe('no-pr', 'subagent', undefined, undefined, false, '', undefined, repairTask);
   expect(p.result.action).toBe('deny');

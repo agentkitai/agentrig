@@ -1,3 +1,22 @@
+## Initial builds are not repairs (#610) — implementation; review/landing pending
+
+Current roadmap row: issue #610, "Initial builds are not repairs";
+next: conductor review and authorized landing. No roadmap completion marker.
+
+Dispatch classification now distinguishes round-zero ledger initialization from
+positive repair receipts. Bare ledger-setup prose and `Repair round: 0/3` pass the
+initial-build/no-PR path. Positive numerators (including malformed punctuation or
+denominators) and read-back markers still require live PR and strict standalone
+receipts. Inline/quoted positive receipts, OLD-plus-finding safety detection,
+exact live-head/source comparisons and pre-PR recovery gates remain intact.
+Rejected: exempting an entire task merely because it contains round zero; mixed
+zero/positive or read-back tasks still fail closed. No runtime/core policy added.
+X1 repair: positive numerators split across LF/CRLF or blank lines now enter strict
+validation in both no-PR and live-PR paths; split zero and ledger prose remain
+initial context. Fail-first tests and newline-exclusion mutants pin this boundary.
+Tests exercise both hook entry points, CRLF, blank/prose/quoted context, mixed
+receipts and #557 inline cases. R19 LOW wording followups remain advisories.
+
 ## Lander command-form recovery — implementation; review/landing pending
 
 Current roadmap row: follow-up #586/#608, "Lander role: retry malformed non-merge commands instead of halting";
