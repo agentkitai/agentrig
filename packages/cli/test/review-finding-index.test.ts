@@ -81,3 +81,6 @@ it.each([
   const heading = '  ### LOW: Preserve `bytes`  exactly';
   expect(findingIndex(url, { html_url: url, body: `${prose}\n${heading}` })).toEqual([{ comment: url, heading }]);
 });
+it.each(['  F2: HIGH — unsupported', '- F2: HIGH — unsupported', '1. [P4] unsupported', '**F2**: HIGH — unsupported'])('M-opening-decoration: preserves unsupported opening refusal %s', body => {
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+});
