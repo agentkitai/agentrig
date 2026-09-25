@@ -31,8 +31,8 @@ phase before dispatch, and read back the updated PR ledger.
   same round, joining/reconciling outstanding children before another dispatch.
 - **awaiting reviews**: recover reviewer jobs/artifacts and read-back receipts. Reuse only
   complete exact-head results; replace a missing/failed slot, not completed reviewer work.
-- **awaiting landing**: recheck task-to-PR merge authorization and exact-head CI; if already
-  merged, verify that merge's main CI instead of merging again. Otherwise hand off to land
+- **awaiting landing**: if already merged, verify that merge's main CI instead of
+  merging again. Otherwise hand off to land
   only under its existing rules. Without authorization, remain at the reviewed PR.
 
 For topic, also restore the authorized band, completed rows and current row. Resume only
@@ -141,7 +141,7 @@ Apply this sequence to successful, failed, retried, stale and interrupted passes
 
 1. Join every job and subprocess, including installs, retries and mutations.
 2. Verify recorded HEADs and restored tracked/index state; an unrestored mutation or unfinished writer blocks removal and invalidates the review, never erases evidence.
-3. Persist verdicts, proof results, failure receipts and durable provenance manifests in the PR before deleting scratch copies; never delete the durable adapter receipt/output pairs.
+3. Persist verdicts, proof results, failure receipts and posted review URLs in the PR before deleting scratch copies; never delete the durable adapter receipt/output pairs.
 4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots, any conductor-proof tree and conductor-proof temporary root, and `OUT`; never the author's tree or old unowned scratch.
 
 For a focused pass remove its one worktree and unique `BASE` instead of the initial declared pass and `review-base-NN`. Also remove any recorded owned conductor-proof tree and conductor-proof temporary root. Remove temporary roots outside `OUT` explicitly; roots inside it are removed with it. Record the removed paths and cleanup result. If restoration cannot be verified, preserve the owned evidence and halt rather than force cleanup. Read/combine the verdicts before removing `OUT`.
@@ -357,7 +357,7 @@ This disagreement rule does not reclassify blocking findings: all HIGH findings,
   If that allowance is already used, halt for the human; do not spawn a second arbiter.
   Focused non-blocking classification disagreement follows the ledger/accept-or-halt rule above,
   not another arbitration under shipping policy §2.
-Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch every source comment live and compare exact bytes before accepting the ledger, even when no fixer is dispatched.
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. The ledger hook validates source identity before writes; retain review-resolution judgment.
 
 Before calling a fixer, perform this ordered persistence gate (including on resumption):
 
@@ -384,20 +384,9 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    paraphrases in a separate rationale field, never as finding identity. Generate the index with
    `node <REPO>/scripts/review-finding-index.mjs <comment-URL>` after reading the posted review;
    retain its comment anchor and exact heading per finding, including collapsed duplicates.
-   Fetch every source comment live again and compare its heading with all three copies before
-   dispatch. Missing, edited or mismatched headings halt; never silently relabel or substitute a
-   different defect. Record the fetched comment identity and verification time in the receipt.
-   Fixer precondition (include verbatim in every fixer task): Before editing, fetch the linked
-   live comments and PR body; compare each assigned verbatim finding heading and comment anchor
-   against the ledger, pre-dispatch receipt and task. On any mismatch refuse the assignment and
-   return the conflicting texts without changes; do not repair the receipt yourself.
-   Only then call the fixer described below, carrying that persisted ledger and counter.
-
-The trusted project extension `.agentrig/extensions/dispatch-record.mjs` records every subagent dispatch after a PR exists, including the exact complete task, dispatch time, current PR head SHA and parent session id.
-The hook posts the dispatch comment and verifies its API read-back byte-for-byte before allowing the tool call; any lookup, post or read-back failure denies dispatch clearly.
-Before a PR exists the hook leaves the initial builder invocation untouched; conductors do not manually post or read back dispatch-task comments.
-Match the hook comment to the immutable session-store `subagent.spawn` event by exact task text and parent session id; obtain the child session ID from that event, never by inventing it.
-Invoke subagents without the optional `label` so immutable spawn retains the complete task. Keep the separate pre-dispatch PR-body receipt and repair ledger gates unchanged.
+   The pre_spawn hook owns dispatch posting/read-back, pre-edit source comparison and
+   resume PR association. Its refusal is binding; do not recreate its records by hand.
+   Carry the persisted receipt, exact finding identities and counter in the fixer task.
 
 - **Fix** with one subagent on the same PR branch, carrying verbatim blocker texts or review
   URLs/finding IDs, authorization, prior reviewed SHA and repair counter. Its brief says:
@@ -567,8 +556,8 @@ deletes these durable artifacts and cannot be used to waive the land gate.
 
 The pre-tool ship hook guards `gh pr edit --body` / `--body-file` and `gh api`
 pull PATCH body writes. The entire existing PR body is an append-only ledger:
-retain every existing byte, including prior findings, resolutions, coverage and
-counters; append a superseding correction instead of rewriting history. A fresh
+the hook requires every existing byte, including prior findings, resolutions, coverage and
+counters. Corrections are appended, not history rewrites. A fresh
 empty body may be populated. The guard fetches the live body and validates cited
 issue-comment, inline-review-comment and review URLs against fetched comment IDs
 and exact `html_url` values. Missing comments, wrong anchors, malformed responses

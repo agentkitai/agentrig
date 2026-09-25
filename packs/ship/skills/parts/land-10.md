@@ -20,19 +20,17 @@ land marker gate below is unchanged.
 
 ## 1. Preconditions — all of them, re-checked now
 
-- The human named this PR and said merge, explicitly authorized this named task's resulting PR,
-  or authorized its fixed roadmap band by invoking `topic`.
-  In the band case, verify the exact invocation quote and that this PR implements the named current
-  row in sequence. If direct authorization is older than the latest push, confirm the pushes since
-  are review fixes it covered; topic authorization remains bounded by that skill's stop criteria.
+The minimal merge guard owns three mechanical checks: exact host authorization on the
+bound PR, required green exact-current-head CI, and a named lander child bound to its
+successful dispatch/spawn record. It does not judge review resolution. Use a literal
+`gh pr merge NN --squash --match-head-commit FULL_HEAD`; a denial is not a waiver.
+See the pack's `docs/MERGE-GUARD.md` for the bounded parser and restart limitations.
+
 - Verify all declared initial external reviews, focused verdicts for every material delta, and recorded
   evidence for mechanical deltas through the CURRENT head, per shipping policy §§2–4.
   Every finding must be fixed, evidence-rebutted, or explicitly dispositioned as non-blocking
   with its required issue/roadmap record. Unresolved blockers always prevent landing.
   Do not demand another full pair solely because a covered repair changed the head.
-- CI is green on the PR's CURRENT head SHA — re-fetch it now (`gh pr view <n> --json headRefOid`)
-  and check the runs are for that exact SHA, both platforms. A green run on a superseded head
-  proves nothing.
 - The PR is mergeable with no conflict. A conflict goes back to the author flow; never resolve it
   inside a land run.
 - A PR that completes a roadmap row marks that row `*(done)*` in `docs/ROADMAP.md` on its head
@@ -57,12 +55,6 @@ Require the same receipt in the GitHub PR body BEFORE dispatch:
 Read the PR body and match that line against the round, OLD and assigned blockers in the persisted fixer task; verify its timestamp precedes the dispatch. Private session notes do not
 substitute for this GitHub-visible receipt. Missing or mismatched evidence blocks landing;
 a receipt added after dispatch cannot retroactively authorize that dispatch.
-Fetch every ledger source comment live. Compare its exact verbatim finding heading and
-comment URL/anchor against the ledger, not the conductor's paraphrase. For assigned blockers,
-also compare against the pre-dispatch receipt and persisted fixer task, and require the hook-recorded
-`Pre-edit comparison: PASS` in the dispatch comment before the child starts. Deferred/advisory rows need no fixer task.
-A missing, edited or mismatched heading/anchor blocks landing even when the local finding ID
-matches; preserve conflicting texts and halt, never retroactively rewrite the assignment.
 Before making a landing-gate claim that attributes a comment ID, comment URL or SHA to the PR body or a comment, fetch the live PR body and comments, then quote the exact fetched body or comment text containing that identifier.
 For a landing-gate claim sourced from a fetched GitHub API response, including a `headRefOid` or CI SHA, quote the exact response field and value from that fetched response.
 For a landing-gate SHA claim sourced from local command output, including `git rev-parse` or a SHA-producing `git merge-base`, record the exact command, require exit 0, and quote the exact stdout containing the claimed full SHA.
@@ -73,11 +65,12 @@ Write the fetched live PR comment listing to a session-owned `comments.json` and
 For every cited comment ID, quote the exact corresponding fetched `body` field from that same `comments.json` artifact.
 A comment ID the lander introduces that is absent from that listing, or a 404 for such an ID that cannot be traced to the fetched data, is a lander error and never a PR defect.
 A PR-supplied finding source URL or anchor that is absent, edited or mismatched remains subject to the existing halt gate above; never recast it as a lander-introduced citation error.
-The fixer's durable pre-push handoff requires the dispatched round, persisted read-back receipt, each exact finding source, dispatch time and hook-recorded pre-edit comparison; it does not require the full dispatched task.
-The full dispatched task belongs in the hook's durable dispatch-time PR comment, which must match the immutable session-store `subagent.spawn` event by exact task text and parent session id; obtain the child session ID from that event.
-A missing durable fixer pre-push handoff alone is not a halt when that matched hook-comment-plus-spawn provenance exists.
-That matched pair is sufficient dispatch provenance, but it does not waive receipt-before-dispatch ordering, round/OLD/blocker identity, exact heading/source identity, or the hook-recorded pre-edit comparison with comment ID and head.
-If neither the durable fixer pre-push handoff nor that matched hook-comment-plus-spawn provenance exists, halt without retroactively manufacturing either record.
+Dispatch posting, pre-edit comparison and resume association are pack-hook responsibilities,
+not a second handwritten landing comparison. Review coverage, dispositions and receipt-before-
+dispatch ordering above remain land judgments; a mechanical allow never resolves a blocker.
+
+A missing durable fixer pre-push handoff alone is not a halt when the hook has recorded
+the authoritative dispatch. Do not fabricate replacement provenance.
 
 ## 2. Merge
 

@@ -201,9 +201,10 @@ Never skip, disable or quarantine tests to get green.
 
 ## 6. Commit and push
 
-For a fixer, the durable pre-push GitHub PR handoff comment must quote verbatim the dispatched `Repair round: N/3` line, the dispatched `Pre-dispatch read-back` receipt, and every assigned finding's exact heading and source comment URL/anchor.
-The dispatch hook records the pre-edit live-review-versus-dispatch comparison, including each checked comment ID and the live PR head; fixers do not write a second comparison.
-Post and read back this handoff before every fixer push; a later handoff does not satisfy the pre-push gate.
+The pre_spawn hook owns dispatch provenance and the pre-edit source comparison;
+fixers do not post a second manual pre-push dispatch handoff. Carry the
+persisted receipt, exact finding identities and counter in the fixer task.
+Hook refusals remain binding; do not manufacture replacement provenance.
 
 - Before every push, builders and fixers must rerun all touched instruction-contract and skill-text test files against a CRLF copy of the entire `.agentrig/skills` tree (normalize LF before converting to CRLF), point `AGENTRIG_TEST_SKILLS_ROOT` at that copy under the proof `TMPDIR` outside Git ancestry, and record start/end times, exact commands, exits and test counts next to the declared check receipts in the PR.
 
@@ -314,7 +315,7 @@ For every adapter launch, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
 `AGENTRIG_REVIEW_PR=NN` and `AGENTRIG_REVIEW_PASS=PASS`. The adapter stores durable
 output/receipt pairs under `$HOME/.agentrig/review-evidence/OWNER/REPO/NN/PASS/ATTEMPT/`,
 never under review scratch. Follow docs/SHIPPING-WORKFLOW.md **Durable review evidence
-(#547)**: save the stdout manifest in the PR, validate it with
+(#547)**: the posting helper attaches the manifest automatically; validate the attached evidence with
 `node scripts/review-provenance.mjs` before scratch cleanup and again before landing,
 and never delete durable pairs during cleanup. Missing or tampered evidence refuses.
 
@@ -322,8 +323,8 @@ and never delete durable pairs during cleanup. Missing or tampered evidence refu
 
 The pre-tool ship hook guards `gh pr edit --body` / `--body-file` and `gh api`
 pull PATCH body writes. The entire existing PR body is an append-only ledger:
-retain every existing byte, including prior findings, resolutions, coverage and
-counters; append a superseding correction instead of rewriting history. A fresh
+the hook requires every existing byte, including prior findings, resolutions, coverage and
+counters. Corrections are appended, not history rewrites. A fresh
 empty body may be populated. The guard fetches the live body and validates cited
 issue-comment, inline-review-comment and review URLs against fetched comment IDs
 and exact `html_url` values. Missing comments, wrong anchors, malformed responses

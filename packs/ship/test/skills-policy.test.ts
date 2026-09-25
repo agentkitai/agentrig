@@ -63,7 +63,7 @@ import { expect, it } from "vitest";
 
     const landText = await readSkillText(".agentrig/skills/land/SKILL.md", "utf8");
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
-    expect(land.body).toContain("authorized its fixed roadmap band by invoking `topic`");
+    expect(land.body).toContain("invoked the `topic` skill to authorize the fixed");
     expect(land.body).toContain("include the human's exact authorization quote");
     expect(land.body).toContain("Residuals are issues, not prose");
     expect(land.body).toContain("An unmarked row is a row the next train rebuilds");

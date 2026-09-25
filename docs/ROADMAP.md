@@ -1209,7 +1209,7 @@ widen authority; recovery and queueing do not supply task or merge authorization
 
 ---
 
-### R19 — Harness, Pack, Train *(approved 2026-09-23)*
+### R19 — Harness, Pack, Train *(done; approved 2026-09-23)*
 
 *Evidence and limit: the approved proposal's fixed 2026-09-23 window reports that,
 of the last 80 merged PRs, 46 tightened ship-workflow gates, 14 concerned config/test
@@ -1231,7 +1231,7 @@ product direction—is explicitly deferred. This definition marks no row complet
 | R19c (M3) **done (#565, #566, #567)** | **Create the ship pack:** move skills, scripts, `SHIPPING-WORKFLOW` and workflow tests; collapse duplicated sections into includes; own required CI lane. | ship pack |
 | R19d (M4) *(done)* | **Done — #568 + #569.** Move the train out of core into its own package with pluggable row stages; the ship pack supplies prompt, receipt and landing verification; drop core exports. | train + ship pack + core |
 | R19e (M5) ✅ #570 + #575 | **Retire bolt-ons — done:** builder routing uses role bindings with compatibility diagnostics (#570); generic `fresh-session` replaces the `topic` TUI case, shipping prompt wording leaves the default prompt, and ship supplies configurable supervisor progress patterns (#575). Repository checks/reviewers live under `packs.ship`. | core + CLI + ship pack |
-| R19f (M6) | **Re-express gates as pack mechanisms:** dispatch record as a spawn hook (#539), merge guard as a `pre_tool` hook; delete the prose that asked the model to do these by hand. | ship pack |
+| R19f (M6) *(done)* (#576, #585, #586) | **Re-express gates as pack mechanisms:** dispatch record as a spawn hook (#539), merge guard as a `pre_tool` hook; delete the prose that asked the model to do these by hand. | ship pack |
 
 Acceptance is row-specific in the [contract](plans/R19.md). The target has three
 layers: a workflow-agnostic harness, a ship workflow pack, and a train application.
@@ -1365,7 +1365,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 16 | R16a (done, PR #199 + repair #206) → R16b (done, PR #203 + repair #208) → R16c (done, PR #198) → R16d (done, PR #200) → R16e (done, PR #201) → R16f (done, PR #204) → R16g (done, PR #210) → R16h (done implementation, PR #211) | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
 | 17 | R17a (gate) + R17b → R17c → R17d → R17e → R17f → R17g | Feel and defaults after every capability row. R17a is the gate under which the band is built, not a row the train expands: its artifacts are R17b's first commit, so the defaults pass is the first PR and carries its own before numbers. Measurement locks the gain in; the follow-ups sweep is last because it does not change feel. |
 | 18 | R18a → R18b → (R18c ∥ R18d) → R18e | Unattended trains: R18b needs R18a session recovery; R18c and R18d are independent after R18b; R18e consumes R18c queue and R18d verdict schema. [Contract](plans/R18.md). |
-| 19 | R19a → R19b → R19c → R19d → R19e → R19f | Harness, Pack, Train: generic mechanisms precede CLI contribution points, then ship-pack extraction, train extraction, bolt-on retirement and mechanized gates. Every dependency is sequential; #539 remains parked until R19f. Post-R19 product direction is deferred. [Contract](plans/R19.md). |
+| 19 *(done)* | R19a → R19b → R19c → R19d → R19e → R19f *(all done)* | Harness, Pack, Train delivered through #586: generic mechanisms, CLI contribution points, ship-pack extraction, train extraction, bolt-on retirement and mechanized gates. #539 is delivered by the pack-owned dispatch path. Full PR inventory is in [STATUS](STATUS.md). Post-R19 product direction remains deferred. [Contract](plans/R19.md). |
 
 R6a has started independently after R5e merged: its memory-hardening dependencies are complete
 and procedure detection does not depend on MCP pinning or extension loading. This parallel start

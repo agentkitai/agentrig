@@ -11,11 +11,7 @@ const contracts: Array<[string, string, string]> = [
   ...["ship", "topic"].flatMap(skill => [
     [skill, "M-paraphrased-assignment", "exact verbatim finding heading and comment URL/anchor"],
     [skill, "M-index-omitted", "scripts/review-finding-index.mjs"],
-    [skill, "M-fixer-mismatch", "On any mismatch refuse the assignment"],
-    [skill, "M-live-dispatch", "Fetch every source comment live again"],
   ] as Array<[string, string, string]>),
-  ["land", "M-live-lander", "Fetch every ledger source comment live"],
-  ["land", "M-id-only-lander", "blocks landing even when the local finding ID matches"],
   ["review", "M-ref-ownership", "reviewers never create, modify or delete them"],
 ];
 for (const [skill, mutant, phrase] of contracts) {

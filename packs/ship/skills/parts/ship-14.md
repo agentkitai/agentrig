@@ -84,7 +84,14 @@ Apply topic §2’s shared extraction and slot posting gate with the configured 
   defects with issue links and advisory polish to the roadmap when useful. Contract or
   authorization findings still go to an arbiter before the fixer.
   A fixable verdict does not wait for the human: perform authorized blocking repairs unasked.
-Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch every source comment live and compare exact bytes before accepting the ledger, even when no fixer is dispatched.
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. The ledger hook validates source identity before writes; retain review-resolution judgment.
+
+Above round 3, use `N/N` and first record one operative PR-body line
+`Human amendment: Repair round: N/N; authorization: <JSON-quoted verbatim human authorization>`
+for that exact round. This is a conductor-recorded human amendment, not automatic
+GitHub-author authentication; never invent an authorization or copy task text as authority.
+A larger denominator or unrelated round amendment alone cannot authorize dispatch.
+Hook validation checks syntax, not human provenance.
 
 Before calling a fixer, perform this ordered persistence gate (including on resumption):
 
@@ -111,20 +118,9 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    paraphrases in a separate rationale field, never as finding identity. Generate the index with
    `node <REPO>/scripts/review-finding-index.mjs <comment-URL>` after reading the posted review;
    retain its comment anchor and exact heading per finding, including collapsed duplicates.
-   Fetch every source comment live again and compare its heading with all three copies before
-   dispatch. Missing, edited or mismatched headings halt; never silently relabel or substitute a
-   different defect. Record the fetched comment identity and verification time in the receipt.
-   Fixer precondition (include verbatim in every fixer task): Before editing, fetch the linked
-   live comments and PR body; compare each assigned verbatim finding heading and comment anchor
-   against the ledger, pre-dispatch receipt and task. On any mismatch refuse the assignment and
-   return the conflicting texts without changes; do not repair the receipt yourself.
-   The trusted project extension `.agentrig/extensions/dispatch-record.mjs` records every subagent dispatch after a PR exists, including the exact complete task, dispatch time, current PR head SHA and parent session id. Repair intent is detected anywhere in the task by `Repair round` or `Pre-dispatch read-back` (including inline prose, quoted history and examples), or by `OLD <SHA>` together with finding headings. Intent requires matching standalone round and read-back receipts; malformed intent denies with formatting guidance. For owner-amended rounds above 3 use `N/N` and record one live PR-body line `Human amendment: Repair round: N/N; authorization: <JSON-quoted verbatim human authorization>` for that exact round before dispatch. The hook verifies this record and includes it in the comparison; a larger denominator alone never authorizes repair. Finding identity comes from the source comment’s canonical structured verdict headings when present (decoded JSON strings), otherwise exact legacy source lines; Markdown, Unicode and heading whitespace remain exact. Tasks may use `Finding: <exact heading>`, `<ID> heading: <exact heading>` (including severity-tagless headings), or a raw heading followed by `Source: <comment URL>`. A source URL may follow a finding or precede a labeled group. These are supported existing dispatch forms, not a new mandatory handoff template. Never strip heading bytes or use surrounding prose to override structured verdict identity.
-   The hook posts the dispatch comment and verifies its API read-back byte-for-byte before allowing the tool call; any lookup, post or read-back failure denies dispatch clearly.
-   Before a PR exists the hook leaves the initial builder invocation untouched; conductors do not manually post or read back dispatch-task comments.
-Invoke every subagent without its optional `label` field so the immutable spawn preserves the exact task. The hook remembers the host own-line train-row binding from the user prompt for conductors working on main; otherwise it resolves the current branch PR.
-   Match the hook comment to the immutable session-store `subagent.spawn` event by exact task text and parent session id; obtain the child session ID from that event, never by inventing it.
-   Invoke the fixer subagent tool without its optional `label` field; because immutable `subagent.spawn.task` records `input.label ?? input.task`, only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.
-   Only then call the fixer described below, carrying that persisted ledger and counter.
+   The pre_spawn hook owns dispatch posting/read-back, pre-edit source comparison and
+   resume PR association. Its refusal is binding; do not recreate its records by hand.
+   Carry the persisted receipt, exact finding identities and counter in the fixer task.
 
 - Spawn the fixer on the same branch with exact blocker texts/URLs. After its local proof and
   push, classify OLD..NEW under shipping policy §3: ONE independent focused reviewer for a

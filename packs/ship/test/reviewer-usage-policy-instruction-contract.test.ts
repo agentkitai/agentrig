@@ -22,9 +22,9 @@ it("pins the adapter invocation once beside launch and exempts pre-launch usage 
   }
 });
 
-it("distinguishes a dispatched fixer task from the durable fixer pre-push handoff", () => {
+it("retains dispatched fixer task inputs without requiring a second manual dispatch handoff", () => {
   for (const text of [ship, topic]) expect(text).toContain("verbatim in the dispatched fixer task");
-  expect(dogfood).toContain("durable pre-push GitHub PR handoff comment");
+  expect(dogfood).toContain("fixers do not post a second manual pre-push dispatch handoff");
   for (const text of [land, policy]) expect(text).toContain("missing durable fixer pre-push handoff alone is not a halt");
 });
 

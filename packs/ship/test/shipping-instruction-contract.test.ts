@@ -190,7 +190,7 @@ const arbitrationRule = "the topic skill permits one arbitration per row; a cond
 const cleanupSteps = [
   "1. Join every job and subprocess, including installs, retries and mutations.",
   "2. Verify recorded HEADs and restored tracked/index state; an unrestored mutation or unfinished writer blocks removal and invalidates the review, never erases evidence.",
-  "3. Persist verdicts, proof results, failure receipts and durable provenance manifests in the PR before deleting scratch copies; never delete the durable adapter receipt/output pairs.",
+  "3. Persist verdicts, proof results, failure receipts and posted review URLs in the PR before deleting scratch copies; never delete the durable adapter receipt/output pairs.",
   "4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots, any conductor-proof tree and conductor-proof temporary root, and `OUT`; never the author's tree or old unowned scratch.",
 ];
 function assertCleanup(text: string): void {

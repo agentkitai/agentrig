@@ -3,7 +3,7 @@
 This is the shared review/repair policy for `dogfood`, `ship`, `topic`, `review`, and
 `land`. Read it with the selected skill. It replaces their historical per-fix dual
 review loops, not their authorization, isolation, testing, or merge gates. These
-are model-facing instructions, not a runtime enforcement mechanism. No model or agent authorship identifiers belong in commits, PR titles/bodies, or code comments. The single PR-body and squash-body exception is a verbatim human authorization quote that itself contains such an identifier: preserve the quote unchanged, but never add model or agent authorship attribution.
+are model-facing judgment instructions; the ship pack owns the mechanical gates described below. No model or agent authorship identifiers belong in commits, PR titles/bodies, or code comments. The single PR-body and squash-body exception is a verbatim human authorization quote that itself contains such an identifier: preserve the quote unchanged, but never add model or agent authorship attribution.
 
 ## 1. CI and review are independent tracks
 
@@ -94,18 +94,31 @@ git merge-base --is-ancestor "$OLD" "$NEW" || exit 1
 ```
 A same-head re-read is not delta coverage and cannot close a blocker.
 
+Above round 3, use `N/N` and first record one operative PR-body line
+`Human amendment: Repair round: N/N; authorization: <JSON-quoted verbatim human authorization>`
+for that exact round. This is a conductor-recorded human amendment, not automatic
+GitHub-author authentication; never invent an authorization or copy task text as authority.
+A larger denominator or unrelated round amendment alone cannot authorize dispatch.
+Hook validation checks syntax, not human provenance.
+
 Before fixer dispatch, ship/topic must persist the verified PR-body read-back receipt in the
 GitHub PR body: `Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>`.
-Require successful edit and read-back of that receipt before dispatch and quote it in the dispatched fixer task; the fixer separately quotes it in the pre-push handoff when that record survives.
+Require successful edit and read-back of that receipt before dispatch and quote it in the dispatched fixer task.
 Land checks the same persisted receipt against the accepted dispatch-provenance source and requires its timestamp before dispatch; private notes or retroactive receipt creation do not satisfy the gate.
-The fixer must post and read back a durable pre-push GitHub PR handoff comment quoting verbatim its dispatched `Repair round: N/3` line, dispatched `Pre-dispatch read-back` receipt, every assigned exact finding heading and source comment URL/anchor, dispatch time, and a reference to the hook-recorded pre-edit comparison with each checked comment ID and PR head.
-The trusted project extension `.agentrig/extensions/dispatch-record.mjs` records every subagent dispatch after a PR exists, including the exact complete task, dispatch time, current PR head SHA and parent session id. Repair intent is detected anywhere in the task by `Repair round` or `Pre-dispatch read-back` (including inline prose, quoted history and examples), or by `OLD <SHA>` together with finding headings. Intent never falls back to an ordinary unchecked dispatch: require one operative standalone `Repair round: N/3` line and one standalone `Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <40-character SHA>; verified <ISO timestamp>` line with matching rounds. Malformed intent denies with formatting guidance; use marker-free prose for ordinary review tasks. Quoted/fenced historical receipts cannot supply the operative receipt or OLD. Repairs require a live PR. Above round 3, use `N/N` and first record one operative PR-body line `Human amendment: Repair round: N/N; authorization: <JSON-quoted verbatim human authorization>` for that exact round. This is a conductor-recorded human amendment, not automatic GitHub-author authentication; never invent an authorization or copy task text as authority. The hook fetches the live PR body, rejects absent/ambiguous/empty records and includes the checked authorization in its pre-edit comparison. A larger denominator or unrelated round amendment alone cannot authorize dispatch. Finding identity comes from the source comment’s canonical structured verdict headings when present (decoded JSON strings), otherwise exact legacy source lines; Markdown, Unicode and heading whitespace remain exact. Tasks may use `Finding: <exact heading>`, `<ID> heading: <exact heading>` (including severity-tagless headings), or a raw heading followed by `Source: <comment URL>`. A source URL may follow a finding or precede a labeled group. These are supported existing dispatch forms, not a new mandatory handoff template. Never strip heading bytes or use surrounding prose to override structured verdict identity.
-The hook posts the dispatch comment and verifies its API read-back byte-for-byte before allowing the tool call; any lookup, post or read-back failure denies dispatch clearly.
-Before starting a fixer, the dispatch hook fetches the live PR head and each cited source, compares OLD and every exact finding heading with its source, and posts `Pre-edit comparison: PASS` (or FAIL with mismatches) in the API-read-back dispatch comment. FAIL denies dispatch. Repair tasks pair each verbatim severity-tagged finding heading with its GitHub source URL on a following line before the next heading. This hook-recorded comparison replaces the handwritten fixer comparison.
-Before a PR exists the hook leaves the initial builder invocation untouched; conductors do not manually post or read back dispatch-task comments.
-Invoke every subagent without its optional `label` field so the immutable spawn preserves the exact task. The hook remembers the host own-line train-row binding from the user prompt for conductors working on main; otherwise it resolves the current branch PR.
-The conductor must invoke the fixer subagent tool without its optional `label` field: immutable `subagent.spawn.task` records `input.label ?? input.task`, so only an unlabeled fixer invocation preserves the complete dispatched task for provenance matching.
-Land may accept the hook dispatch comment matched to the immutable session-store `subagent.spawn` event by exact task text and parent session id as sufficient dispatch provenance; obtain the child session ID from that event. A missing durable fixer pre-push handoff alone is not a halt; when neither source exists land halts, and all receipt ordering, round/OLD/blocker identity, exact heading/source identity, and durable pre-edit comparison checks still apply.
+The pack's pre_spawn hook owns the exact-task dispatch record, API read-back, pre-edit
+source comparison and resume PR association. Denials remain binding; do not reconstruct
+these records or repeat their mechanical comparisons by hand. Repair task inputs retain
+matching standalone round/read-back lines and exact finding identities. Carry the
+persisted receipt, exact finding identities and counter in the fixer task.
+Fixers do not post a second manual pre-push dispatch handoff. The ledger hook
+validates append-only body writes and source identities; the posting helper attaches manifests.
+The minimal merge guard owns only exact host authorization on the bound PR, required green
+exact-current-head CI, and named-lander dispatch/spawn binding. Review resolution, coverage,
+receipt ordering, mergeability, completion markers and post-merge CI remain land judgments.
+See `packs/ship/docs/MERGE-GUARD.md` for bounded command syntax and restart limitations.
+
+A missing durable fixer pre-push handoff alone is not a halt when the hook has recorded
+the authoritative dispatch. Do not fabricate replacement provenance.
 
 Collect all declared initial verdicts before one repair batch. Give the fixer all blocking
 finding texts/URLs, not the advisory list as new requirements. Keep the same PR.
@@ -223,12 +236,12 @@ Finding identity is the verbatim Markdown finding heading plus source comment UR
 `node <REPO>/scripts/review-finding-index.mjs <comment-URL>` on each posted review to produce a
 small index from the live GitHub body (not a conductor summary). The ledger, pre-dispatch receipt
 and fixer task retain that exact pair for every assigned finding. Conductor rationale stays
-separate. Before dispatch, before fixer edits and before landing fetch the live comments and
-compare all three copies; absent/edited/mismatched identity halts, never silently relabels a fix.
+separate. The dispatch and ledger hooks validate live source identity; their refusals
+are binding, not a request for a second handwritten comparison.
 
 ### Repair ledger and comparison-ref invariants
 
-Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch all source comments live and compare exact bytes even when no fixer is dispatched; landing checks every row, not only assigned IDs.
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. The ledger hook validates source identity before writes; land judges completeness and disposition for every row, not only assigned IDs.
 
 Initial review preparation creates `git branch "review-base-NN" "$MAIN"` (NN is the PR number), refusing an existing ref, and records ownership; cleanup removes exactly that recorded ref after jobs join. Focused preparation/cleanup uses its recorded unique `BASE` instead. Neither `codex exec` nor dedicated `codex review` mode creates or owns these refs implicitly. The exec adapter uses the assembled prompt/artifact protocol, not dedicated review mode.
 
@@ -366,8 +379,8 @@ deletes these durable artifacts and cannot be used to waive the land gate.
 
 The pre-tool ship hook guards `gh pr edit --body` / `--body-file` and `gh api`
 pull PATCH body writes. The entire existing PR body is an append-only ledger:
-retain every existing byte, including prior findings, resolutions, coverage and
-counters; append a superseding correction instead of rewriting history. A fresh
+the hook requires every existing byte, including prior findings, resolutions, coverage and
+counters. Corrections are appended, not history rewrites. A fresh
 empty body may be populated. The guard fetches the live body and validates cited
 issue-comment, inline-review-comment and review URLs against fetched comment IDs
 and exact `html_url` values. Missing comments, wrong anchors, malformed responses
