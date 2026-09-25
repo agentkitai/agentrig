@@ -80,6 +80,7 @@ describe("minimal merge guard", () => {
     'echo "gh pr merge 7" && pwd',
     "gh pr comment 7 --body 'refused: gh pr merge --help'",
     "printf '%s' 'gh api repos/o/r/pulls/7/merge -X PUT'",
+    "echo 'https://api.github.com/repos/o/r/pulls/7/merge'",
   ])("read-only merge text continues without fetch: %s", async text => {
     const f = await fixture();
     expect(await f.merge(text)).toEqual({ action: "continue" });
@@ -105,6 +106,13 @@ describe("minimal merge guard", () => {
     expect(merge.reason).toContain("merge guard:");
     expect(merge.reason).toContain("gh pr merge NUMBER --squash --match-head-commit FULL_HEAD");
     expect(merge.reason).not.toContain("body edits");
+  });
+  it.each([
+    `python3 -c 'import os; os.system("gh pr edit 7 --body replaced")'`,
+    `node -e 'require("child_process").execSync("gh pr edit 7 --body replaced")'`,
+  ])("retains interpreter-wrapped ledger refusal: %s", async text => {
+    const f = await fixture();
+    expect((await f.merge(text)).action).toBe("deny");
   });
   it("names the ledger rule and accepted body-edit form independently", async () => {
     const f = await fixture();

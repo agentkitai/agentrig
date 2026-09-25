@@ -24,7 +24,7 @@ export function mergeIntent(command) {
         const stop = rest.indexOf("--");
         if (!rest.slice(0, stop < 0 ? undefined : stop).some(arg => arg === "--help" || arg === "-h")) return true;
       }
-      if (/^\S*\bpulls\/[^\s/]+\/merge$/u.test(args[i])) return true;
+      if ((args.includes("api") || args.some(arg => /^(?:.*\/)?curl$/u.test(arg))) && /^\S*\bpulls\/[^\s/]+\/merge$/u.test(args[i])) return true;
     }
     // Quoted shell programs and API mutation payloads are executable data,
     // unlike quoted comment/printf text. Retain the previous bounded backstop.

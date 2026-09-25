@@ -50,7 +50,9 @@ export function ledgerEditIntent(command) {
   return substitutions.some(ledgerEditIntent) || segments.some(args =>
     args.some((arg, i) => arg === "pr" && args[i + 1] === "edit") ||
     (args.includes("api") && args.some(arg => /^\/?repos\/[^\s]+\/pulls(?:\/|$)/u.test(arg))) ||
-    (shellWrapper(args) && args.some(arg => /\s/u.test(arg) && ledgerEditIntent(arg))));
+    (shellWrapper(args) && args.some(arg => /\s/u.test(arg) && ledgerEditIntent(arg))) ||
+    (args.some(arg => /^(?:.*\/)?(?:python[\d.]*|node|ruby|perl)$/u.test(arg)) &&
+      args.some(arg => /\bpr\s+edit\b|\bapi\b[\s\S]*\bpulls(?:\/|\b)/u.test(arg))));
 }
 async function candidate(command, cwd) {
   const args = words(command).flatMap(word => /^-[bFRfX]./u.test(word) && !word.startsWith("--") ? [word.slice(0, 2), word.slice(2)] : [word]);
