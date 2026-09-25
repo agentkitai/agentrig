@@ -1,8 +1,12 @@
-## R19f slice 3 — implementation ready for conductor review; band closure pending
+## R19f slice 3 — done (#586); band R19 done
 
-Current roadmap row: R19f slice 3. Next: conductor review resolution, final completion
-markers and the first live minimal-merge-guard landing exercise; no next product band
-is selected. R19f and band R19 are **not marked done** by this builder.
+R19a–f implementation and independent review are complete. Both initial reviews and
+one focused repair review are recorded in #586; all three blockers closed in repair
+round 1/3, with LOW wording/style observations retained as advisories. The conductor
+sets these completion markers after the disposition ledger resolved. Final exact-head
+CI, the actual guarded merge decision and merge-commit CI are landing receipts in #586,
+not claims inferred from this pre-merge documentation commit. No next product band is
+selected; post-R19 direction remains a human decision.
 
 The activated pre_tool dispatch fallback is retired: pre_tool composes merge and
 ledger guards only, while pre_spawn alone records authoritative task/parent data.
@@ -14,7 +18,7 @@ integrity checks and manifest copying are removed from effective skills/policy.
 Repair input receipts, review coverage/disposition, residual judgments, receipt ordering,
 completion-marker timing and post-merge CI remain explicit responsibilities.
 
-### Slice 3 blocking instruction repairs (review pending)
+### Slice 3 blocking instruction repairs (independently reviewed and resolved)
 
 Removed the remaining mandatory manual pre-push dispatch handoff; retained hook
 provenance and receipt inputs. Restored land-time exact live-source judgment for all
@@ -23,7 +27,7 @@ round-bound above-cap human amendments and anti-fabrication semantics: syntax va
 cannot authenticate human authority. Arbiter d7f66013 approved these bounded repairs;
 no mechanical merge-guard predicate, LOW advisory, or completion marker changes.
 
-### R19 delivery inventory and proposed completion text
+### R19 delivery inventory
 
 - Definition: #544 approved R19 contract.
 - R19a: #549 spawn hooks/log queries; #559 provider-bound roles; #561 provider spawn
@@ -33,17 +37,17 @@ no mechanical merge-guard predicate, LOW advisory, or completion marker changes.
 - R19d: #568 train engine/stages; #569 final CLI/accounting migration and core facade removal.
 - R19e: #570 role-routing compatibility; #575 final TUI/system/stall bolt-on retirement.
 - R19f: #576 authoritative pre_spawn dispatch; #585 minimal pre_tool merge guard;
-  this slice retires superseded prose/fallback and closes #577 when merged.
+  #586 retires superseded prose/fallback and closes #577 on merge.
 - Supporting gate migration: #545 dispatch publication/resume binding (#539), #555
   hook-owned pre-edit comparisons, #558 repair intent/amendments, #548 durable
   adapter evidence (#547), #573 ledger integrity/automatic attachments (#571),
   #574 pre-PR resume (#572). Test-infrastructure support: #551/#556 FIFO timing.
   These are supporting deliveries, not extra band rows.
 
-Proposed final completion (not yet asserted): all R19a–f acceptances delivered with
-serialized exact-head and post-merge CI, pack-owned workflow policy and train ownership,
-and no workflow knowledge remaining in the designated migrated harness surfaces.
-The conductor must resolve independent reviews and add final markers only then.
+All R19a–f implementation acceptances are delivered: pack-owned workflow policy and
+train ownership, with no workflow knowledge remaining in the designated migrated
+harness surfaces. Serialized exact-head and post-merge CI remain mandatory for each
+landing; #586 records the final verification rather than assuming it here.
 The lander must append the actual guarded merge command/decision receipt to the PR;
 #585 explicitly deferred that first real exercise to this row. No live exercise is
 claimed by builder tests. Missing or denied guard evidence cannot be fabricated.
