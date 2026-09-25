@@ -301,3 +301,11 @@ it("advertises available entries for provider-bound roles even with flat configu
   const { provider: _binding, ...unbound } = bound;
   expect(wiring({ agentRoles: [unbound] }).providerChoices).toBeUndefined();
 });
+
+it("shares supplied child hooks at spawn without copying unrelated parent hooks", () => {
+  const handler = () => ({ action: "continue" as const });
+  const hooks = [{ point: "pre_tool" as const, handler }];
+  const options = wiring({ childHooks: () => hooks });
+  expect(options.childConfig().hooks).toBe(hooks);
+  expect(wiring().childConfig().hooks).toBeUndefined();
+});

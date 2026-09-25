@@ -96,7 +96,7 @@ it("failed activation is logged without partial commands and configuration overr
   expect(() => parseConfigText("fixture", '{"extensionDiscovery":"true"}')).toThrow();
 });
 
-it("registered extension hooks stay advisory and child agents inherit neither tools nor paired hooks", async () => {
+it("registered extension hooks stay advisory and children inherit neither tools nor pre-model hints", async () => {
   const f = await fixture();
   const path = await extensionFixture(f.root);
   const source = await readFile(path, "utf8");
@@ -166,4 +166,30 @@ it("trusted headless project discovers and loads the dispatch hook without promp
   const events = await new SessionStore({ root: join(f.root, "logs") }).readAll(run.id);
   expect(events.some(event => event.type === "extension.loaded" && event.name === "dispatch-record")).toBe(true);
   expect(events.some(event => event.type === "extension.error")).toBe(false);
+});
+
+it("shares activated pre-tool gates with real child sessions but not parent lifecycle hooks", async () => {
+  const f = await fixture();
+  const path = await extensionFixture(f.root, "child-gate", `export function activate(ctx) {
+    const children = new Set();
+    ctx.hooks.on("post_spawn", c => { children.add(c.spawn.childId); return {action:"continue"}; });
+    ctx.hooks.on("pre_tool", c => children.has(c.sessionId) && c.tool.name === "bash"
+      ? {action:"deny",reason:"child gate exercised"} : {action:"continue"});
+  }`);
+  let calls = 0;
+  provider.stream = async function* () {
+    const input = calls++ === 0 ? { name: "subagent", input: { task: "child fixture" } }
+      : calls === 2 ? { name: "bash", input: { command: "printf child" } } : undefined;
+    if (input) { yield { type: "tool_use", id: `call-${calls}`, ...input }; yield { type: "stop", reason: "tool_use" }; }
+    else { yield { type: "text_delta", text: "done" }; yield { type: "stop", reason: "end_turn" }; }
+  };
+  const built = await build(f, ["--extension", path, "--subagents", "--allow", "subagent", "--allow", "bash"]);
+  const run = built.agent.run("fixture", { cwd: f.cwd });
+  const events = []; for await (const event of run.events) events.push(event); await run.done;
+  const spawn = events.find(event => event.type === "subagent.spawn");
+  expect(spawn?.type).toBe("subagent.spawn");
+  if (spawn?.type !== "subagent.spawn") throw new Error("missing spawn");
+  const child = await new SessionStore({ root: join(f.root, "logs") }).readAll(spawn.id);
+  expect(child.some(event => event.type === "tool.denied" && event.name === "bash")).toBe(true);
+  expect(child.some(event => event.type === "tool.result" && event.name === "bash")).toBe(false);
 });

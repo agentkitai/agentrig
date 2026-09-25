@@ -1,3 +1,35 @@
+## R19f slice 2 — minimal merge guard (implementation; review/landing pending)
+
+Current roadmap row: R19f slice 2; next is R19f slice 3 (superseded manual
+bookkeeping prose). R19f is **not complete**; no whole-row completion marker.
+
+The ship-pack pre-tool gate guards literal gh PR and REST API merge calls. It
+requires the initial host Row.authorization verbatim on its own line in the bound PR body,
+required green exact-current-head checks, and a named lander child whose resolved
+spawn envelope matches a successful dispatch record for that PR. Later prompt or
+tool-input text is not authority. Dispatch comment edits, malformed/failed API
+reads and stale/pending/red checks fail closed with reasons. SHA-pinned execution
+and a final PR re-read bound the check/use race; GitHub branch protection remains
+the remote backstop. Existing ledger integrity and compatibility reexports remain.
+
+CLI child configuration shares activated extension pre-tool gates (not parent
+lifecycle/checkpoint hooks or extension tools), so the actual lander is guarded.
+No review-resolution judgment, new review evidence format, land-skill edits or
+new review rules. Live grants require redispatch after a host restart. The bounded
+shell parser is not a sandbox; indirect scripts are not interpreted. Exact-head
+local receipts and named fail-first/mutation probes travel in the PR ledger.
+[Merge guard boundary and landing correction](../packs/ship/docs/MERGE-GUARD.md):
+operator withdrew PR #585's own-landing exercise; this main-based host uses the
+existing land skill. Row 052 is the first live guard exercise, operator-verified.
+No exercise is claimed here. LOW observations and wording followups stay advisory.
+
+Repair round 1 adds own-line authorization matching (LF/CRLF delimiters, no
+trimming), refuses `--admin` as well as deferred merge flags, and pins changing
+head/body/URL between initial and final PR reads. Named mutants and exact-head
+checks are recorded in the PR ledger. Arbiter child `61381213` approved precise
+textual-command/file-payload limits in the plan and guard guide, not a fourth
+code repair. Review rules remain unchanged. Slice 3 remains next; R19f is not done.
+
 ## Verify every typed builder blocker — #582 implementation awaiting independent review
 
 Current roadmap row: user-directed #582; next remains ROADMAP §5 continuation.
@@ -91,7 +123,7 @@ Legacy direct factory consumers remain supported. The dispatch fail-first suite
 runs against both legacy and authoritative envelopes, including repeated identical
 spawns and pre_tool-before/after checks for exactly one record per spawn.
 
-R19f is **not complete**: slice 2 (merge policy via `pre_merge`) and slice 3
+R19f is **not complete**: slice 2 (minimal merge policy via `pre_tool`, implemented above) and slice 3
 (removal of redundant skill bookkeeping prose) remain pending. No merge guard or
 skill prose deletion is included here. Independent conductor review/CI follows.
 
