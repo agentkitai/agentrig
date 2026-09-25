@@ -390,3 +390,11 @@ beforeEach(async () => {
   vi.stubEnv("AGENTRIG_CHILD_PROFILE", undefined);
 });
 afterEach(async () => { vi.unstubAllEnvs(); await rm(profileHome, { recursive: true, force: true }); });
+
+it("run forwards builder-provider as routing data without changing the conductor provider", async () => {
+  const { buildProgram } = await import("../src/program.js");
+  let received: { builderProvider?: string; provider: string } | undefined;
+  const program = buildProgram({ run: async (_task, opts) => { received = opts; } });
+  await program.parseAsync(["node", "agentrig", "run", "fixture", "--provider", "anthropic", "--builder-provider", "sol"]);
+  expect(received).toMatchObject({ builderProvider: "sol", provider: "anthropic" });
+});

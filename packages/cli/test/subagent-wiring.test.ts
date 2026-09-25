@@ -267,12 +267,14 @@ describe("the flags exist on the commands that build an agent", () => {
 describe("which provider a child runs on (R3.5a)", () => {
   it("defaults to the subagents role, never the parent's main provider", () => {
     expect(wiring().childConfig().provider).toBe(second);
+    expect(wiring().childConfig().providerSelection?.()).toEqual({ provider: second, entry: "local" });
     expect(wiring().childConfig(undefined).provider).toBe(second);
     expect(wiring().childConfig({}).provider).toBe(second);
   });
 
   it("honours an explicit entry name from the spawn call", () => {
     expect(wiring().childConfig({ provider: "cloud" }).provider).toBe(provider);
+    expect(wiring().childConfig({ provider: "cloud" }).providerSelection?.()).toEqual({ provider, entry: "cloud" });
   });
 
   it("offers the entry menu only when config defines named entries", () => {

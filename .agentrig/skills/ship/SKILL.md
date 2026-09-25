@@ -281,3 +281,12 @@ reviewer-authored replacement, and passes its local path as `TRUSTED_ADAPTER_REC
 `--validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`. Validate the reassembled
 canonical body when split comments are used. Missing or mismatched provenance halts: recover
 the original adapter artifact or rerun the adapter, never fill transportModel from configuration.
+
+## Builder provider routing
+
+The train row's optional `builderProvider`, delivered as `run --builder-provider <entry>`,
+is routing data, not authorization: use that named entry as the subagent `provider` on
+every builder and fixer spawn unless the row explicitly says otherwise. With no override,
+retain the profile default; reviewers, arbiters and landers are unaffected. Record the
+effective builder provider for each child session in the PR body's child inventory,
+including overrides and the session ID; never infer execution from the row's intent alone.

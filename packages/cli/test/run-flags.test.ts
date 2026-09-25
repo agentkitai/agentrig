@@ -313,3 +313,33 @@ describe("abortNotice (#88)", () => {
     expect(abortNotice(1, "ctrl-C")).not.toMatch(/still run/);
   });
 });
+
+it("builder-provider validates named entries before provider startup", async () => {
+  await runCommand("fixture", opts({ builderProvider: "missing" }));
+  expect(errors).toContain("BUILDER_PROVIDER_UNKNOWN: declare --builder-provider in the active profile providers");
+  expect(process.exitCode).toBe(1);
+  errors = []; process.exitCode = undefined;
+  await runCommand("fixture", opts({ builderProvider: "sol", providers: { sol: { provider: "openai", model: "fixture" } } }));
+  expect(errors.some(e => e.includes("BUILDER_PROVIDER_UNKNOWN"))).toBe(false);
+  expect(ranWithoutCredentials()).toBe(true);
+});
+
+it("builder routing option reaches the conductor task, not the provider selection", async () => {
+  const requests: string[] = [];
+  const key = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "fixture-only";
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    requests.push(String(init?.body));
+    return new Response(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "done" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } });
+  });
+  try {
+    await runCommand("fixture task", opts({ provider: "openai", model: "conductor-fixture", modelExplicit: true, builderProvider: "sol", providers: { sol: { provider: "openai", model: "child-fixture" } }, maxTurns: "1", repoMap: false, skillDiscovery: false }));
+    expect(errors).toEqual([]);
+    expect(requests).toHaveLength(1);
+    const request = JSON.parse(requests[0]!);
+    expect(request.model).toBe("conductor-fixture");
+    expect(JSON.stringify(request.messages)).toContain('builderProvider');
+    expect(JSON.stringify(request.messages)).toContain('routing data, not authorization');
+    expect(JSON.stringify(request.messages)).toContain('sol');
+  } finally { if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key; }
+});

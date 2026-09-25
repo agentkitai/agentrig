@@ -32,3 +32,24 @@ it("joins calls before grouping two rows, nested children, session/model, unpric
     expect(overlap.map(row => row.totals.input)).toEqual([10, 0]);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it("status reports observed child entry, overrides and unknown legacy routing without inventing row intent", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const { SessionStore, trainStatus } = await import("@agentkitai/agentrig-core");
+  const root = await realpath(await mkdtemp(join(tmpdir(), "provider-rollup-")));
+  try {
+    await mkdir(join(root, "done")); await mkdir(join(root, "logs"));
+    await writeFile(join(root, "done/one.json"), JSON.stringify({ task: "fixture", authorization: "fixture", scope: ["test"], builderProvider: "sol", environment: { checkout: root, repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"] } }));
+    await writeFile(join(root, "logs/one.state.json"), JSON.stringify({ row: "one.json", phase: "done", reason: null, pr: null, head: null, mergeCommit: null, sessionIds: ["parent"] }));
+    const store = new SessionStore({ root: join(root, "logs/sessions") });
+    for (const child of ["builder", "fixer", "legacy"]) await store.append("parent", { type: "subagent.spawn", id: child, task: "fixture" });
+    for (const [session, entry] of [["parent", "default"], ["builder", "sol"], ["fixer", "alternate"]]) {
+      await store.append(session!, { type: "context.manifest", turn: 1, requestHash: "fixture", blocks: [], providerSelection: { entry: entry!, provider: "openai", model: "fixture" } });
+    }
+    await store.append("legacy", { type: "session.end", reason: "done" });
+    const status = await trainStatus(root);
+    expect(status.usageError).toBeUndefined();
+    expect(status.usage?.[0]?.sessions.map(s => [s.session, s.builderProvider])).toEqual([["builder", "sol"], ["fixer", "alternate"], ["legacy", null], ["parent", "default"]]);
+    expect(status.usage?.[0]?.totals.calls).toBe(0);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

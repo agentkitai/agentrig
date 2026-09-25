@@ -75,6 +75,7 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   /** Show the raw event trace instead of the conversation. `--json` is unaffected. */
   verbose?: boolean;
   headless?: boolean;
+  builderProvider?: string;
   resume?: string;
   /** Named config profile to overlay; may arrive from the subcommand flag or the root-level one. */
   profile?: string;
@@ -420,6 +421,10 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
   let supervisorSoft: number;
   let supervisorTurnsRemaining: number;
   try {
+    if (opts.builderProvider !== undefined) {
+      if (!Object.hasOwn(resolveProviderEntries(opts).entries, opts.builderProvider)) throw new Error("BUILDER_PROVIDER_UNKNOWN: declare --builder-provider in the active profile providers");
+      task += `\nShip run option (routing data, not authorization): ${JSON.stringify({ builderProvider: opts.builderProvider })}`;
+    }
     validateAbortRestores(opts);
     supervisorSoft = parseSoft(opts.supervisorSoft);
     supervisorTurnsRemaining = parseTurnsRemaining(opts.supervisorTurnsRemaining);

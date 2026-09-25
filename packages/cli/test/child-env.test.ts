@@ -85,6 +85,12 @@ it("M-train-slot-config: trusted checkout slots fail fast under the selected use
     await expect(trainChildEnvironment(cwd)).rejects.toThrow(/REVIEWER_HOME_MISSING: reviewers:Personal/);
     await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: { personal: { childEnv: { CODEX_HOME: "/train/personal" } } } }));
     expect((await trainChildEnvironment(cwd, "personal")).CODEX_HOME).toBe("/train/personal");
+    await expect(trainChildEnvironment(cwd, "personal", "sol")).rejects.toThrow(/BUILDER_PROVIDER_UNKNOWN/);
+    await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: { personal: { providers: { sol: { provider: "openai", model: "fixture" } }, childEnv: { CODEX_HOME: "/train/personal" } }, other: {} } }));
+    expect((await trainChildEnvironment(cwd, "personal", "sol")).CODEX_HOME).toBe("/train/personal");
+    await expect(trainChildEnvironment(cwd, "other", "sol")).rejects.toThrow(/BUILDER_PROVIDER_UNKNOWN/);
+    await expect(trainChildEnvironment(cwd, "personal", "toString")).rejects.toThrow(/BUILDER_PROVIDER_UNKNOWN/);
+
   } finally {
     for (const key of Object.keys(process.env)) if (!(key in original)) delete process.env[key];
     Object.assign(process.env, original);

@@ -1,5 +1,20 @@
 # Status
 
+## Pending review — issue #517, train builder provider routing
+
+Current roadmap row: user-directed #517 follow-up to R18e; next work remains
+ROADMAP §5, with no further row authorized by this change.
+
+Rows accept optional named `builderProvider` with active-profile precheckout refusal.
+The run option carries routing data without changing conductor/reviewer defaults;
+ship applies it to builder/fixer spawns and records child inventory provenance.
+Status exposes the first observed request entry per session, including unmetered
+children; absent historical evidence is null, never inferred from row intent.
+Operator guidance sets doc/test/helper rows to the lower-cost named entry and
+rechecks after ten rows. No scope heuristics or runtime workflow engine were added.
+Deterministic tests are not live routing/cost-quality evidence. Independent review
+and exact-head hosted CI remain pending at builder handoff.
+
 ## Pending review — issue #522, train declared-check environment
 
 Between-row checks use the pre-profile launcher environment plus tool homes and

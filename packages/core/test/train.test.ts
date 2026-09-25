@@ -34,6 +34,29 @@ async function fixture(count = 1) {
   return { root, command, calls };
 }
 describe("train", () => {
+  it("builder provider schema and fake run routing preserve conductor selection", async () => {
+    expect(TrainRowSchema.parse({ ...row, builderProvider: "sol" }).builderProvider).toBe("sol");
+    for (const builderProvider of ["", " ", 7]) expect(TrainRowSchema.safeParse({ ...row, builderProvider }).success).toBe(false);
+    const f = await fixture();
+    await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "sol" }));
+    const childEnvironment = vi.fn(async () => ({}));
+    expect(await runTrain(f.root, { command: f.command, childEnvironment })).toBe("empty");
+    expect(childEnvironment).toHaveBeenCalledWith(row.environment.checkout, undefined, "sol");
+    expect(f.calls.find(c => c.startsWith("run --headless"))).toContain("--builder-provider sol");
+    expect(f.calls.find(c => c.startsWith("run --headless"))).not.toContain("--provider sol");
+  });
+  it("unknown builder provider refuses before checkout and remains queued", async () => {
+    const f = await fixture();
+    await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "missing" }));
+    const childEnvironment = vi.fn(async (_cwd: string, _profile?: string, provider?: string) => {
+      if (provider === "missing") throw new Error("BUILDER_PROVIDER_UNKNOWN");
+      return {};
+    });
+    expect((await trainStatus(f.root, { childEnvironment })).invalidEntries[0]).toContain("BUILDER_PROVIDER_UNKNOWN");
+    expect(await runTrain(f.root, { command: f.command, childEnvironment })).toBe("halted");
+    expect(f.calls).toEqual([]);
+    expect(await readdir(join(f.root, "queue"))).toEqual(["1.json"]);
+  });
   it("refuses invalid schema before running any command", async () => {
     const f = await fixture(); await writeFile(join(f.root, "queue/1.json"), "{}");
     expect(TrainRowSchema.safeParse({ ...row, environment: { ...row.environment, yolo: "yes" } }).success).toBe(false);

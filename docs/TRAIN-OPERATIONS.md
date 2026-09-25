@@ -120,7 +120,8 @@ Each row is a strict zod-validated object (unknown fields are refused):
 {
   "task": "Implement the one authorized roadmap row using ship",
   "authorization": "The human's exact scoped task/merge authorization quote",
-  "scope": ["packages/core/src", "packages/core/test"],
+  "scope": ["docs", "packages/core/test"],
+  "builderProvider": "sol",
   "environment": {
     "checkout": "/absolute/dedicated-checkout",
     "repository": "owner/repo",
@@ -130,6 +131,16 @@ Each row is a strict zod-validated object (unknown fields are refused):
   }
 }
 ```
+
+`builderProvider` optionally names a provider entry in the active profile (including
+its implicit `default` entry). Unknown names fail row validation before checkout
+commands and leave the row queued. Train forwards `run --builder-provider <entry>`:
+this is conductor routing data for builder/fixer spawns, not `--provider` and not a
+change to the conductor, reviewer, arbiter or lander provider. Omission preserves
+profile defaults; the transport never guesses a row's scope. Operators should set
+`builderProvider: "sol"` for doc/test/helper-scoped rows; product rows use the profile
+default. Re-check the cost/quality decision after ten Sol rows. Explicit row exceptions
+win and must be recorded with each child session's effective provider in the PR inventory.
 
 `profile` is optional. `environment.sessionRoot` optionally selects an absolute
 session store; otherwise every row uses `<dir>/logs/sessions`. Optional
@@ -228,7 +239,13 @@ read-only `agentrig train <dir> --status`. It includes `queue`, `active`, `done`
 `halted`, `invalidEntries`, `usage` and `pricingNote`; accounting failures yield
 `usage: null` plus `usageError`, never misleading zero totals. Each `usage` row has
 `row`, `totals`, `sessions` (with per-session `totals` and provider/model `models`),
-and `coverageWarnings`. Totals expose `calls`, `input`, `output`, `cacheRead`,
+and `coverageWarnings`. Each session also has `builderProvider`: the effective named
+entry from its first recorded request selection, or null when unavailable (legacy,
+missing logs or no request). This is observed launch routing for all session roles,
+not a guess that every descendant is a builder or used the row's requested entry;
+role/override details belong in the PR child inventory. Sessions without ledger calls
+remain visible with zero usage. Later interactive provider switches do not rewrite the
+initial routing provenance. Totals expose `calls`, `input`, `output`, `cacheRead`,
 `cacheWrite`, `estimatedMicros`, `unpricedCalls` and `incompleteCalls`. Raw token
 counts include unpriced calls; `estimatedMicros` covers only the priced subset at
 historical configured rates, is not provider billing, and is null (not zero cost)
