@@ -26,6 +26,9 @@ const retired = [
   "save the stdout manifest in the PR",
   "Fetch every source comment live again and compare its heading with all three copies",
   "Invoke every subagent without its optional `label` field",
+  "Before dispatch, before fixer edits and before landing fetch the live comments",
+  "Fetch all source comments live and compare exact bytes",
+  "recheck task-to-PR merge authorization and exact-head CI",
 ];
 for (const name of ["dogfood", "ship", "topic", "land", "review"]) {
   it(`${name} does not ask for hook-owned manual bookkeeping`, () => {

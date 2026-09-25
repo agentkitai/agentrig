@@ -31,8 +31,8 @@ phase before dispatch, and read back the updated PR ledger.
   same round, joining/reconciling outstanding children before another dispatch.
 - **awaiting reviews**: recover reviewer jobs/artifacts and read-back receipts. Reuse only
   complete exact-head results; replace a missing/failed slot, not completed reviewer work.
-- **awaiting landing**: recheck task-to-PR merge authorization and exact-head CI; if already
-  merged, verify that merge's main CI instead of merging again. Otherwise hand off to land
+- **awaiting landing**: if already merged, verify that merge's main CI instead of
+  merging again. Otherwise hand off to land
   only under its existing rules. Without authorization, remain at the reviewed PR.
 
 For topic, also restore the authorized band, completed rows and current row. Resume only

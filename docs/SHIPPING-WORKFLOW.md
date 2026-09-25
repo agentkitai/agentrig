@@ -228,12 +228,12 @@ Finding identity is the verbatim Markdown finding heading plus source comment UR
 `node <REPO>/scripts/review-finding-index.mjs <comment-URL>` on each posted review to produce a
 small index from the live GitHub body (not a conductor summary). The ledger, pre-dispatch receipt
 and fixer task retain that exact pair for every assigned finding. Conductor rationale stays
-separate. Before dispatch, before fixer edits and before landing fetch the live comments and
-compare all three copies; absent/edited/mismatched identity halts, never silently relabels a fix.
+separate. The dispatch and ledger hooks validate live source identity; their refusals
+are binding, not a request for a second handwritten comparison.
 
 ### Repair ledger and comparison-ref invariants
 
-Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. Fetch all source comments live and compare exact bytes even when no fixer is dispatched; landing checks every row, not only assigned IDs.
+Every ledger row, including nonblocking deferred and advisory findings, must quote the live verbatim finding heading and source comment URL/anchor. The ledger hook validates source identity before writes; land judges completeness and disposition for every row, not only assigned IDs.
 
 Initial review preparation creates `git branch "review-base-NN" "$MAIN"` (NN is the PR number), refusing an existing ref, and records ownership; cleanup removes exactly that recorded ref after jobs join. Focused preparation/cleanup uses its recorded unique `BASE` instead. Neither `codex exec` nor dedicated `codex review` mode creates or owns these refs implicitly. The exec adapter uses the assembled prompt/artifact protocol, not dedicated review mode.
 
