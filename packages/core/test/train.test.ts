@@ -341,3 +341,18 @@ it("rejects unbounded train budgets before starting the suite", async () => {
   expect(await runTrain(f.root, { command: f.command, testTimeout: async () => 120001 })).toBe("halted");
   expect(f.calls).not.toContain("test --testTimeout=120001");
 });
+
+it("profile environment reaches every train command and resolver failure halts before dispatch", async () => {
+  const f = await fixture();
+  const env = { CODEX_HOME: "/selected", GIT_TRACE2_EVENT: "0" };
+  let resolutions = 0;
+  expect(await runTrain(f.root, {
+    childEnv: async () => { resolutions++; return env; },
+    command: async request => { expect(request.env).toEqual(env); return f.command(request); },
+  })).toBe("empty");
+  expect(resolutions).toBe(2);
+  const failed = await fixture();
+  expect(await runTrain(failed.root, { childEnv: async () => { throw new Error("reviewers:audit: reviewer requires CODEX_HOME"); }, command: failed.command })).toBe("halted");
+  expect(failed.calls).toEqual([]);
+  expect(await readFile(join(failed.root, "logs/1.halt.json"), "utf8")).toContain("CODEX_HOME");
+});

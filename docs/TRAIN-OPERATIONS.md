@@ -193,3 +193,27 @@ To continue a halted task, retain its evidence and enqueue a **new unique row id
 with explicit resume pointers and unchanged authorization bounds. Existing done or
 halted row ids and stale result receipts are never reused. Directory layout/name/
 lock errors are command errors before execution, not evidence of a landed row.
+
+### Profile-scoped tool homes
+
+Put non-secret child settings in **user** `~/.agentrig/config.json`, for example:
+
+```json
+{"profiles":{"work":{"childEnv":{"CODEX_HOME":"/absolute/tool-homes/work-codex","CLAUDE_CONFIG_DIR":"/absolute/tool-homes/work-claude"}}}}}
+```
+
+Select `environment.profile` per train row (or `--profile work` on a headless run).
+User profile settings override the launching environment for child processes; omitted
+settings retain inheritance. Project `childEnv` declarations are ignored: a checkout
+cannot choose your CLI identity. No credentials belong in this map. Values are plain
+strings, CLI homes must be absolute paths, and credential-named variables are rejected.
+Keep tokens in each tool's own login store; do not copy or print credential files.
+
+Before launch run `agentrig doctor --profile work`. Each `reviewers:<slot>` line runs
+that CLI's login-status command under its resolved home and reports only its public
+identity when available. A CLI that exposes only login method is reported as such,
+not as a verified account email. Missing homes and failed status checks are failures;
+API reviewer slots continue to use provider diagnostics. The train refuses a CLI
+reviewer without its required `CODEX_HOME` or `CLAUDE_CONFIG_DIR` before dispatch,
+and rechecks after fast-forward. Every train process, including checks and headless
+children, receives the row environment. `GIT_TRACE2_EVENT=0` remains mandatory.

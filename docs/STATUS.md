@@ -1,5 +1,15 @@
 # Status
 
+## Profile-scoped child environments (#506; builder implementation)
+
+User profile childEnv now selects non-secret process settings and explicit reviewer CLI homes.
+CLI commands restore the launching environment after completion; train rows pass their own
+environment to every child and revalidate reviewer homes after fast-forward. Doctor uses CLI
+login-status, never reads tool credentials, and distinguishes visible identity from login-method-only
+output. Review receipts and posted headings carry resolved home paths. Project childEnv is ignored
+so repository configuration cannot choose user login identities. No roadmap completion claimed.
+Repair round: 0/3; independent review and hosted CI remain conductor-owned.
+
 ## Reviewer adapter usage and review-policy residuals (#505, #508, #510, #511; implementation, proof pending)
 
 Reviewer CLI argument-count and output-prefix mistakes now fail with EX_USAGE before launch without consuming a reviewer retry. Transport-proven numeric GPT major-family assertions cover suffixed minor pins while retaining exact transport proof. Shipping instructions distinguish dispatched fixer tasks from durable fixer pre-push handoffs and preserve the sole verbatim-human-authorization-quote exception to identifier bans in PR and squash bodies. Repair round: 0/3; review disposition pending; residuals none. No roadmap completion is claimed.

@@ -1,3 +1,4 @@
+import { isAbsolute, win32 } from "node:path";
 /** Versioned reviewer wire contract. Prose is evidence, never machine authority. */
 import { createRequire } from 'node:module';
 const { z } = await import(createRequire(new URL('../packages/core/package.json', import.meta.url)).resolve('zod'));
@@ -90,4 +91,12 @@ export function receiptTransport(receipt, expected, verdict, adapter) {
   // Only CLI adapters currently obtain identity from an independent transport envelope.
   // API provider.model (including legacy receipts) is just the configured pin echoed back.
   return ["codex-cli", "claude-cli"].includes(receipt.adapter) ? receipt.transportModel : undefined;
+}
+
+/** Optional for historical receipts; new CLI adapters always supply the resolved home. */
+export function receiptHomeLabel(receipt) {
+  if (receipt.resolvedHome == null) return "";
+  const home = z.object({ variable: z.enum(["CODEX_HOME", "CLAUDE_CONFIG_DIR"]), path: z.string().min(1).max(8192).refine(path => (isAbsolute(path) || win32.isAbsolute(path)) && !/[\x00-\x1f\x7f]/.test(path)) }).strict().parse(receipt.resolvedHome);
+  if (home.variable !== (receipt.adapter === "codex-cli" ? "CODEX_HOME" : receipt.adapter === "claude-cli" ? "CLAUDE_CONFIG_DIR" : null)) throw new Error("reviewer home adapter mismatch");
+  return ` [${home.variable}=${JSON.stringify(home.path)}]`;
 }

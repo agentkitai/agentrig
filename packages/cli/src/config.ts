@@ -1,3 +1,4 @@
+import { ChildEnvSchema } from "./child-env.js";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -205,7 +206,7 @@ export type ReviewerSlot = z.output<typeof ReviewerSlotSchema>;
 // Declarations are file metadata, not runtime launch/evaluation settings.
 const ConfigDeclarationSchema = ConfigValuesSchema.extend({ checks: ProjectChecksSchema.optional() });
 const ConfigFileSchema = ConfigDeclarationSchema.extend({
-  profiles: z.record(ConfigDeclarationSchema).optional(),
+  profiles: z.record(ConfigDeclarationSchema.extend({ childEnv: ChildEnvSchema.optional() })).optional(),
   reviewers: ReviewersSchema.optional(),
 }).superRefine((data, ctx) => {
   for (const [slot, binding] of Object.entries(data.reviewers ?? {})) {
@@ -324,7 +325,7 @@ export interface ResolveConfigInput<T extends Record<string, unknown>> {
 
 function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   if (file === undefined) return {};
-  const { profiles: _profiles, checks: _checks, reviewers: _reviewers, ...values } = file;
+  const { profiles: _profiles, checks: _checks, reviewers: _reviewers, childEnv: _childEnv, ...values } = file as ConfigFile & { childEnv?: unknown };
   return values;
 }
 

@@ -2,7 +2,7 @@ import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { diagnose, type DoctorOptions, type DoctorProbes } from "../src/doctor.ts";
+import { diagnose, reviewerLoginIdentity, type DoctorOptions, type DoctorProbes } from "../src/doctor.ts";
 import { buildProgram } from "../src/program.ts";
 
 const HOME = "/home/tester";
@@ -49,6 +49,7 @@ function fixture(): Fixture {
     },
     async boundary() { return { projectRoot: ROOT, userStateSafe: true }; },
     async commandExists() { return true; },
+    async reviewerStatus() { return "identity fixture@example.test"; },
     async gitState() { return { inside: true, branch: "feat/test", detached: false }; },
   };
   return {
@@ -638,4 +639,30 @@ it("prints all five measured feel references through ordinary doctor without pro
     expect(text).toContain(`feel:E1:${task}`);
   }
   expect(text).not.toContain("probe:usage");
+});
+
+it("reviewer doctor checks CLI status under user profile homes without reading credentials", async () => {
+  const f = fixture();
+  f.files.set(USER_CONFIG, JSON.stringify({ profiles: { work: { childEnv: { CODEX_HOME: "/selected" } } } }));
+  f.files.set(PROJECT_CONFIG, JSON.stringify({ reviewers: { audit: { adapter: "codex-cli", model: "pinned" } }, profiles: { work: { childEnv: { CODEX_HOME: "/untrusted-override" } } } }));
+  const status = vi.fn(async (_adapter, env) => { expect(env.CODEX_HOME).toBe("/selected"); return "identity fixture@example.test"; });
+  f.probes.reviewerStatus = status;
+  const result = await diagnose({ ...f.options, cli: { profile: "work" } });
+  expect(result.lines.join("\n")).toContain('reviewers:audit');
+  expect(result.lines.join("\n")).toContain('identity fixture@example.test');
+  expect(result.lines.join("\n")).toContain('/selected');
+  expect(status).toHaveBeenCalledOnce();
+  expect(f.reads.some(path => path.startsWith("/selected"))).toBe(false);
+  f.files.set(USER_CONFIG, JSON.stringify({ profiles: { work: {} } }));
+  status.mockClear();
+  const missing = await diagnose({ ...f.options, cli: { profile: "work" } });
+  expect(missing.lines.join("\n")).toMatch(/reviewers:audit.*CODEX_HOME/);
+  expect(status).not.toHaveBeenCalled();
+});
+
+it("login-status parsing exposes designated identity but never raw secret-bearing output", () => {
+  expect(reviewerLoginIdentity("claude-cli", JSON.stringify({ loggedIn: true, email: "fixture@example.test", accessToken: "fabricated-secret" }), "")).toBe('identity "fixture@example.test"');
+  expect(() => reviewerLoginIdentity("claude-cli", '{"loggedIn":false}', "")).toThrow();
+  expect(reviewerLoginIdentity("codex-cli", "", "Logged in using ChatGPT\nprivate details never copied")).not.toContain("private details");
+  expect(reviewerLoginIdentity("codex-cli", "Logged in using an API key: fabricated-secret", "")).toBe("logged in using API key; CLI did not expose an account identity");
 });

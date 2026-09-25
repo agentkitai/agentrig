@@ -1,3 +1,4 @@
+import { profileChildEnv, installChildEnv } from "./child-env.js";
 import { registerTrainCommand } from "./train.js";
 import { Command, InvalidArgumentError } from "commander";
 import { readFileSync } from "node:fs";
@@ -851,5 +852,17 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
 
+  let restoreChildEnv: (() => void) | undefined;
+  program.hook("preAction", async (_command, action) => {
+    if (!["agentrig", "run", "resume", "review", "acp", "web", "mcp-serve", "dream", "ingest", "login", "tick"].includes(action.name())) return;
+    if (action.name() === "tick" && action.opts().execute !== true) return;
+    const profile = (action.optsWithGlobals() as { profile?: string }).profile;
+    restoreChildEnv = installChildEnv(await profileChildEnv(dependencies.config?.cwd ?? process.cwd(), profile, dependencies.config?.home));
+  });
+  const parseAsync = program.parseAsync.bind(program);
+  program.parseAsync = async (...args) => {
+    try { return await parseAsync(...args); }
+    finally { restoreChildEnv?.(); restoreChildEnv = undefined; }
+  };
   return program;
 }

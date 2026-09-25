@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "nod
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
-import { verdictRange, parseVerdict, receiptTransport } from "./review-verdict.mjs";
+import { verdictRange, parseVerdict, receiptTransport, receiptHomeLabel } from "./review-verdict.mjs";
 import { reviewerVerdict, assertReviewerVerdict } from "./review-finding-index.mjs";
 
 try {
@@ -50,7 +50,8 @@ try {
   }
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");
-  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full`;
+  const homeLabel = provenanceFile ? receiptHomeLabel(JSON.parse(readFileSync(provenanceFile, "utf8"))) : "";
+  const heading = `## External review — ${reviewer} (${model})${homeLabel} — head ${head} — merged with origin/main ${main} — full`;
   const payload = `${body}${proofFile === undefined ? "" : `\n${proof}`}`;
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;

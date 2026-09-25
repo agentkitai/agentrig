@@ -276,3 +276,26 @@ Posting supplies `--provenance <PREFIX>.provenance.json`. Land retrieves the sam
 and runs `node scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`
 on the reassembled canonical body. Never reconstruct a receipt from the configured pin
 or reviewer prose; missing or mismatched artifacts require recovery or an adapter rerun.
+
+### Explicit reviewer login homes (#506)
+
+Select non-secret tool homes with user `profiles.<name>.childEnv` as described in
+[train operations](TRAIN-OPERATIONS.md#profile-scoped-tool-homes). Before launching
+reviewers, run `agentrig doctor --profile <name>` and inspect each `reviewers:<slot>`
+login-status result. This is distinct from AgentRig provider token diagnostics.
+Never inspect, copy, or print credentials. The login-status command may expose only
+login method rather than account identity; doctor states that limitation explicitly.
+
+Pass `--profile <name>` to `scripts/reviewer-adapters.mjs` when launching directly;
+its five positional arguments remain unchanged. CLI slots fail before launch unless
+`CODEX_HOME` (codex-cli) or `CLAUDE_CONFIG_DIR` (claude-cli) resolves from the selected
+user profile or inherited environment. API slots require neither CLI home. Project
+profiles never override these homes. An explicit user-profile home wins over an
+inherited home; omission retains inheritance, never a silent CLI default-home login.
+
+Adapter receipts add `resolvedHome: { variable, path }` (null for API). Preserve that
+adapter artifact. Posting adds ` [VARIABLE="/resolved/path"]` immediately after the
+model parentheses in the canonical heading when the receipt contains a CLI home.
+This suffix is part of the complete heading for new CLI receipts; legacy/API receipts
+without a home retain their existing heading. Do not infer or rewrite the home from
+review prose, and do not mistake a home path for attestation of the logged-in account.

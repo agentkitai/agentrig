@@ -1,3 +1,5 @@
+import { resolveChildEnv, reviewerHome } from "./child-env.js";
+import { z } from "zod";
 import { execFile } from "node:child_process";
 import { formatFeelBudgets } from "./feel-budgets.js";
 import { feelReference } from "./feel-reference.js";
@@ -40,6 +42,7 @@ export interface DoctorProbes {
   boundary(cwd: string, home: string): Promise<ProjectBoundary>;
   commandExists(command: string, env: NodeJS.ProcessEnv, cwd: string): Promise<boolean>;
   gitState(cwd: string): Promise<DoctorGitState>;
+  reviewerStatus(adapter: string, env: NodeJS.ProcessEnv, cwd: string): Promise<string>;
 }
 
 export interface DoctorOptions {
@@ -144,7 +147,24 @@ function defaultProbes(): DoctorProbes {
     boundary: resolveProjectBoundary,
     commandExists: defaultCommandExists,
     gitState: defaultGitState,
+    reviewerStatus: async (adapter, env, cwd) => {
+      const claude = adapter === "claude-cli";
+      const result = await execFileAsync(claude ? "claude" : "codex", claude ? ["auth", "status", "--json"] : ["login", "status"], { env, cwd, timeout: 10_000, maxBuffer: 64 * 1024 });
+      return reviewerLoginIdentity(adapter, result.stdout, result.stderr);
+    },
   };
+}
+
+/** Parse only public login-status fields; raw CLI output must never reach diagnostics. */
+export function reviewerLoginIdentity(adapter: string, stdout: string, stderr: string): string {
+  if (adapter === "claude-cli") {
+    const status = z.object({ loggedIn: z.literal(true), email: z.string().max(320).optional() }).parse(JSON.parse(stdout));
+    return status.email !== undefined && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(status.email)
+      ? `identity ${display(status.email)}` : "logged in; CLI did not expose an account identity";
+  }
+  if (/^Logged in using (?:an? )?API key\b/im.test(stdout + "\n" + stderr)) return "logged in using API key; CLI did not expose an account identity";
+  if (!/^Logged in using ChatGPT\s*$/im.test(stdout + "\n" + stderr)) throw new Error("login identity unavailable");
+  return "logged in using ChatGPT; CLI did not expose an account identity";
 }
 
 function selected(file: ConfigFile | undefined, profile: string | undefined): ConfigValues | undefined {
@@ -409,6 +429,19 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       cli,
       ...(profile === undefined ? {} : { profile }),
     });
+    const reviewerEnv = resolveChildEnv(profile === undefined ? {} : user?.profiles?.[profile]?.childEnv ?? {}, env);
+    for (const [slot, binding] of Object.entries(project?.reviewers ?? {})) {
+      const label = `reviewers:${slot}`;
+      try {
+        const home = reviewerHome(binding.adapter, reviewerEnv);
+        if (!home) { checks.push(line("skip", label, "API slot uses provider credential diagnostics")); continue; }
+        const identity = await probes.reviewerStatus(binding.adapter, reviewerEnv, cwd);
+        checks.push(line("pass", label, `${home.variable}=${display(home.path)}; ${identity}`));
+      } catch (error) {
+        const variable = binding.adapter === "codex-cli" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR";
+        checks.push(line("fail", label, `check ${variable} in user profile childEnv or environment; CLI login-status failed or home missing (no credential output shown)`));
+      }
+    }
     const provider = String(effective.provider ?? "anthropic");
     const model = String(effective.model ?? DEFAULT_ANTHROPIC_MODEL);
     const providerSource = sourceOf("provider", user, project, profile, env, cli);

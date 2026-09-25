@@ -76,16 +76,23 @@ export async function runApi(config, binding, prompt, buildRoleProvider) {
 const USAGE = "usage: reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix>";
 class UsageError extends Error {}
 export async function main(args) {
+  const profileIndex = args.indexOf("--profile");
+  let profile;
+  if (profileIndex !== -1) { profile = args[profileIndex + 1]; if (!profile) throw new UsageError(USAGE); args = [...args]; args.splice(profileIndex, 2); }
   const [configPath, slot, promptPath, cwd, prefix] = args;
   if (args.length !== 5 || resolve(prefix) !== prefix) throw new UsageError(USAGE);
   const { parseConfigText } = await import("../packages/cli/dist/config.js");
   const config = parseConfigText(configPath, readFileSync(configPath, "utf8"));
   if (!Object.hasOwn(config.reviewers ?? {}, slot)) throw new Error("undeclared reviewer slot");
   const binding = config.reviewers[slot];
+  const { profileChildEnv, resolveChildEnv, reviewerHome } = await import("../packages/cli/dist/child-env.js");
+  const childEnv = resolveChildEnv(await profileChildEnv(cwd, profile));
+  let resolvedHome;
+  try { resolvedHome = reviewerHome(binding.adapter, childEnv); } catch (error) { throw new Error(`reviewers:${slot}: ${error.message}`); }
   let prompt = readFileSync(promptPath, "utf8");
   if (!prompt.trim()) throw new Error("empty review prompt");
   for (const suffix of ["stdout", "stderr", "last", "md", "model.txt", "provenance.json", "verdict.json"]) if (existsSync(`${prefix}.${suffix}`)) throw new Error("output already exists; use a fresh attempt prefix");
-  const gitHead = spawnSync("git", ["-C", cwd, "rev-parse", "HEAD"], { encoding: "utf8" });
+  const gitHead = spawnSync("git", ["-C", cwd, "rev-parse", "HEAD"], { encoding: "utf8", env: childEnv });
   if (gitHead.status !== 0) throw new Error("cannot resolve reviewed worktree head");
   const reviewedHead = gitHead.stdout.trim();
   prompt += `\n\n${verdictPrompt({ reviewedHead, assertedModel: binding.model, slot, modelSource: cliAdapters[binding.adapter]?.modelSource ?? `providers.${binding.adapter.slice(4)}.model` })}`;
@@ -100,7 +107,7 @@ export async function main(args) {
     const adapter = cliAdapters[binding.adapter];
     const argv = adapter.template.map(value => value.replace("{model}", binding.model).replace("{lastMessage}", `${prefix}.last`));
     launch = [adapter.command, ...argv];
-    const env = { ...process.env };
+    const env = { ...childEnv };
     for (const key of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_BRIDGE_SESSION_ID", "CLAUDE_PID"]) delete env[key];
     const run = spawnSync(adapter.command, argv, { cwd, input: prompt, encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024, timeout: 30 * 60 * 1000 });
     writeFileSync(`${prefix}.stdout`, run.stdout ?? "");
@@ -115,6 +122,6 @@ export async function main(args) {
   writeFileSync(`${prefix}.md`, result.text);
   writeFileSync(`${prefix}.verdict.json`, JSON.stringify(verdict, null, 2) + "\n");
   writeFileSync(`${prefix}.model.txt`, result.model + "\n");
-  writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ verdict, reviewedHead, slot, adapter: binding.adapter, model: result.model, assertedModel: verdict.assertedModel, transportModel, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
+  writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ verdict, reviewedHead, slot, adapter: binding.adapter, model: result.model, assertedModel: verdict.assertedModel, transportModel, modelSource: result.modelSource, resolvedHome, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
 }
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = error instanceof UsageError ? 64 : 2; });

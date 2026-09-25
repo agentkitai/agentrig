@@ -702,3 +702,19 @@ describe("providers and roles (R3.5a)", () => {
     }
   });
 });
+
+it("headless profile childEnv reaches subprocesses and restores after rejected execution", async () => {
+  const { cwd, home } = await fixture();
+  await configAt(home, { profiles: { work: { childEnv: { CODEX_HOME: "/selected/home" } } } });
+  const previous = process.env.CODEX_HOME;
+  let invoked = false;
+  const { execFileSync } = await import("node:child_process");
+  const program = buildProgram({ config: { cwd, home, env: {} }, run: async () => {
+    invoked = true;
+    expect(execFileSync(process.execPath, ["-e", "process.stdout.write(process.env.CODEX_HOME)"], { encoding: "utf8" })).toBe("/selected/home");
+    throw new Error("fixture rejection");
+  } });
+  await expect(program.parseAsync(["node", "agentrig", "run", "task", "--profile", "work"])).rejects.toThrow("fixture rejection");
+  expect(invoked).toBe(true);
+  expect(process.env.CODEX_HOME).toBe(previous);
+});
