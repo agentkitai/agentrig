@@ -56,7 +56,7 @@ for (const step of ${JSON.stringify(steps ?? [{}])}) {
   if (step.prompt !== undefined) await hooks.get("user_prompt").handler({ sessionId, prompt: step.prompt });
   if (step.listing !== undefined) writeFileSync(${JSON.stringify(join(root, "listing"))}, JSON.stringify(step.listing));
   const task = step.task ?? ${JSON.stringify(task)};
-  const context = {cwd:${JSON.stringify(root)},sessionId,tool:{name:${JSON.stringify(name)},input:{task,label:step.label ?? ""}}};
+  const context = {cwd:${JSON.stringify(root)},sessionId,tool:{name:${JSON.stringify(name)},input:{task,label:${JSON.stringify(label)}}}};
   const before = await hooks.get("pre_tool").handler(context);
   if (before.action !== "continue") throw new Error("unexpected early refusal");
   results.push(await hooks.get("pre_spawn").handler({...context, sessionId:"not-authoritative", spawn:{parent:sessionId,task}}));
@@ -87,8 +87,8 @@ Row: {"task":"Dispatch record as a project extension hook","scope":[".agentrig/e
 Include this exact host-generated row binding on its own line in the PR body: agentrig-train-row:17b1b85d-5d2f-4e35-aafc-3c5272028099
 Return final JSON {"pr": <PR number>} through normal assistant output. Do not write a receipt file; the host captures validated run JSON. Do not claim success from a session ending: the train independently verifies merge and post-merge CI.`;
 
-it("activate binds literal train host prompt on main despite a search-index gap", async () => {
-  const p = await probe("ok", "subagent", undefined, undefined, true);
+it.each([undefined, "", "display label"])("activate records authoritative task once with label %s", async label => {
+  const p = await probe("ok", "subagent", label, undefined, true);
   expect(p.result.action).toBe("continue");
   expect(p.calls).not.toContain("--head");
   expect(p.calls).not.toContain("--search");

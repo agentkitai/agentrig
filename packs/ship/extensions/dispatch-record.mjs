@@ -22,7 +22,7 @@ function repairIntent(task) {
 
 // Framework hook exceptions/timeouts fail open. Own all failures and finish five
 // seconds before that deadline. Never retry a write whose outcome is ambiguous.
-export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, spawnEnabled = false, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false, prePrBranchForSession = () => undefined, onDispatch = () => {} } = {}) {
+export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, rowForSession = () => undefined, resumePrForSession = () => undefined, isResumeForSession = () => false, prePrBranchForSession = () => undefined, onDispatch = () => {} } = {}) {
   const absenceProofs = new Map();
   return async context => {
     if (context.spawn) {
@@ -32,11 +32,7 @@ export function createDispatchHook({ gh = "gh", git = "git", budgetMs = 25_000, 
         tool: { name: "subagent", input: { task: context.spawn.task } } };
     } else {
       if (context.tool?.name !== "subagent") return createLedgerHook({ gh, budgetMs })(context);
-      // Activated packs gate at pre_spawn, which runs after pre_tool. Do not post
-      // here either before or after that gate: a session/task cache could wrongly
-      // suppress a distinct repeated or concurrent spawn. Retain the legacy label
-      // refusal (labels are not part of the authoritative spawn envelope).
-      if (spawnEnabled && !context.tool.input?.label) return { action: "continue" };
+
     }
     const deadline = Date.now() + budgetMs;
     const run = (executable, args, input) => new Promise((resolve, reject) => {
@@ -227,7 +223,7 @@ export function activate(ctx, { gh = "gh", git = "git", budgetMs = 25_000 } = {}
     }
     return { action: "continue" };
   });
-  const dispatch = createDispatchHook({ gh, git, budgetMs, spawnEnabled: true, rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id), isResumeForSession: id => resumes.get(id), prePrBranchForSession: id => prePrBranches.get(id),
+  const dispatch = createDispatchHook({ gh, git, budgetMs, rowForSession: id => rows.get(id), resumePrForSession: id => resumePrs.get(id), isResumeForSession: id => resumes.get(id), prePrBranchForSession: id => prePrBranches.get(id),
     onDispatch: ({ spawn, pr, recordId, recordBody }) => {
       if (spawn?.role?.name !== "lander") return;
       const authority = authorities.get(spawn.parent);
@@ -237,6 +233,7 @@ export function activate(ctx, { gh = "gh", git = "git", budgetMs = 25_000 } = {}
       pending.set(key(spawn), queue);
     },
   });
+  const ledger = createLedgerHook({ gh, budgetMs });
   const merge = createMergeGuard({ gh, budgetMs, grantForSession: id => grants.get(id) });
   ctx.hooks.on("post_spawn", context => {
     const spawn = context.spawn;
@@ -251,6 +248,6 @@ export function activate(ctx, { gh = "gh", git = "git", budgetMs = 25_000 } = {}
   ctx.hooks.on("pre_spawn", dispatch, { timeoutMs: 30_000 });
   ctx.hooks.on("pre_tool", async context => {
     const result = await merge(context);
-    return result.action === "deny" ? result : dispatch(context);
+    return result.action === "deny" ? result : ledger(context);
   }, { timeoutMs: 30_000 });
 }

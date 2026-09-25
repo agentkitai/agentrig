@@ -7,7 +7,7 @@ import { expect, it } from "vitest";
 const read = (path: string) => readSkillText(new URL(`../../../${path}`, import.meta.url), "utf8");
 const skill = (name: string) => `.agentrig/skills/${name}/SKILL.md`;
 const checks: Array<[string, string, string, string[]]> = [
- ["M-lander-fixer-receipt",skill("land"),"## 1.",["`gh pr view NN --json body` read-back receipt BEFORE", "Reject a missing read-back receipt", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "match that line against the round, OLD and assigned blockers", "persisted fixer task", "counter repaired by the fixer afterwards cannot retroactively satisfy it", "must match the immutable session-store `subagent.spawn` event", "exact task text and parent session id", "does not waive receipt-before-dispatch ordering", "hook-recorded pre-edit comparison with comment ID and head", "If neither the durable fixer pre-push handoff nor that matched hook-comment-plus-spawn provenance exists"]],
+ ["M-lander-fixer-receipt",skill("land"),"## 1.",["`gh pr view NN --json body` read-back receipt BEFORE", "Reject a missing read-back receipt", "Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>", "in the GitHub PR body BEFORE dispatch", "match that line against the round, OLD and assigned blockers", "persisted fixer task", "counter repaired by the fixer afterwards cannot retroactively satisfy it", "Review coverage, dispositions and receipt-before- dispatch ordering above remain land judgments"]],
  ["M-claim-documentation",skill("topic"),"## 2.",["delimited JSON", "No first-line head gate", "Prose quotations and range expressions", "fallback cannot satisfy a landing review"]],
  ["M-mechanical-closure", "docs/SHIPPING-WORKFLOW.md", "## 3.",["it cannot replace independent focused review to close a blocker"]],
  ...["topic", "ship", "land"].map(name => ["M-model-heading", skill(name), "## Initial full review heading contract", ["initial heading model must equal the slot's pinned model", "missing required initial review, not a receipt"]] as [string,string,string,string[]]),
@@ -88,7 +88,7 @@ for (const name of ["ship", "topic"]) {
 for (const row of checks.filter(([id]) => ["M-fixer-readback", "M-lander-fixer-receipt"].includes(id))) {
  const [id, path, , phrases] = row;
  const anchor = id === "M-fixer-readback" ? "Before calling a fixer" : "For every dispatched fixer";
- const end = id === "M-fixer-readback" ? "Only then call the fixer described below, carrying that persisted ledger and counter." : "halt without retroactively manufacturing either record.";
+ const end = id === "M-fixer-readback" ? "Carry the persisted receipt, exact finding identities and counter in the fixer task." : "a mechanical allow never resolves a blocker.";
  for (const location of id === "M-fixer-readback" ? ["EOF", "after-spawn"] : ["EOF"]) {
   it(`${id} ${path} whole gate relocated ${location}`, () => {
    const s = read(path); checkRow(s, row);

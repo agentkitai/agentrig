@@ -6,7 +6,7 @@ it.each(['dogfood','ship','review','land','topic'])('%s retains mechanical ledge
   expect(text).toContain('entire existing PR body is an append-only ledger');
   expect(text).toContain('Finding identities: ');
   expect(text).toContain('without adding severity');
-  expect(text).toContain('retain every existing byte');
+  expect(text).toContain('the hook requires every existing byte');
   expect(text).toContain('fetched comment IDs');
 });
 it.each(['ship','land','topic'])('%s consumes posted evidence without manual copying', name => {

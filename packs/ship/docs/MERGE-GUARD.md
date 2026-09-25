@@ -69,4 +69,6 @@ instruct a conductor to launch another host from bash.
 
 When the guard is active, a denial is not a waiver: fix the named missing
 authority/CI/provenance or redispatch. The builder does not merge.
-Slice 3 still owns deletion of superseded manual bookkeeping prose.
+Slice 3 retires superseded manual bookkeeping prose while preserving land review-resolution
+judgment. Its PR ledger leaves the first real guarded merge decision pending for the lander;
+builder fixture passes are not a live landing receipt.

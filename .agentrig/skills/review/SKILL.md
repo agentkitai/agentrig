@@ -221,7 +221,7 @@ For every adapter launch, export `AGENTRIG_REVIEW_REPOSITORY=OWNER/REPO`,
 `AGENTRIG_REVIEW_PR=NN` and `AGENTRIG_REVIEW_PASS=PASS`. The adapter stores durable
 output/receipt pairs under `$HOME/.agentrig/review-evidence/OWNER/REPO/NN/PASS/ATTEMPT/`,
 never under review scratch. Follow docs/SHIPPING-WORKFLOW.md **Durable review evidence
-(#547)**: save the stdout manifest in the PR, validate it with
+(#547)**: the posting helper attaches the manifest automatically; validate the attached evidence with
 `node scripts/review-provenance.mjs` before scratch cleanup and again before landing,
 and never delete durable pairs during cleanup. Missing or tampered evidence refuses.
 
@@ -229,8 +229,8 @@ and never delete durable pairs during cleanup. Missing or tampered evidence refu
 
 The pre-tool ship hook guards `gh pr edit --body` / `--body-file` and `gh api`
 pull PATCH body writes. The entire existing PR body is an append-only ledger:
-retain every existing byte, including prior findings, resolutions, coverage and
-counters; append a superseding correction instead of rewriting history. A fresh
+the hook requires every existing byte, including prior findings, resolutions, coverage and
+counters. Corrections are appended, not history rewrites. A fresh
 empty body may be populated. The guard fetches the live body and validates cited
 issue-comment, inline-review-comment and review URLs against fetched comment IDs
 and exact `html_url` values. Missing comments, wrong anchors, malformed responses
