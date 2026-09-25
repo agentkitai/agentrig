@@ -1334,6 +1334,13 @@ describe("provider choice on the spawn tool", () => {
     await tool.execute({ task: "b" }, ctx);
     expect(seen).toEqual(["cloud", undefined]);
     expect(emitted.filter(e => e.type === "subagent.spawn").map(e => e.provider)).toEqual(["cloud", "local"]);
+    const fallback = subagentTool({
+      defaultProvider: "default",
+      childConfig: () => ({ provider: new ScriptedProvider([[say("done"), usage(1, 1), stop("end_turn")]]), tools: [], permissions: new RulePolicy([]), systemPrompt: "child", store, maxTokensPerTurn: 100 }),
+      createAgent,
+    });
+    await fallback.execute({ task: "flat default" }, ctx);
+    expect(emitted.filter(e => e.type === "subagent.spawn").at(-1)?.provider).toBe("default");
   });
 
   it("threads the choice through the depth re-wrap, so a grandchild's spawn still offers it (I4a)", async () => {
