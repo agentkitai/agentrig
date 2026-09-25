@@ -5,6 +5,25 @@ This is the shared review/repair policy for `dogfood`, `ship`, `topic`, `review`
 review loops, not their authorization, isolation, testing, or merge gates. These
 are model-facing judgment instructions; the ship pack owns the mechanical gates described below. No model or agent authorship identifiers belong in commits, PR titles/bodies, or code comments. The single PR-body and squash-body exception is a verbatim human authorization quote that itself contains such an identifier: preserve the quote unchanged, but never add model or agent authorship attribution.
 
+## Builder pre-push checklist (#607)
+
+The tested 12-item checklist from [#607](https://github.com/agentkitai/agentrig/issues/607)
+lives in `packs/ship/skills/shared/pre-push-checklist.md`, composed into dogfood,
+ship and topic. Conductors include its PRE-PUSH CHECKLIST block verbatim in EVERY
+builder/fixer dispatch: initial builders, continuations, retries and repair batches.
+Builders/fixers check every item before every push and record each numbered item
+as addressed with evidence or not applicable with a reason under `## Checklist`
+in the PR body. Standalone dogfood authors do the same.
+
+This is guidance, not a landing gate: reviewers and landers must not block on a
+missing or partial Checklist. Actual acceptance failures and missing required
+proof remain blocking; a completed checklist does not waive any existing gate.
+Refresh the checklist manually from recurring blocking-finding classes in reviews;
+there is no automated extraction, scoring, enforcement or new gate. Preserve the
+tested wording unless a deliberate manual refresh is authorized. Under R19, LOW
+observations and wording followups are advisories, not residual issues; real
+acceptance failures remain blocking and genuine defects retain §2 disposition.
+
 ## 1. CI and review are independent tracks
 
 `<REPO>` is the absolute path to a separate clean checkout at the fetched base-branch commit,
