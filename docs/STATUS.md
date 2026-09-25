@@ -1,3 +1,19 @@
+## Builder pre-push checklist (#607) — implementation; review/landing pending
+
+Current roadmap row: issue #607, "Adopt the builder pre-push checklist";
+next: conductor review and authorized landing. No roadmap completion marker added.
+
+The ship pack shares the twelve tested items unchanged across dogfood/ship/topic.
+Every builder/fixer dispatch carries the block verbatim, including continuations
+and retries; before each push authors record all twelve addressed/not-applicable
+items under `## Checklist`. Source: #607's experiment and manual baseline.
+Refresh is manual from recurring blocking-finding classes, with no automation.
+This is guidance, not a landing gate: missing/partial Checklist never blocks a
+reviewer or lander; actual acceptance/proof failures still block. R19 LOW wording
+observations remain advisories rather than residual issues. Rejected: checklist
+scoring, runtime hooks, and an extra landing requirement. Instruction contracts
+pin the baseline, all consumers, dispatch coverage and the non-gating boundary.
+
 ## Hook refusals (#587) — implementation; review/landing pending
 
 Current roadmap row: issue #587, "Hook refusals: no false positives on read-only merge text, distinct messages";
