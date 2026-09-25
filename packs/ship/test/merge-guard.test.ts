@@ -92,8 +92,10 @@ describe("minimal merge guard", () => {
     expect(lander.tools).toEqual(["bash", "bash_job", "read_file", "read_output", "glob", "grep", "skill", "update_plan", "write_file", "edit_file"]);
     expect(lander.body).toContain("Do not build, repair or review.");
     expect(lander.body).toContain("gh pr merge NUMBER --squash --match-head-commit FULL_HEAD");
+    // Match subagentTool's production snapshot: an unpinned manifest omits provider.
     const discovered = { name: lander.name, origin: lander.origin, hash: lander.hash,
-      tools: [...lander.tools], modelRole: lander["model-role"], provider: "selected", delegable: lander.delegable };
+      tools: [...lander.tools], modelRole: lander["model-role"], delegable: lander.delegable };
+    expect(discovered).not.toHaveProperty("provider");
     expect((await f.dispatch({ ...envelope, role: discovered })).action).toBe("continue");
     expect(await f.merge()).toEqual({ action: "continue" });
     expect((await f.merge(command, "parent")).action).toBe("deny");
