@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 /** Versioned reviewer wire contract. Prose is evidence, never machine authority. */
 import { createRequire } from 'node:module';
 const { z } = await import(createRequire(new URL('../packages/core/package.json', import.meta.url)).resolve('zod'));
@@ -90,4 +91,17 @@ export function receiptTransport(receipt, expected, verdict, adapter) {
   // Only CLI adapters currently obtain identity from an independent transport envelope.
   // API provider.model (including legacy receipts) is just the configured pin echoed back.
   return ["codex-cli", "claude-cli"].includes(receipt.adapter) ? receipt.transportModel : undefined;
+}
+
+/** Path-only launch metadata, never account credentials or reviewer prose. */
+export function receiptHome(receipt) {
+  if (receipt.adapter?.startsWith("api:")) {
+    if (receipt.home !== null) throw new Error("API reviewer provenance home must be null");
+    return "";
+  }
+  const variable = { "codex-cli": "CODEX_HOME", "claude-cli": "CLAUDE_CONFIG_DIR" }[receipt.adapter];
+  const home = receipt.home;
+  if (!variable || home?.variable !== variable || typeof home.path !== "string" || home.path.length > 4096
+    || !isAbsolute(home.path) || /[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/u.test(home.path)) throw new Error("missing/invalid reviewer home provenance");
+  return ` — home ${variable}=${JSON.stringify(home.path)}`;
 }

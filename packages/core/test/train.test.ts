@@ -341,3 +341,33 @@ it("rejects unbounded train budgets before starting the suite", async () => {
   expect(await runTrain(f.root, { command: f.command, testTimeout: async () => 120001 })).toBe("halted");
   expect(f.calls).not.toContain("test --testTimeout=120001");
 });
+
+it("profile environments reach every train command and are refreshed after fast-forward", async () => {
+  const f = await fixture(); let resolved = 0;
+  const seen: Array<NodeJS.ProcessEnv | undefined> = [];
+  expect(await runTrain(f.root, {
+    childEnvironment: async (checkout, profile) => {
+      expect(checkout).toBe(row.environment.checkout); expect(profile).toBeUndefined();
+      return { CODEX_HOME: `/home/slot-${++resolved}`, AGENTRIG_CHILD_PROFILE: "personal" };
+    },
+    command: async request => { seen.push(request.env); return f.command(request); },
+  })).toBe("empty");
+  expect(resolved).toBe(2);
+  expect(seen[0]?.CODEX_HOME).toBe("/home/slot-1");
+  expect(seen.at(-1)?.CODEX_HOME).toBe("/home/slot-2");
+  expect(seen.every(env => env?.CODEX_HOME)).toBe(true);
+  expect(f.calls.find(call => call.startsWith("run --headless"))).toContain("--profile personal");
+});
+it("reviewer environment refusal halts before even checkout validation or model launch", async () => {
+  const f = await fixture();
+  expect(await runTrain(f.root, { command: f.command, childEnvironment: async () => { throw new Error("REVIEWER_HOME_REQUIRED: set CODEX_HOME"); } })).toBe("halted");
+  expect(f.calls).toEqual([]);
+  expect(await readFile(join(f.root, "logs/1.halt.json"), "utf8")).toContain("CODEX_HOME");
+});
+
+it("train transport passes supplied profile environment while enforcing trace/PATH sanitation", async () => {
+  const f = await fixture(0);
+  const result = await trainCommand({ executable: process.execPath, argv: ["-e", "console.log(JSON.stringify({home:process.env.CODEX_HOME,path:process.env.PATH,trace:process.env.GIT_TRACE2_EVENT}))"], cwd: f.root, log: join(f.root, "env.log"), env: { CODEX_HOME: "/profile/home", PATH: "/safe:/fixture/.git-ai/bin", GIT_TRACE2_EVENT: "wrong" } });
+  expect(result.code).toBe(0);
+  expect(JSON.parse(result.stdout)).toEqual({ home: "/profile/home", path: "/safe", trace: "0" });
+});

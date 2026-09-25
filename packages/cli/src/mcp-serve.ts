@@ -1,3 +1,4 @@
+import { applyChildEnvironment } from "./profile-child-env.js";
 import type { Command } from "commander";
 import { opendir, realpath, lstat } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -148,6 +149,7 @@ export async function startMcpServe(command: Command, flags: AcpFlags, dependenc
   if (flags.json) throw new Error("MCP stdout is protocol-only");
   const cwd = await realpath(dependencies.config?.cwd ?? process.cwd());
   const loaded = await loadRunConfig(command, flags as unknown as Record<string, unknown>, { ...dependencies.config, cwd, interactive: false, notice });
+  await applyChildEnvironment(cwd, flags.profile, dependencies.config?.home);
   const opts = loaded as unknown as AcpFlags;
   opts.root = resolve(cwd, opts.root);
   if (opts.memory !== undefined) opts.memory = resolve(cwd, opts.memory);

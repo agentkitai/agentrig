@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "nod
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
-import { verdictRange, parseVerdict, receiptTransport } from "./review-verdict.mjs";
+import { verdictRange, parseVerdict, receiptTransport, receiptHome } from "./review-verdict.mjs";
 import { reviewerVerdict, assertReviewerVerdict } from "./review-finding-index.mjs";
 
 try {
@@ -39,7 +39,12 @@ try {
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");
   if (!body.trim()) throw new Error("empty reviewer body");
   const expected = { reviewedHead: head, assertedModel: model, slot: reviewer };
-  if (provenanceFile) expected.transportModel = receiptTransport(JSON.parse(readFileSync(provenanceFile, "utf8")), expected, parseVerdict(body, { reviewedHead: head, slot: reviewer }), slots[reviewer].adapter);
+  let homeHeading = "";
+  if (provenanceFile) {
+    const receipt = JSON.parse(readFileSync(provenanceFile, "utf8"));
+    expected.transportModel = receiptTransport(receipt, expected, parseVerdict(body, { reviewedHead: head, slot: reviewer }), slots[reviewer].adapter);
+    homeHeading = receiptHome(receipt);
+  }
   const verdict = assertReviewerVerdict(body, expected);
   let sizeExplanation;
   if (Buffer.byteLength(body, "utf8") > 40 * 1024) {
@@ -50,7 +55,7 @@ try {
   }
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");
-  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full`;
+  const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full${homeHeading}`;
   const payload = `${body}${proofFile === undefined ? "" : `\n${proof}`}`;
   // Payload length bounds chunk count; reserve space for its numbered marker.
   const digits = String(payload.length).length;

@@ -1,3 +1,4 @@
+import { reviewerHome, reviewerCommands, reviewerLoginSummary } from "./child-env.js";
 import { execFile } from "node:child_process";
 import { formatFeelBudgets } from "./feel-budgets.js";
 import { feelReference } from "./feel-reference.js";
@@ -9,7 +10,7 @@ import { inspectPackages } from "./packages.js";
 import { promisify } from "node:util";
 import { ChatGPTTokens, decodeJwtClaims, tokensFromEnvValue, probeProvider, type ModelProvider } from "@agentkitai/agentrig-core";
 import { parseMcpConfigText } from "./agent-builder.js";
-import { parseConfigText, resolveConfig, type ConfigFile, type ConfigValues } from "./config.js";
+import { assertNoProjectChildEnv, parseConfigText, resolveConfig, type ConfigFile, type ConfigValues } from "./config.js";
 import { DEFAULT_ANTHROPIC_MODEL, resolveProviderEntries, buildRoleProvider, type ProviderOptions, type ProviderHooks } from "./provider.js";
 import { providerProbeCachePath, providerProbeFingerprint, writeProviderProbe } from "./provider-probe-cache.js";
 import { parseTrustText, resolveProjectBoundary, type ProjectBoundary } from "./trust.js";
@@ -39,6 +40,7 @@ export interface DoctorProbes {
   stat(path: string): Promise<DoctorFileInfo>;
   boundary(cwd: string, home: string): Promise<ProjectBoundary>;
   commandExists(command: string, env: NodeJS.ProcessEnv, cwd: string): Promise<boolean>;
+  reviewerStatus(command: string, argv: readonly string[], env: NodeJS.ProcessEnv, cwd: string): Promise<{ stdout: string; stderr: string }>;
   gitState(cwd: string): Promise<DoctorGitState>;
 }
 
@@ -144,6 +146,7 @@ function defaultProbes(): DoctorProbes {
     boundary: resolveProjectBoundary,
     commandExists: defaultCommandExists,
     gitState: defaultGitState,
+    reviewerStatus: (command, argv, env, cwd) => execFileAsync(command, [...argv], { env, cwd, timeout: 10_000, maxBuffer: 16_384 }),
   };
 }
 
@@ -376,6 +379,7 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
   } else {
     const loaded = await readOptionalConfig(projectPath, probes);
     project = loaded.file;
+    try { assertNoProjectChildEnv(project); } catch { loaded.check = line("fail", "config:project", "childEnv is allowed only in user profiles, not project config"); }
     configInvalid ||= loaded.check.status === "fail";
     checks.push({ ...loaded.check, label: "config:project" });
   }
@@ -409,6 +413,21 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       cli,
       ...(profile === undefined ? {} : { profile }),
     });
+    const childEnv = { ...env, ...(profile === undefined ? {} : user?.profiles?.[profile]?.childEnv) };
+    for (const [slot, binding] of Object.entries(project?.reviewers ?? {})) {
+      const label = `reviewers:${slot}`;
+      let homeInfo;
+      try { homeInfo = reviewerHome(binding.adapter, childEnv); }
+      catch (error) { checks.push(line("fail", label, (error as Error).message)); continue; }
+      if (homeInfo === null) { checks.push(line("skip", label, "API slot uses existing provider credential diagnostics")); continue; }
+      const command = reviewerCommands[binding.adapter as keyof typeof reviewerCommands];
+      const location = `${homeInfo.variable}=${display(homeInfo.path)}`;
+      try {
+        const result = await probes.reviewerStatus(command.command, command.status, childEnv, cwd);
+        const summary = reviewerLoginSummary(binding.adapter, result.stdout, result.stderr);
+        checks.push(line(summary ? "pass" : "fail", label, `${location}; ${summary ?? "CLI did not report a recognized logged-in status; run its login command under this home"}`));
+      } catch { checks.push(line("fail", label, `${location}; CLI login-status command failed or timed out; verify installation and login under this home`)); }
+    }
     const provider = String(effective.provider ?? "anthropic");
     const model = String(effective.model ?? DEFAULT_ANTHROPIC_MODEL);
     const providerSource = sourceOf("provider", user, project, profile, env, cli);

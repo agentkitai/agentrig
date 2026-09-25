@@ -158,7 +158,8 @@ checkout; mixed assertions, malformed/incomplete reports, unsafe file names,
 unhandled errors and other timeout budgets fail closed. Original output and each
 isolated argv remain in the row log. Never retry the row itself.
 Git and pnpm must be available; landing verification uses authenticated `gh`.
-Children inherit the operator's environment, without git-ai PATH injection and with
+Children inherit the operator's environment overlaid by the selected user profile's
+`childEnv` (see below), without git-ai PATH injection and with
 `GIT_TRACE2_EVENT=0`. The command uses argv spawning, not shell interpolation.
 
 A JSON `train.status` is printed after every completed or halted row and by the
@@ -193,3 +194,60 @@ To continue a halted task, retain its evidence and enqueue a **new unique row id
 with explicit resume pointers and unchanged authorization bounds. Existing done or
 halted row ids and stale result receipts are never reused. Directory layout/name/
 lock errors are command errors before execution, not evidence of a landed row.
+
+
+## Profile-scoped child environment
+
+Store non-secret launch settings in the **user** config `~/.agentrig/config.json`,
+not repository config. Only the selected user profile supplies `childEnv`; it
+replaces matching inherited variables and preserves unrelated environment values.
+Project profiles cannot supply this map. Profile launch selection is process-scoped:
+normal CLI run/resume/review, ACP/web/MCP sessions and their spawned processes inherit
+the same selected user environment. Headless children inherit it too; this adds no
+trust, permission, sandbox or credential grant.
+
+```json
+{"profiles":{"personal":{"childEnv":{
+  "CODEX_HOME":"/absolute/personal/codex",
+  "CLAUDE_CONFIG_DIR":"/absolute/personal/claude"
+}}}}
+```
+
+`CODEX_HOME` is the Codex CLI configuration/login home; `CLAUDE_CONFIG_DIR` is the
+Claude CLI configuration/login home. Set them to the homes you already logged into.
+Neither AgentRig nor this setting migrates, reads or prints reviewer credential
+files. Never put secrets in `childEnv`: it accepts at most 64 uppercase variable
+names (1–128 characters) with nonblank, control-free string values (1–4096 characters).
+Credential-like names/values and reserved `AGENTRIG_*`, `NODE_OPTIONS`, `LD_*`, `DYLD_*`
+names are refused. Other values are literal plain strings, not shell expansions;
+reviewer homes must be absolute paths, so `~` is not expanded. This is not a general
+secret detector: operators must not disguise credentials as ordinary settings.
+
+Launch `agentrig --profile personal train /absolute/train`; an explicit row
+`environment.profile` overrides that default. User-only launch profiles retain the
+base project checks; a matching project profile selects its check declaration. Unknown
+profile names are refused rather than falling back to another account. Each row resolves its own environment
+before any command and revalidates reviewer slots after fast-forward, before checks
+or headless model launch. All row processes, including retries, receive that environment;
+the existing git-ai PATH removal and `GIT_TRACE2_EVENT=0` protections still apply.
+`--status` remains read-only. Missing, blank, relative or malformed reviewer homes
+halt with `REVIEWER_HOME_REQUIRED` naming the exact variable, rather than silently
+using a vendor default. API slots need no CLI home.
+
+Before launching reviewers, run `agentrig doctor --profile personal` in the trusted
+reviewed checkout. Each `reviewers:<slot>` line executes `codex login status` or
+`claude auth status --json` under the selected home (10-second/16-KiB bound). Doctor
+prints the home and only recognized login state plus an email if exposed; where a
+CLI exposes no account identity it says so, never guesses. Unrecognized output,
+nonzero status, unavailable commands or timeouts fail that slot, without echoing raw
+output or reading credential files. API slots refer to existing provider diagnostics.
+
+For standalone script launches, use
+`node <BASE>/scripts/reviewer-adapters.mjs <CONFIG> <SLOT> <PROMPT> <WT> <PREFIX> --profile personal`.
+Without the flag, a CLI-launched adapter inherits `AGENTRIG_CHILD_PROFILE`; without
+any selection only explicitly exported homes apply. The adapter records
+`home: {variable, path}` beside `transportModel` (`null` for API homes). The path is
+the exact absolute value passed to the CLI, preserving symlink-sensitive components;
+no home contents or credentials are included. Posting appends
+` — home CODEX_HOME="/absolute/personal/codex"` (or `CLAUDE_CONFIG_DIR`) to the
+canonical review heading from that bound receipt, including every numbered chunk.

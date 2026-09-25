@@ -57,6 +57,19 @@ the slot's pinned model; it duplicates no endpoints, credentials or routing. See
 
 Each declared slot's initial comment must start with:
 `## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+
+CLI receipts append ` — home <VARIABLE>=<JSON-quoted absolute path>` to that canonical
+first line; this suffix comes only from the adapter's validated `home` provenance,
+not reviewer prose or the launching shell at posting time. Require the same home
+suffix on every chunk. API slots have `home: null` and no suffix. Legacy exact-model
+script calls without receipts retain their old heading; they are not shipping proof.
+Before launching CLI reviewers, select the operator's user profile with adapter
+`--profile <name>` (or inherit the CLI's `AGENTRIG_CHILD_PROFILE`) and run
+`agentrig doctor --profile <name>` in the trusted reviewed project. The adapter and
+train require explicit `CODEX_HOME` / `CLAUDE_CONFIG_DIR` via user-profile `childEnv`
+or the inherited environment; never default to an implicit login home. See
+[launch environment](../../../docs/TRAIN-OPERATIONS.md#profile-scoped-child-environment).
+
 Substitute the slot name, transport-proven pinned model, full reviewed PR head SHA and full origin/main SHA.
 The initial heading model must equal the slot's pinned model. A different model makes this a
 missing required initial review, not a receipt. Require the complete heading, not just a prefix

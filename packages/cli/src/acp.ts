@@ -1,3 +1,4 @@
+import { applyChildEnvironment } from "./profile-child-env.js";
 import type { Command } from "commander";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -60,6 +61,7 @@ export async function startAcp(command: Command, flags: AcpFlags, dependencies: 
       const loaded = await loadRunConfig(command, defaults as unknown as Record<string, unknown>, {
         ...dependencies.config, cwd: request.cwd, interactive: false, notice,
       });
+      await applyChildEnvironment(request.cwd, flags.profile, home);
       const opts = loaded as unknown as AcpFlags;
       // Every cwd-relative runtime location is resolved per session, never via process.chdir.
       opts.root = resolve(request.cwd, opts.root);

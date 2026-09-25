@@ -1,5 +1,17 @@
 # Status
 
+## Profile-scoped child environment (#506; implementation, independent review pending)
+
+User profiles carry bounded non-secret childEnv settings into CLI and train descendants.
+CLI reviewer slots require explicit absolute homes, doctor probes login status without
+reading credentials, and adapter receipts/review headings carry path-only home provenance.
+User settings override inherited values; project childEnv is refused. Train revalidates
+after fast-forward and retains transport sanitation. Legacy receipt-free exact-model
+posting remains script-compatible, not shipping evidence. No account is inferred when
+a CLI status command does not expose identity. Repair round: 0/3; residuals none.
+Current roadmap row: issue #506 replay only; no roadmap row completion or next-row
+advance is claimed. ROADMAP markers are forbidden by the controlled replay.
+
 ## Reviewer adapter usage and review-policy residuals (#505, #508, #510, #511; implementation, proof pending)
 
 Reviewer CLI argument-count and output-prefix mistakes now fail with EX_USAGE before launch without consuming a reviewer retry. Transport-proven numeric GPT major-family assertions cover suffixed minor pins while retaining exact transport proof. Shipping instructions distinguish dispatched fixer tasks from durable fixer pre-push handoffs and preserve the sole verbatim-human-authorization-quote exception to identifier bans in PR and squash bodies. Repair round: 0/3; review disposition pending; residuals none. No roadmap completion is claimed.

@@ -49,6 +49,7 @@ function fixture(): Fixture {
     },
     async boundary() { return { projectRoot: ROOT, userStateSafe: true }; },
     async commandExists() { return true; },
+    async reviewerStatus() { throw new Error("unexpected reviewer probe"); },
     async gitState() { return { inside: true, branch: "feat/test", detached: false }; },
   };
   return {
@@ -638,4 +639,38 @@ it("prints all five measured feel references through ordinary doctor without pro
     expect(text).toContain(`feel:E1:${task}`);
   }
   expect(text).not.toContain("probe:usage");
+});
+
+
+it("reviewer doctor resolves each user-profile home, runs login status, and never reads credentials", async () => {
+  const f = fixture();
+  f.files.set(USER_CONFIG, JSON.stringify({ profiles: { personal: { childEnv: { CODEX_HOME: "/personal/codex", CLAUDE_CONFIG_DIR: "/personal/claude" } } } }));
+  f.files.set(PROJECT_CONFIG, JSON.stringify({ reviewers: { first: { adapter: "codex-cli", model: "pin" }, second: { adapter: "claude-cli", model: "pin" } } }));
+  const calls: unknown[] = [];
+  f.probes.reviewerStatus = async (command, argv, env, cwd) => {
+    calls.push({ command, argv, codex: env.CODEX_HOME, claude: env.CLAUDE_CONFIG_DIR, cwd });
+    return command === "codex" ? { stdout: "", stderr: "Logged in using ChatGPT" } : { stdout: JSON.stringify({ loggedIn: true, email: "operator@example.com", token: "never-print" }), stderr: "" };
+  };
+  const result = await diagnose({ ...f.options, cli: { profile: "personal" }, env: { CODEX_HOME: "/wrong" } });
+  expect(find(result.lines, "reviewers:first")).toMatch(/^pass reviewers:first /);
+  expect(find(result.lines, "reviewers:first")).toContain('/personal/codex');
+  expect(find(result.lines, "reviewers:second")).toContain("operator@example.com");
+  expect(calls).toEqual([
+    { command: "codex", argv: ["login", "status"], codex: "/personal/codex", claude: "/personal/claude", cwd: ROOT },
+    { command: "claude", argv: ["auth", "status", "--json"], codex: "/personal/codex", claude: "/personal/claude", cwd: ROOT },
+  ]);
+  expect(result.lines.join("\n")).not.toContain("never-print");
+  expect(f.reads.some(path => /auth\.json|credentials/u.test(path))).toBe(false);
+  f.probes.reviewerStatus = async () => { throw new Error("secret-stderr"); };
+  const failed = await diagnose({ ...f.options, cli: { profile: "personal" } });
+  expect(find(failed.lines, "reviewers:first")).toContain("failed or timed out");
+  expect(failed.lines.join("\n")).not.toContain("secret-stderr");
+  f.probes.reviewerStatus = async () => ({ stdout: "unrecognized private output", stderr: "secret-stderr" });
+  const unknown = await diagnose({ ...f.options, cli: { profile: "personal" } });
+  expect(find(unknown.lines, "reviewers:first")).toMatch(/^fail reviewers:first /);
+  expect(find(unknown.lines, "reviewers:first")).toContain("did not report a recognized logged-in status");
+  expect(unknown.lines.join("\n")).not.toContain("private output");
+  const absent = await diagnose({ ...f.options, env: {} });
+  expect(find(absent.lines, "reviewers:first")).toContain("REVIEWER_HOME_REQUIRED: set CODEX_HOME");
+  expect(find(absent.lines, "reviewers:second")).toContain("CLAUDE_CONFIG_DIR");
 });

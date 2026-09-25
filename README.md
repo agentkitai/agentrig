@@ -273,3 +273,6 @@ PRs and main pushes. It combines the eight-task structural suite and injection c
 with scripted Linux-container PASS/FAIL/human-PENDING checks, retaining bounded evidence
 even when a control fails. It needs no model credentials and measures mechanics, not
 model quality. See [R9c](docs/plans/R9c.md) for the local runner and scheduling limits.
+
+User profiles may set non-secret `childEnv` launch settings, including explicit reviewer
+CLI homes `CODEX_HOME` and `CLAUDE_CONFIG_DIR`; see [configuration and reviewer login checks](docs/TRAIN-OPERATIONS.md#profile-scoped-child-environment).

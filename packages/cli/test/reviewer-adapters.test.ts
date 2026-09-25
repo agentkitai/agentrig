@@ -53,7 +53,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 const runner = fileURLToPath(new URL("../../../scripts/reviewer-adapters.mjs", import.meta.url));
-const usage = "usage: reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix>";
+const usage = "usage: reviewer-adapters.mjs <config> <slot> <prompt-file> <owned-worktree> <absolute-output-prefix> [--profile <name>]";
 it("wrong argument count exits EX_USAGE before launch", () => {
   const run = spawnSync(process.execPath, [runner, "only-a-config"], { encoding: "utf8" });
   expect(run.status).toBe(64);
@@ -72,7 +72,7 @@ it("relative output prefix exits EX_USAGE before vendor launch and writes no std
     const prompt = join(dir, "prompt");
     writeFileSync(config, JSON.stringify({ reviewers: { Codex: { adapter: "codex-cli", model: "gpt-5.6-sol" } } }));
     writeFileSync(prompt, "review");
-    const run = spawnSync(process.execPath, [runner, config, "Codex", prompt, dir, "relative-prefix"], { encoding: "utf8", cwd: dir, env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const run = spawnSync(process.execPath, [runner, config, "Codex", prompt, dir, "relative-prefix"], { encoding: "utf8", cwd: dir, env: { ...process.env, AGENTRIG_CHILD_PROFILE: "", PATH: `${dir}:${process.env.PATH}` } });
     expect(run.status).toBe(64);
     expect(run.stderr.trim()).toBe(usage);
     expect(existsSync(launched)).toBe(false);
@@ -97,11 +97,12 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ reviewers: { custom: { adapter, model: "pinned" } } }));
     const prompt = join(dir, "prompt"); writeFileSync(prompt, "source bundle; checks green");
-    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", CLAUDE_CODE_CHILD_SESSION: "child", CLAUDE_CODE_MESSAGING_SOCKET: "/parent/socket", CLAUDE_CODE_MESSAGING_TOKEN: "parent-token", CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge", CLAUDE_PID: "12345", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
+    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix], { encoding: "utf8", env: { ...process.env, AGENTRIG_CHILD_PROFILE: "", PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, CODEX_HOME: join(dir, "codex-home"), CLAUDE_CONFIG_DIR: join(dir, "claude-home"), CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", CLAUDE_CODE_CHILD_SESSION: "child", CLAUDE_CODE_MESSAGING_SOCKET: "/parent/socket", CLAUDE_CODE_MESSAGING_TOKEN: "parent-token", CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge", CLAUDE_PID: "12345", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
     const prefix = join(dir, "out");
     const run = invoke(prefix);
     expect(run.status, run.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "argv"), "utf8"))).toEqual(cliAdapters[adapter].template.map((value: string) => value.replace("{model}", "pinned").replace("{lastMessage}", `${prefix}.last`)));
+    expect(JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8")).home).toEqual({ variable: adapter === "codex-cli" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR", path: join(dir, `${command}-home`) });
     const childEnv = JSON.parse(readFileSync(join(dir, "env"), "utf8"));
     for (const name of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_BRIDGE_SESSION_ID", "CLAUDE_PID"]) expect(childEnv).not.toHaveProperty(name);
     expect(childEnv).toMatchObject({ PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" });
@@ -155,4 +156,40 @@ it.each([
 it("M-overlong-head: no partial-token normalization", () => {
   const raw = `Reviewed head ${"a".repeat(41)}\nVERDICT: PASS\n`;
   expect(normalizeReviewerHead(raw)).toEqual({ text: raw, tolerances: [] });
+});
+
+it.each(["codex-cli", "claude-cli"])("%s fails before reading prompt or invoking vendor when its home is missing", adapter => {
+  const dir = mkdtempSync(join(tmpdir(), "review-no-home-"));
+  try {
+    const config = join(dir, "config.json");
+    writeFileSync(config, JSON.stringify({ reviewers: { fixture: { adapter, model: "pin" } } }));
+    const env = { ...process.env, AGENTRIG_CHILD_PROFILE: "" }; delete env.CODEX_HOME; delete env.CLAUDE_CONFIG_DIR;
+    const result = spawnSync(process.execPath, [runner, config, "fixture", "absent-prompt", dir, join(dir, "out")], { env, encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain(`REVIEWER_HOME_REQUIRED: set ${adapter === "codex-cli" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"}`);
+    expect(existsSync(join(dir, "out.stdout"))).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it("standalone adapter --profile overrides inherited homes and rejects unknown/missing profile values", () => {
+  const dir = mkdtempSync(join(tmpdir(), "review-profile-"));
+  try {
+    const cwd = join(dir, "repo"), home = join(dir, "user"), bin = join(dir, "bin"), head = "a".repeat(40);
+    mkdirSync(join(cwd, ".git"), { recursive: true }); mkdirSync(join(home, ".agentrig"), { recursive: true }); mkdirSync(bin);
+    const selectedHome = join(home, "chosen-home");
+    writeFileSync(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: { personal: { childEnv: { CODEX_HOME: selectedHome } } } }));
+    writeFileSync(join(cwd, "config.json"), JSON.stringify({ reviewers: { fixture: { adapter: "codex-cli", model: "pin" } } }));
+    writeFileSync(join(cwd, "prompt"), "fixture review");
+    writeFileSync(join(bin, "git"), `#!/bin/sh\nprintf '%s\\n' '${head}'\n`); chmodSync(join(bin, "git"), 0o755);
+    const verdict = `<!-- agentrig-verdict:v1 -->\n${JSON.stringify({ version: 1, reviewedHead: head, slot: "fixture", assertedModel: "pin", modelSource: "fixture", verdict: "PASS", findings: [] })}\n<!-- /agentrig-verdict -->`;
+    writeFileSync(join(bin, "codex"), `#!${process.execPath}\nconst fs=require('node:fs'); if(process.env.CODEX_HOME!==${JSON.stringify(selectedHome)}) process.exit(7); console.error('model: pin'); fs.writeFileSync(process.argv[process.argv.indexOf('--output-last-message')+1],${JSON.stringify(verdict)});`); chmodSync(join(bin, "codex"), 0o755);
+    const env = { ...process.env, HOME: home, USERPROFILE: home, AGENTRIG_CHILD_PROFILE: "", CODEX_HOME: "/wrong/inherited", PATH: `${bin}:${process.env.PATH}` };
+    const args = [runner, join(cwd, "config.json"), "fixture", join(cwd, "prompt"), cwd, join(cwd, "out")];
+    const result = spawnSync(process.execPath, [...args, "--profile", "personal"], { env, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(readFileSync(join(cwd, "out.provenance.json"), "utf8")).home).toEqual({ variable: "CODEX_HOME", path: selectedHome });
+    const unknown = spawnSync(process.execPath, [...args, "--profile", "missing"], { env, encoding: "utf8" });
+    expect(unknown.status).toBe(2); expect(unknown.stderr).toContain("unknown config profile");
+    expect(spawnSync(process.execPath, [...args, "--profile"], { env }).status).toBe(64);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

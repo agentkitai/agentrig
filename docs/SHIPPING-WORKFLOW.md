@@ -276,3 +276,25 @@ Posting supplies `--provenance <PREFIX>.provenance.json`. Land retrieves the sam
 and runs `node scripts/review-finding-index.mjs --validate FILE REVIEWED_HEAD SLOT MODEL TRUSTED_ADAPTER_RECEIPT`
 on the reassembled canonical body. Never reconstruct a receipt from the configured pin
 or reviewer prose; missing or mismatched artifacts require recovery or an adapter rerun.
+
+
+### Launching reviewers with an explicit login home
+
+Configure user-profile `childEnv` as described in
+[train operations](TRAIN-OPERATIONS.md#profile-scoped-child-environment), then run
+`agentrig doctor --profile <name>` in the trusted reviewed checkout before dispatch.
+Launch the base-pinned reviewer adapter with `--profile <name>` or the CLI-inherited
+`AGENTRIG_CHILD_PROFILE`. Profile values override inherited environment values;
+project config cannot supply `childEnv`. CLI slots require an absolute `CODEX_HOME`
+or `CLAUDE_CONFIG_DIR`; `REVIEWER_HOME_REQUIRED` is a launch configuration refusal,
+not a completed review. Never repair it by reading credentials or inventing identity.
+Train rechecks declared slots before launching its children. API slots have no CLI
+home and retain their existing provider credential path.
+
+Adapter provenance includes `home: {variable, path}` next to `transportModel` (API:
+`home: null`). Posting validates the adapter/variable binding and appends
+` — home <VARIABLE>=<JSON-quoted absolute path>` to the canonical first-line heading;
+every chunk must carry the identical suffix. Carry that actual receipt through
+landing. Legacy exact-model no-receipt helper calls keep the old heading for script
+compatibility, but do not satisfy shipping's trusted-receipt requirement. Doctor
+reports only recognized login state/account email, never raw login output or secrets.

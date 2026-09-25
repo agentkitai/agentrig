@@ -1,3 +1,4 @@
+import { applyChildEnvironment } from "./profile-child-env.js";
 import { registerTrainCommand } from "./train.js";
 import { Command, InvalidArgumentError } from "commander";
 import { readFileSync } from "node:fs";
@@ -185,7 +186,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand); run commands also accept built-in recommended; other unknown names list available profiles (names only)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "web", "mcp-serve"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "web", "mcp-serve", "train"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -334,11 +335,13 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     const globalProfile = (cmd.optsWithGlobals() as { profile?: string }).profile;
     if (opts.profile === undefined && globalProfile !== undefined) opts = { ...opts, profile: globalProfile };
     try {
-      return (await loadRunConfig(cmd, opts as unknown as Record<string, unknown>, {
+      const loaded = await loadRunConfig(cmd, opts as unknown as Record<string, unknown>, {
         ...dependencies.config,
         interactive,
         confirmTrust: dependencies.config?.confirmTrust ?? confirmTrust,
-      })) as unknown as T;
+      });
+      await applyChildEnvironment(dependencies.config?.cwd ?? process.cwd(), opts.profile, dependencies.config?.home);
+      return loaded as unknown as T;
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;
@@ -688,6 +691,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       for (const [key, value] of Object.entries(defaults))
         if (cmd.getOptionValueSource(key) === undefined) cmd.setOptionValueWithSource(key, value, "default");
       const profile = await loadRunConfig(cmd, defaults, dependencies.config);
+      await applyChildEnvironment(dependencies.config?.cwd ?? process.cwd(), opts.against, dependencies.config?.home);
       const result = await withMaintenanceSignal(signal => evaluateSessions({
         sessions: ids, against: opts.against, fixtures: opts.fixtures, output: opts.output,
         profile: { ...profile, provider: profile.provider ?? "anthropic", model: profile.model ?? DEFAULT_ANTHROPIC_MODEL,

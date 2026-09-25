@@ -1,3 +1,4 @@
+import { ChildEnvSchema } from "./child-env.js";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -205,7 +206,7 @@ export type ReviewerSlot = z.output<typeof ReviewerSlotSchema>;
 // Declarations are file metadata, not runtime launch/evaluation settings.
 const ConfigDeclarationSchema = ConfigValuesSchema.extend({ checks: ProjectChecksSchema.optional() });
 const ConfigFileSchema = ConfigDeclarationSchema.extend({
-  profiles: z.record(ConfigDeclarationSchema).optional(),
+  profiles: z.record(ConfigDeclarationSchema.extend({ childEnv: ChildEnvSchema.optional() })).optional(),
   reviewers: ReviewersSchema.optional(),
 }).superRefine((data, ctx) => {
   for (const [slot, binding] of Object.entries(data.reviewers ?? {})) {
@@ -293,12 +294,23 @@ export function parseConfigText(path: string, text: string): ConfigFile {
       Object.hasOwn(raw.reviewers, "__proto__")) {
     throw new Error(`invalid config ${path} at reviewers.__proto__: invalid reviewer slot name`);
   }
+  if (isPlainObject(raw) && isPlainObject(raw.profiles)) {
+    for (const profile of Object.values(raw.profiles)) {
+      if (isPlainObject(profile) && isPlainObject(profile.childEnv) && Object.hasOwn(profile.childEnv, "__proto__")) {
+        throw new Error(`invalid config ${path}: reserved childEnv variable`);
+      }
+    }
+  }
   const parsed = ConfigFileSchema.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new Error(`invalid config ${path} at ${issueField(issue)}: ${safeIssueMessage(issue)}`);
   }
   return parsed.data;
+}
+
+export function assertNoProjectChildEnv(file: ConfigFile | undefined): void {
+  if (Object.values(file?.profiles ?? {}).some(profile => profile.childEnv !== undefined)) throw new Error("childEnv is allowed only in operator-owned user profiles, not project config");
 }
 
 /** Read and validate one config boundary. Missing files are the only errors ignored. */
@@ -324,7 +336,7 @@ export interface ResolveConfigInput<T extends Record<string, unknown>> {
 
 function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   if (file === undefined) return {};
-  const { profiles: _profiles, checks: _checks, reviewers: _reviewers, ...values } = file;
+  const { profiles: _profiles, checks: _checks, reviewers: _reviewers, childEnv: _childEnv, ...values } = file as ConfigFile & { childEnv?: unknown };
   return values;
 }
 
@@ -416,6 +428,7 @@ export async function loadRunConfig(
   const project = trust.trusted
     ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json"))
     : undefined;
+  assertNoProjectChildEnv(project);
   const selected = (file: ConfigFile | undefined): ConfigValues | undefined =>
     profile === undefined ? undefined : file?.profiles?.[profile];
   const configHas = (key: keyof ConfigValues): boolean =>
