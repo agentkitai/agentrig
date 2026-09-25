@@ -17,9 +17,9 @@ function validRepairTimestamp(timestamp) {
 
 function repairIntent(task) {
   // Round zero and ledger setup prose are initial-build context, not repairs.
-  // Detect positive numerators even with damaged punctuation/denominators;
+  // Detect positive numerators even with damaged punctuation/denominators or split lines;
   // strict standalone receipt validation below must still refuse those tasks.
-  return /Repair round\b[^\p{L}\d\r\n]*0*[1-9]\d*|Pre-dispatch read-back\b/iu.test(task)
+  return /Repair round\b[^\p{L}\d]*0*[1-9]\d*|Pre-dispatch read-back\b/iu.test(task)
     || (/\bOLD\s+[a-f0-9]{40}\b/iu.test(task) && assignedFindings(operativeLines(task)).length > 0);
 }
 

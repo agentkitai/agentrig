@@ -613,7 +613,7 @@ supported. Append source identities and resolution evidence; do not collapse the
 
 Initial builder tasks may request `Initialize Repair round: 0/3, Review disposition, Residuals`
 without a live PR. Round zero and ledger-initialization prose are not repair receipts.
-Positive repair rounds (N >= 1), including inline/quoted or malformed receipts,
+Positive repair rounds (N >= 1), including inline/quoted, split-line or malformed receipts,
 and Pre-dispatch read-back markers still trigger strict live-PR receipt validation;
 a zero-round mention never exempts another repair receipt in the same task.
 

@@ -11,6 +11,9 @@ receipts. Inline/quoted positive receipts, OLD-plus-finding safety detection,
 exact live-head/source comparisons and pre-PR recovery gates remain intact.
 Rejected: exempting an entire task merely because it contains round zero; mixed
 zero/positive or read-back tasks still fail closed. No runtime/core policy added.
+X1 repair: positive numerators split across LF/CRLF or blank lines now enter strict
+validation in both no-PR and live-PR paths; split zero and ledger prose remain
+initial context. Fail-first tests and newline-exclusion mutants pin this boundary.
 Tests exercise both hook entry points, CRLF, blank/prose/quoted context, mixed
 receipts and #557 inline cases. R19 LOW wording followups remain advisories.
 

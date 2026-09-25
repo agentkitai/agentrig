@@ -407,6 +407,27 @@ it.each([
   expect(p.result.reason).toContain('standalone');
 });
 
+describe.each(['no-pr', 'ok'])('#610 X1 split receipts with %s', mode => {
+  it.each(['\n', '\r\n', '\n\n'])('positive numerator across %j enters strict validation', async newline => {
+    const p = await repairProbe(mode, `Repair round:${newline}1/3`);
+    expect(p.result.action).toBe('deny');
+    expect(p.result.reason).toContain(mode === 'no-pr' ? 'requires a live PR' : 'malformed repair intent');
+    expect(p.result.reason).toContain('standalone');
+    if (mode === 'no-pr') expect(p.calls).not.toContain('POST');
+    else {
+      expect(p.calls).toContain('"pr","view","7"');
+      expect(p.body).toContain('Pre-edit comparison: FAIL');
+    }
+  });
+  it.each(['Repair round:\n0/3', 'Repair round:\r\n0/3', 'Initialize Repair round:\nledger with 3 sections.'])('zero and ledger prose stay initial: %s', async task => {
+    const p = await repairProbe(mode, task);
+    expect(p.result.action).toBe('continue');
+    expect(p.body).not.toContain('Pre-edit comparison: PASS');
+    if (mode === 'no-pr') expect(p.calls).not.toContain('POST');
+    else expect(p.calls).toContain('POST');
+  });
+});
+
 it('repair intent without a live PR cannot take initial-builder bypass', async () => {
   const p = await probe('no-pr', 'subagent', undefined, undefined, false, '', undefined, repairTask);
   expect(p.result.action).toBe('deny');
