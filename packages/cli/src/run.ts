@@ -61,6 +61,8 @@ export const RUN_NUMERIC_DEFAULTS = {
 } as const;
 
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
+  /** Ship routing data, not the conductor provider. */
+  builderProvider?: string;
   /** Validated schedule CLI/config option; not a provider option. */
   heartbeatMaxTurns?: string | number;
   outputSchema?: string;
@@ -453,6 +455,11 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
     if (opts.outputMode === "native") {
       const resolved = resolveProviderEntries(opts);
       if (resolved.entries[resolved.roleNames.main]?.provider !== "openai") throw new Error("Native output currently requires the OpenAI-compatible adapter; use prompted mode for other adapters");
+    }
+    if (opts.builderProvider !== undefined) {
+      const { entries } = resolveProviderEntries(opts);
+      if (!Object.hasOwn(entries, opts.builderProvider)) throw new Error("BUILDER_PROVIDER_UNKNOWN: declare the named builder provider in the active profile or correct --builder-provider");
+      task = `Ship run option: builderProvider=${JSON.stringify(opts.builderProvider)}. Apply the ship skill's builder routing contract.\n${task}`;
     }
     const outputContract = opts.outputSchema === undefined ? undefined : await readOutputContract(opts.outputSchema, opts.outputMode ?? "prompted");
     const onQuestion = await questionPolicy(opts.answerPolicy);

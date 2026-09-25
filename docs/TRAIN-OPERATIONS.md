@@ -120,7 +120,8 @@ Each row is a strict zod-validated object (unknown fields are refused):
 {
   "task": "Implement the one authorized roadmap row using ship",
   "authorization": "The human's exact scoped task/merge authorization quote",
-  "scope": ["packages/core/src", "packages/core/test"],
+  "scope": ["docs", "packages/core/test"],
+  "builderProvider": "sol",
   "environment": {
     "checkout": "/absolute/dedicated-checkout",
     "repository": "owner/repo",
@@ -130,6 +131,14 @@ Each row is a strict zod-validated object (unknown fields are refused):
   }
 }
 ```
+
+`builderProvider` is an optional named provider entry from the active profile;
+unknown names are refused during queued-row validation before checkout commands.
+Train forwards it as `agentrig run --builder-provider <entry>`, a documented headless
+run option carrying routing data to ship (see its single [builder routing contract](../.agentrig/skills/ship/SKILL.md#builder-routing)). It does not select the conductor's provider.
+The operator rule is: doc/test/helper-scoped rows default to `sol`, product rows to
+the profile default; set the row field accordingly and re-check after ten Sol rows.
+This is operator policy, not automatic scope classification or a new provider declaration.
 
 `profile` is optional. `environment.sessionRoot` optionally selects an absolute
 session store; otherwise every row uses `<dir>/logs/sessions`. Optional
@@ -227,7 +236,7 @@ A JSON `train.status` is printed after every completed or halted row and by the
 read-only `agentrig train <dir> --status`. It includes `queue`, `active`, `done`,
 `halted`, `invalidEntries`, `usage` and `pricingNote`; accounting failures yield
 `usage: null` plus `usageError`, never misleading zero totals. Each `usage` row has
-`row`, `totals`, `sessions` (with per-session `totals` and provider/model `models`),
+`row`, `totals`, `sessions` (with per-session `totals`, provider/model `models`, and `builderProvider`),
 and `coverageWarnings`. Totals expose `calls`, `input`, `output`, `cacheRead`,
 `cacheWrite`, `estimatedMicros`, `unpricedCalls` and `incompleteCalls`. Raw token
 counts include unpriced calls; `estimatedMicros` covers only the priced subset at
@@ -259,3 +268,9 @@ lock errors are command errors before execution, not evidence of a landed row.
 Reviewer adapter preflight: missing homes and invalid profiles exit 64 before launch and
 do not consume the single exit-2 retry. Fix configuration before re-dispatch. Review
 headings include transport model and JSON-quoted resolved home in the canonical suffix.
+
+Per-session `builderProvider` reports the effective named entry from the immutable
+spawn event, including row overrides and zero-call children. It applies to all child
+jobs so the PR inventory can distinguish builder/fixer from other roles; it is not
+an inference that every child is a builder. Root sessions and historical spawns
+without named-entry provenance report null (unknown), never the requested row value.

@@ -1328,9 +1328,12 @@ describe("provider choice on the spawn tool", () => {
       },
       createAgent,
     });
-    const ctx = { cwd: root, sessionId: "parent", emit: () => {}, signal: new AbortController().signal };
+    const events: Array<Record<string, unknown>> = [];
+    const ctx = { cwd: root, sessionId: "parent", emit: (e: Record<string, unknown>) => { events.push(e); }, signal: new AbortController().signal };
     await tool.execute({ task: "a", provider: "cloud" }, ctx);
+    expect(events.find(e => e.type === "subagent.spawn")).toMatchObject({ provider: "cloud" });
     await tool.execute({ task: "b" }, ctx);
+    expect(events.filter(e => e.type === "subagent.spawn").map(e => e.provider)).toEqual(["cloud", "local"]);
     expect(seen).toEqual(["cloud", undefined]);
   });
 

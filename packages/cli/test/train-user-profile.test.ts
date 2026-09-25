@@ -57,3 +57,19 @@ it("train --status wires profile validation without claiming the queued row", as
   expect(JSON.parse(output)).toMatchObject({ queue: 1, active: 0, halted: 0, invalidEntries: [expect.stringContaining('unknown config profile "missing"')] });
   expect(await readdir(join(queue, "queue"))).toEqual(["001.json"]);
 });
+
+it("builderProvider validates against the active user profile before checkout", async () => {
+  const { home, checkout, queue } = await fixture();
+  await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ profiles: {
+    personal: { providers: { sol: { provider: "openai", model: "fixture" } } }, other: {},
+  } }));
+  await expect(trainChildEnvironment(checkout, "personal", "sol")).resolves.toBeDefined();
+  await expect(trainChildEnvironment(checkout, "personal", "default")).resolves.toBeDefined();
+  await expect(trainChildEnvironment(checkout, "other", "sol")).rejects.toThrow(/BUILDER_PROVIDER_UNKNOWN/);
+  await expect(trainChildEnvironment(checkout, "personal", "toString")).rejects.toThrow(/BUILDER_PROVIDER_UNKNOWN/);
+  await writeFile(join(queue, "queue/001.json"), JSON.stringify({ task: "Test", authorization: "Test only", scope: ["packages/cli"], builderProvider: "missing", environment: { checkout, repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"], profile: "personal" } }));
+  const command = vi.fn();
+  expect(await runTrain(queue, { ...options, command })).toBe("halted");
+  expect(command).not.toHaveBeenCalled();
+  expect((await trainStatus(queue, options)).invalidEntries.join()).toContain("BUILDER_PROVIDER_UNKNOWN");
+});

@@ -32,3 +32,14 @@ it("joins calls before grouping two rows, nested children, session/model, unpric
     expect(overlap.map(row => row.totals.input)).toEqual([10, 0]);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it("builderProvider rollup records actual child selection including zero-call children and unknown historical provenance", () => {
+  const result = rollupTrainUsage([], [{ row: "r", sessions: ["parent"] }], [
+    { parent: "parent", child: "builder", provider: "sol" },
+    { parent: "parent", child: "fixer", provider: "override" },
+    { parent: "parent", child: "old" },
+  ]);
+  expect(result[0]!.sessions.map(s => [s.session, s.builderProvider])).toEqual([
+    ["builder", "sol"], ["fixer", "override"], ["old", null], ["parent", null],
+  ]);
+});

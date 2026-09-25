@@ -130,7 +130,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "extension.loaded": return `${p} ${e.name}${e.disabled === true ? " (disabled; not reactivated)" : ""} hooks=${e.surfaces.hooks.join(",")} tools=${e.surfaces.tools.join(",")} commands=${e.surfaces.commands.join(",")}`;
     case "extension.error": return `${p} ${e.name} ${e.phase}${e.surface === undefined ? "" : `/${e.surface}`}${e.disabled === true ? " (disabled)" : ""}: ${e.message}`;
     case "skill.used": return `${p} ${e.name} by=${e.invokedBy}${e.generated === true ? " generated=true" : ""}`;
-    case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}${e.role === undefined ? "" : ` role=${e.role.name} maxTurns=${e.role.maxTurns} tools=${e.role.tools.join(",")}`}`;
+    case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}${e.provider === undefined ? "" : ` provider=${e.provider}`}${e.role === undefined ? "" : ` role=${e.role.name} maxTurns=${e.role.maxTurns} tools=${e.role.tools.join(",")}`}`;
     case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
     case "steer": return `${p} from=${e.source} ${JSON.stringify(e.message)}`;
     case "context.delegation": return `${p} ${e.action} principal=${JSON.stringify(e.principal)} receipt=${e.delegation}`;

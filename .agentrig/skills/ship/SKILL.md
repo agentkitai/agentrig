@@ -18,6 +18,16 @@ human-message quote, together with the task scope. Carry it through builder/fixe
 once a PR exists, bind it to that PR number. Follow land's authorization checks, including later
 revocation or narrowing. Do not infer authorization from YOLO or a tool allowance.
 
+## Builder routing
+
+When the run option `builderProvider` is present, pass that named entry as `provider`
+on every builder and fixer spawn (including continuations), unless the row explicitly
+overrides it. Without it, retain the configured child default. This does not change
+reviewers, arbiters, landers or the conductor's provider. Require the PR child inventory
+to record each child session ID, job, effective provider entry and state (ran / handed
+off / died); use the recorded `subagent.spawn.provider`, not row intent, and mark missing
+historical provenance unknown. Provider inventory is operational routing data, not authorship.
+
 ## Resuming
 
 Use `agentrig run --resume <session>` to continue in the **same session** after a halt

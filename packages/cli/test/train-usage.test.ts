@@ -14,7 +14,7 @@ it("queue status and usage --row read two rows and nested spawn logs without mut
       await writeFile(join(root, "queue", `${id}.json`), JSON.stringify({ task: "fixture", authorization: "fixture", scope: ["src"], environment: { checkout: root, repository: "owner/repo", baseBranch: "main", ciWorkflows: ["CI"] } }));
       await writeFile(join(root, "logs", `${id}.state.json`), JSON.stringify({ row: `${id}.json`, phase: "ship", reason: null, pr: null, head: null, mergeCommit: null, sessionIds: [session] }));
     }
-    await store.append("parent", { type: "subagent.spawn", id: "child", task: "child" });
+    await store.append("parent", { type: "subagent.spawn", id: "child", task: "child", provider: "sol" });
     await store.append("child", { type: "subagent.spawn", id: "nested", task: "nested" });
     await store.append("nested", { type: "session.end", reason: "done" });
     await store.append("second", { type: "session.end", reason: "done" });
@@ -26,6 +26,8 @@ it("queue status and usage --row read two rows and nested spawn logs without mut
     const before = await readFile(join(root, ".agentrig", "usage.jsonl"), "utf8");
     expect((await trainUsage(root)).map(row => row.totals.input)).toEqual([6, 2]);
     expect((await trainStatus(root)).usage?.[0]?.totals).toMatchObject({ input: 6, output: 9, estimatedMicros: null, unpricedCalls: 3 });
+    expect((await trainStatus(root)).usage?.[0]?.sessions.find(s => s.session === "child")?.builderProvider).toBe("sol");
+    expect((await trainStatus(root)).usage?.[0]?.sessions.find(s => s.session === "nested")?.builderProvider).toBeNull();
     await usageCommand(root, "2000-01-01", false, { row: "one" });
     expect(log.mock.calls.at(-1)?.[0]).toContain("nested openai-chatgpt/chat: 2 input / 3 output");
     expect(log.mock.calls.at(-1)?.[0]).toContain("ChatGPT-login calls remain unpriced");

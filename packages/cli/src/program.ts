@@ -349,6 +349,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     program.command("run [task]").description("Run the agent on a task, non-interactively"),
     HEADLESS_MAX_TURNS,
   )
+    .option("--builder-provider <entry>", "named provider for ship builder/fixer spawns, not the conductor or reviewers")
     .option("--resume <id>", "continue an existing session in place from its recorded history")
     .option("--ci", "bounded CI mode: explicit file input, headless asks fail closed, never YOLO")
     .option("--task-file <path>", "CI task text, at most 16 KiB")

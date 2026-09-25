@@ -1,5 +1,14 @@
 # Status
 
+## Pending review — issue #517, per-row builder provider
+
+Optional builderProvider is validated against active-profile entries before checkout,
+forwarded as headless ship routing data, and recorded from actual child spawn entry
+selection in train usage. Ship requires operational provider inventory for every child.
+No workflow role is automatically rerouted by core. Independent review remains pending;
+no ROADMAP marker is changed.
+
+
 ## Pending review — issue #522, train declared-check environment
 
 Between-row checks use the pre-profile launcher environment plus tool homes and

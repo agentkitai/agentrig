@@ -17,8 +17,9 @@ it("actual headless run reports validated final PR to host outside checkout with
   // The former model write would ask under the project's cwd confinement policy.
   const confined = new RulePolicy([{ class: "write", cwdOnly: true, decision: "allow" }]);
   expect(await confined.decide({ tool: "write_file", class: "write", paths: [resultPath], cwd: checkout, input: {} })).toBe("ask");
+  let payload = "";
   const server = createServer(async (request, response) => {
-    for await (const _chunk of request) { /* drain */ }
+    for await (const chunk of request) { payload += String(chunk); }
     response.setHeader("content-type", "text/event-stream");
     response.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: '{"pr":42}' }, finish_reason: "stop" }] })}\n\ndata: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 10, completion_tokens: 2 } })}\n\ndata: [DONE]\n\n`);
   });
@@ -28,12 +29,13 @@ it("actual headless run reports validated final PR to host outside checkout with
     for (const key of ["HOME", "USERPROFILE", "XDG_CONFIG_HOME"]) vi.stubEnv(key, home);
     vi.stubEnv("OPENAI_API_KEY", "fixture-key");
     const result = await trainCommand({ executable: process.execPath, argv: [
-      fileURLToPath(new URL("../dist/index.js", import.meta.url)), "run", "--headless", "--json", "--output-schema", schema,
+      fileURLToPath(new URL("../dist/index.js", import.meta.url)), "run", "--headless", "--json", "--builder-provider", "default", "--output-schema", schema,
       "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
       "--root", join(root, "sessions"), "--memory", join(root, "memory"), "--deny", "write",
       "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery", "Return the PR as final JSON.",
     ], cwd: checkout, log: join(root, "logs/child.log"), resultPath });
     expect(result.code, result.stderr).toBe(0);
+    expect(JSON.stringify(JSON.parse(payload).messages)).toContain('builderProvider=\\"default\\"');
     expect(JSON.parse(await readFile(resultPath, "utf8"))).toEqual({ pr: 42 });
     expect(result.stdout).toContain('"type":"output.validated"');
     expect(result.stdout).not.toContain('"type":"permission.request"');

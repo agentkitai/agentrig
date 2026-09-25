@@ -427,3 +427,31 @@ it("keeps profile selection in the run child, never the declared checks", async 
     expect(env?.LAUNCHER_ONLY).toBe("kept"); expect(env?.CODEX_HOME).toBe("/profile/codex");
   }
 });
+
+it("builderProvider schema accepts named entries and refuses blank/non-string values", () => {
+  expect(TrainRowSchema.safeParse({ ...row, builderProvider: "sol" }).success).toBe(true);
+  expect(TrainRowSchema.safeParse(row).success).toBe(true);
+  for (const builderProvider of ["", " ", 2]) expect(TrainRowSchema.safeParse({ ...row, builderProvider }).success).toBe(false);
+});
+it("builderProvider passes as a run option without selecting the conductor provider", async () => {
+  const f = await fixture();
+  await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "sol" }));
+  const childEnvironment = vi.fn(async () => ({}));
+  expect(await runTrain(f.root, { command: f.command, childEnvironment })).toBe("empty");
+  expect(childEnvironment).toHaveBeenCalledWith(row.environment.checkout, undefined, "sol");
+  const run = f.calls.find(call => call.startsWith("run --headless"))!;
+  expect(run).toContain("--builder-provider sol");
+  expect(run).not.toContain("--provider sol");
+});
+it("builderProvider validation refuses before checkout and leaves the row queued", async () => {
+  const f = await fixture();
+  await writeFile(join(f.root, "queue/1.json"), JSON.stringify({ ...row, builderProvider: "missing" }));
+  const childEnvironment = async (_cwd: string, _profile?: string, provider?: string) => {
+    if (provider === "missing") throw new Error("BUILDER_PROVIDER_UNKNOWN");
+    return {};
+  };
+  expect(await runTrain(f.root, { command: f.command, childEnvironment })).toBe("halted");
+  expect(f.calls).toEqual([]);
+  expect(await readdir(join(f.root, "queue"))).toEqual(["1.json"]);
+  expect((await trainStatus(f.root, { childEnvironment })).invalidEntries.join()).toContain("BUILDER_PROVIDER_UNKNOWN");
+});
