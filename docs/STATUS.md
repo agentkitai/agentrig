@@ -2,6 +2,20 @@
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## Project-store guard follow-ups — #355, #356, #357, #364
+
+Test/docs-only maintenance, with no roadmap advancement or product discovery changes.
+The suite inventories session stores and wiki trees at checkout and package roots;
+Windows explicitly includes inventory, wiring and racing-deletion regressions.
+Observed entries removed mid-inventory fail with a contextual path diagnostic,
+not a partial success; roots absent at entry remain valid baselines. Memory-enabled
+CLI test fixtures use owned temporary memory roots instead of the checkout default.
+TESTING documents quiescent stores, legitimate concurrent-session failures, coverage
+boundaries and non-destructive troubleshooting without bypasses. The historical #313
+summary below now includes the existing §1 clean-main CI-staleness pointer.
+Fail-first and named mutation receipts are recorded in the PR. Replay handoff stops
+at a draft against checklist/065-base; independent review remains pending.
+
 ## Review and cleanup skill wording sweep (#341, #342, #348, #349, #351, #365)
 
 Instruction-only cleanup: topic enumerates optional conductor-trio trees/temporary roots on
@@ -168,7 +182,8 @@ roadmap advancement; local proof is recorded in the PR, independent review and C
 Topic's rerun check still matches the CURRENT head SHA in the complete canonical heading.
 Recorded MAIN is historical provenance for the origin/main merge base reviewed, not an
 additional equality gate against current origin/main. Moved main follows the existing
-conflict/material-delta policy rather than causing a redundant initial pair. Instruction-contract
+conflict/material-delta policy (§3 of shipping policy), with clean main advances routed
+through §1 CI-staleness, rather than causing a redundant initial pair. Instruction-contract
 coverage pins this clarification at the operative rerun check and rejects removal, current-main
 equality, redundant-pair and lost-routing mutants. No heading, landing gate or runtime change;
 this maintenance task does not advance ROADMAP §5. Independent review and exact-head hosted

@@ -65,6 +65,38 @@ The preflight does not repair anything, and nothing in the product changes becau
 - Discovery is not being taught to ignore `.git`. Fail-closed trust discovery is the correct
   behavior; the environment is what is wrong.
 
+## Read-only project-store guard
+
+Every test file inherits `test/setup-no-ci.ts` (including the Windows lane). Before
+and after the file, `test/project-store.ts` inventories `.agentrig/raw/sessions`
+and `.agentrig/wiki` at the checkout root and in each of `packages/cli`,
+`packages/core`, `packages/memory`, and `packages/supervisor`. This is not a claim
+of whole-`.agentrig` coverage. The Windows include list also runs the dedicated
+inventory, racing-deletion and setup-wiring regressions.
+
+The inventory records empty directories, symlink targets without following them,
+special-file modes, and SHA-256 hashes of all regular files, including session
+snapshots and unexpected artifacts. It detects creation, deletion and same-size
+rewrites without printing session contents. Hashing costs scale with store bytes
+and run twice per test file; timestamps alone would weaken rewrite detection.
+
+Stores must remain quiescent for the entire run. A legitimate concurrent AgentRig
+session in this checkout can append a log or update a snapshot, and memory work
+can change the wiki. Either intentionally trips “test suite must leave project
+session stores untouched”; it does not establish that a test caused the change.
+An entry disappearing after it was observed reports `project-store guard:
+removed-during-inventory: <path>` and fails closed rather than certifying a partial
+inventory. A root already absent at the start is a valid empty baseline; other
+filesystem errors still propagate.
+
+On failure, preserve the paths and evidence. Stop or finish concurrent sessions
+before rerunning, or run tests in a separate, idle owned worktree with its own
+outside-Git TMPDIR (see the preflight above). If an idle run still changes a store,
+locate the producing test and give its session and memory options explicit paths
+in a `realpath`-resolved tmpdir fixture with owned teardown. Do not delete genuine
+sessions or wiki content to make the guard green. The guard only reads: it never
+cleans up stores, offers no opt-out, and does not alter product discovery.
+
 ## Known sandbox limitation
 
 In the controlled Codex `workspace-write` experiment, empty, mode-0555 `.git` directories appeared

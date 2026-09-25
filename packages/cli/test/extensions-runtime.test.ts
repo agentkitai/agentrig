@@ -31,7 +31,7 @@ async function build(f: Awaited<ReturnType<typeof fixture>>, flags: string[] = [
   let built: BuiltAgent | undefined;
   await buildProgram({ config: { cwd: f.cwd, home: f.home, env: {} }, run: async (_task, opts) => {
     built = await buildAgent(opts, { onNotice: message => notices.push(message) });
-  } }).parseAsync(["run", "fixture", "--root", join(f.root, "logs"), "--no-repo-map", "--max-turns", "4", ...flags], { from: "user" });
+  } }).parseAsync(["run", "fixture", "--root", join(f.root, "logs"), "--memory", join(f.root, "memory"), "--no-repo-map", "--max-turns", "4", ...flags], { from: "user" });
   return built!;
 }
 
