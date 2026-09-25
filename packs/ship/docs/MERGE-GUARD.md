@@ -7,8 +7,9 @@ with that skill, unchanged. The guard does not read or invent review evidence.
 
 The initial host prompt's adjacent `Row: <JSON>` and host-generated row-binding
 line provide the only authorization source. Later prompts cannot replace it.
-The PR body must contain that exact authorization string and the own-line row
-binding. A successful `pre_spawn` dispatch posts and reads back the existing
+The PR body must contain that exact authorization string on its own line and the own-line row
+binding. LF and CRLF delimiters are accepted; quote bytes are never trimmed.
+Prefix, suffix and whitespace edits are refused. A successful `pre_spawn` dispatch posts and reads back the existing
 GitHub dispatch record. `post_spawn` supplies the child ID after core emits the
 spawn event; only an exact matching parent/task/role/provider/tools envelope can
 bind that child to the dispatched PR. Only the named `lander` role is eligible.
@@ -38,9 +39,11 @@ against check runs or statuses fetched from the exact commit, then re-fetches th
 PR head/body before allowing execution. Missing requirements, truncation,
 ambiguous names, skipped/red/pending checks, malformed responses and fetch errors
 refuse with a reason. The pinned merge SHA closes the head-change race after the
-last read. No deferred `--auto` merge is authorized by a transient green result.
-GraphQL merge mutations, curl merge calls, input-file API merges and shell
-wrappers/operators are refused; use the literal REST or PR form above.
+last read. No deferred `--auto` merge is authorized by a transient green result;
+`--admin` and `--disable-auto` are also refused. Branch protection may not be
+bypassed. Recognized literal inline GraphQL merge mutations, curl merge calls,
+and REST merge calls using input files are refused, as are recognized merge
+commands wrapped with shell operators; use the literal REST or PR form above.
 
 Like ledger integrity this is a bounded command gate, not a shell sandbox or a
 GitHub transaction. Indirect scripts or dynamically constructed commands are not
@@ -49,55 +52,21 @@ is also the backstop against check results changing after the final read. Ordina
 reads and unrelated tools remain unchanged. The API/CLI fetch budget is 25s,
 below the registered 30s hook deadline.
 
-## Activate this PR's guard for its own landing
+## Slice-2 boundary and landing correction
 
-An already-running conductor uses the code it loaded at startup. Checking out the
-new files does not hot-reload its hooks or child wiring. After independent review
-and exact-head CI, the conductor should use an **owned landing checkout of the
-reviewed head** (never switch or edit the author's checkout), build it, and launch
-a fresh coordinator with that checkout's CLI and explicit dispatch extension.
-Keep the land skill, reviewer schema/helpers and evidence base-pinned as usual;
-loading this reviewed guard does not replace those policy inputs.
+The slice-2 guard is a textual command backstop, not a shell sandbox or a payload interpreter. It guards recognized literal merge commands; constructed commands and merge operations hidden in file-referenced API payloads are not inspected. It does not promise universal GraphQL or arbitrary-shell merge interception. This limitation is explicit; review resolution and remote branch protection remain separate controls.
 
-1. In that owned checkout, create a temporary trusted role file
-   `.agentrig/agents/lander.md` (do not commit it):
+This documentation-only boundary correction is approved by arbiter child
+`61381213`; it does not change the three predicates or land/review rules.
 
-   ```markdown
-   ---
-   schema: 1
-   tools: ["bash", "bash_job", "read_file", "glob", "grep", "skill", "read_output"]
-   model-role: subagents
-   delegable: false
-   ---
-   Follow the base-pinned land skill for the single assigned PR. Do not spawn.
-   ```
+The operator withdrew the requirement that PR #585 land through its own new
+guard: the running host is built from main and cannot hot-reload this change.
+PR #585 instead lands through the existing land skill after its normal review
+and exact-head CI gates. The next row (052) is the first live guard exercise,
+to be verified by the operator. No self-landing guard exercise is claimed.
+This replaces the obsolete nested-host self-landing procedure; it does not
+instruct a conductor to launch another host from bash.
 
-   Use the existing configured subagent provider, or an explicitly selected
-   provider entry in the role; no provider identity is inferred from task prose.
-2. Launch that checkout's `node packages/cli/dist/index.js run` with `--trust`,
-   `--sandbox none`, `--subagents`, `--extension` pointing to its
-   `packs/ship/extensions/dispatch-record.mjs`, `--no-extension-discovery`, and
-   explicit external `--root`/`--memory` paths. Preserve the required environment
-   and the conductor's profile. Pass base-pinned skills with the existing skills
-   configuration. Use sufficient child turn/budget limits for the land skill.
-3. The fresh coordinator's **initial** prompt must contain adjacent lines:
-
-   ```text
-   Row: {"task":"R19f slice 2: minimal merge guard","authorization":"<verbatim authorized quote>","resume":{"pr":NUMBER}}
-   Include this exact host-generated row binding on its own line in the PR body: agentrig-train-row:607f5563-3fc5-4101-8d9e-0546c55e7693
-   ```
-
-   The conductor copies the actual trusted Row.authorization; the placeholder
-   above is not authority. Include the real PR, current head, base-pinned land
-   inputs, live ledger and review/CI handoff. Ask this coordinator to dispatch
-   `subagent` with `agent: "lander"` for that PR, not to merge itself.
-4. The dispatched lander rechecks the unchanged land preconditions and uses the
-   literal SHA-pinned merge command. Preserve its child ID, immutable spawn event,
-   dispatch comment ID, hook/tool events and merge result in the PR handoff as
-   evidence that this guard ran during this PR's own merge. Run normal post-merge
-   main CI verification. Remove the temporary role and all owned landing scratch
-   only after joining jobs and persisting the landing handoff.
-
-A denial is not a waiver: fix the named missing authority/CI/provenance or
-redispatch. The builder does not run this landing procedure or merge the PR.
+When the guard is active, a denial is not a waiver: fix the named missing
+authority/CI/provenance or redispatch. The builder does not merge.
 Slice 3 still owns deletion of superseded manual bookkeeping prose.

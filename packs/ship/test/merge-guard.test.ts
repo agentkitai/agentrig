@@ -25,12 +25,25 @@ if(mode==='failure') {console.error('API unavailable');process.exit(1);}
 const head='a'.repeat(40), row=${JSON.stringify(row)}, authorization=${JSON.stringify(authorization)};
 const pr={number:7,url:'https://github.com/agentkitai/agentrig/pull/7',state:'OPEN',headRefName:'feature',headRefOid:head,body:row+'\\n'+(mode==='missing-auth'?'':mode==='edited-auth'?authorization+'x':authorization)};
 if(mode==='edited-auth') pr.body=row+'\\n'+authorization.replace('authorize','authorized');
+const edits={'prefix-auth':'x'+authorization,'suffix-auth':authorization+'x','leading-space-auth':' '+authorization,'trailing-space-auth':authorization+' ','tab-auth':authorization+'\\t','bare-cr-auth':authorization+'\\r'};
+if(edits[mode]) pr.body=row+'\\n'+edits[mode];
+if(mode==='crlf-auth') pr.body=row+'\\r\\n'+authorization+'\\r\\n';
 if(mode==='missing-row') pr.body=authorization;
 if(mode==='wrong-pr') pr.url='https://github.com/other/repo/pull/7';
 if(mode==='moved-head') pr.headRefOid='b'.repeat(40);
 if(a[0]==='rev-parse') console.log('feature');
 else if(a[0]==='pr'&&a[1]==='list') console.log(JSON.stringify([pr]));
-else if(a[0]==='pr'&&a[1]==='view') console.log(JSON.stringify(pr));
+else if(a[0]==='pr'&&a[1]==='view') {
+  const countPath=root+'/merge-views';
+  const count=fs.existsSync(countPath)?Number(fs.readFileSync(countPath,'utf8'))+1:1;
+  fs.writeFileSync(countPath,String(count));
+  if(count===2) {
+    if(mode==='changed-head') pr.headRefOid='b'.repeat(40);
+    if(mode==='changed-body') pr.body+='edited';
+    if(mode==='changed-url') pr.url='https://github.com/other/repo/pull/7';
+  }
+  console.log(JSON.stringify(pr));
+}
 else if(a[0]==='pr'&&a[1]==='checks') console.log(JSON.stringify(mode==='empty-ci'?[]:[{name:'ship',bucket:mode==='red'?'fail':mode==='pending'?'pending':'pass',state:mode==='red'?'FAILURE':mode==='pending'?'PENDING':'SUCCESS'}]));
 else if(a.includes('POST')) { let input=''; process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{fs.writeFileSync(root+'/record',JSON.parse(input).body);console.log(JSON.stringify({id:123}));}); }
 else if(a[1]?.includes('/comments/123')) console.log(JSON.stringify({id:123,body:mode==='tampered-record'?'edited':fs.readFileSync(root+'/record','utf8')}));
@@ -51,6 +64,7 @@ else {console.error('unexpected '+JSON.stringify(a));process.exit(2);}
   };
   const merge = async (text = command, sessionId = "child") => {
     await writeFile(join(root, "mode"), mode);
+    await rm(join(root, "merge-views"), { force: true });
     return invoke("pre_tool", { sessionId, tool: { name: "bash", input: { command: text } } });
   };
   return { root, invoke, dispatch, merge };
@@ -66,6 +80,22 @@ describe("minimal merge guard", () => {
   it.each(["missing-auth", "edited-auth", "missing-row", "wrong-pr", "moved-head", "empty-ci", "red", "pending", "stale-ci", "skipped", "truncated", "tampered-record", "failure", "timeout"])("denies %s with a reason", async mode => {
     const f = await fixture(mode); expect((await f.dispatch()).action).toBe("continue");
     const result = await f.merge(); expect(result.action).toBe("deny"); expect(result.reason).toMatch(/^merge guard: .+/u);
+  });
+  it.each(["prefix-auth", "suffix-auth", "leading-space-auth", "trailing-space-auth", "tab-auth", "bare-cr-auth"])("denies own-line authorization edit %s", async mode => {
+    const f = await fixture(mode); await f.dispatch();
+    expect((await f.merge()).reason).toContain("exact Row.authorization");
+  });
+  it("accepts exact own-line authorization with CRLF delimiters", async () => {
+    const f = await fixture("crlf-auth"); await f.dispatch();
+    expect(await f.merge()).toEqual({ action: "continue" });
+  });
+  it.each(["changed-head", "changed-body", "changed-url"])("denies PR changed between initial and final reads: %s", async mode => {
+    const f = await fixture(mode); await f.dispatch();
+    expect((await f.merge()).reason).toContain("PR changed during merge verification");
+    expect(await readFile(join(f.root, "merge-views"), "utf8")).toBe("2");
+    const calls = (await readFile(join(f.root, "calls"), "utf8")).trim().split("\n").map(line => JSON.parse(line) as string[]);
+    expect(calls.at(-1)?.slice(0, 2)).toEqual(["pr", "view"]);
+    expect(calls.at(-2)?.[1]).toContain("/status?");
   });
   it.each(["parent", "unrecorded-child"])("refuses %s even with green CI and authorization", async id => {
     const f = await fixture(); await f.dispatch(); expect((await f.merge(command, id)).reason).toContain("lander child");
@@ -101,6 +131,7 @@ describe("minimal merge guard", () => {
   it.each([
     `gh pr merge 7 --squash`, `gh api repos/agentkitai/agentrig/pulls/7/merge -XPUT`,
     `gh pr merge 7 --auto=true --match-head-commit ${head}`, `gh pr merge 7 --auto --match-head-commit ${head}`,
+    ...["--admin", "--admin=true", "--admin=false", "--disable-auto", "--disable-auto=true"].map(flag => `${command} ${flag}`),
     `echo ignored; ${command}`, `gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:"x"}) { clientMutationId }}'`,
     `curl -X PUT https://api.github.com/repos/agentkitai/agentrig/pulls/7/merge`,
     `gh api repos/agentkitai/agentrig/pulls/7/merge -X PUT --input request.json`,

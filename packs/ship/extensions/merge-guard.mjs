@@ -35,7 +35,7 @@ export function mergeTarget(command) {
   if (args[0] === "pr" && args[1] === "merge") {
     const target = args[2];
     if (!/^[1-9]\d*$|^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*$/u.test(target ?? "")) throw new Error("merge requires an explicit PR number or URL");
-    if (args.some(arg => /^(?:--auto|--disable-auto)(?:=|$)/u.test(arg))) throw new Error("deferred merge is not an immediate guarded merge");
+    if (args.some(arg => /^(?:--auto|--disable-auto|--admin)(?:=|$)/u.test(arg))) throw new Error("deferred or branch-protection-bypassing merge flags are not allowed");
     return { target, repo, head: sha.parse(option(["--match-head-commit"])) };
   }
   if (args[0] === "api") {
@@ -72,7 +72,7 @@ export function createMergeGuard({ gh = "gh", budgetMs = 25_000, grantForSession
       const pr = pull.parse(await run(args));
       const identity = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/([1-9]\d*)$/u.exec(pr.url);
       if (!identity || pr.url !== grant.url || pr.number !== Number(identity[2]) || (target.repo && target.repo !== identity[1]) || (target.target.startsWith("https:") ? target.target !== pr.url : Number(target.target) !== pr.number)) throw new Error("merge target does not match dispatched PR");
-      if (typeof grant.authorization !== "string" || !grant.authorization.trim() || !pr.body.includes(grant.authorization) || !pr.body.split(/\r?\n/u).includes(grant.row)) throw new Error("PR body must carry the exact Row.authorization quote and row binding");
+      if (typeof grant.authorization !== "string" || !grant.authorization.trim() || !pr.body.split(/\r?\n/u).includes(grant.authorization) || !pr.body.split(/\r?\n/u).includes(grant.row)) throw new Error("PR body must carry the exact Row.authorization quote and row binding");
       const record = z.object({ id: z.number().int().positive(), body: z.string() }).parse(await run(["api", `repos/${identity[1]}/issues/comments/${grant.recordId}`]));
       if (record.id !== grant.recordId || record.body !== grant.recordBody) throw new Error("dispatch record missing or edited; redispatch lander");
       if (target.head !== pr.headRefOid) throw new Error("merge must pin the exact current head");
