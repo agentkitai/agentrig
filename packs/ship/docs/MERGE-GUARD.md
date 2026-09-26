@@ -58,6 +58,26 @@ Literal `gh pr merge --help` and `-h` are reads, including in compound commands.
 Help belongs to that invocation only: a later real merge is still guarded, and a
 flag after `--` is not a help option. Quoted comment/printf text is data, not a
 merge command. Quoting individual executable words does not hide a real merge.
+The executable/subcommand selects the rule: `gh pr edit`, `gh pr comment`,
+and issue/PR comment REST calls are not merges because of their quoted body,
+body-file name or file contents (#619). Payload words such as `bash`, `node`,
+`api` or `mergePullRequest` cannot reclassify that invocation. PR body edits
+still undergo independent append-only ledger/source validation. Shell segments
+and substitutions are checked separately, so a merge chained after an edit
+remains refused. Leading assignments and wrapper prefixes do not hide a literal
+recognized executable (including env/sudo, xargs and shell control prefixes);
+these are not accepted literal merge forms. Unknown prefixes conservatively
+retain that literal-command backstop, not an interpretation of arbitrary wrapper
+programs. API option values are not endpoints; literal REST merges and relative
+or absolute GraphQL endpoints remain recognized with options before the route,
+including `-p`/`--preview` values. Repository selectors before `pr` or between
+`pr` and `merge` do not hide the verb. `eval` joins its operands into one shell
+program; quoting an operand does not make that program ordinary comment data.
+For curl, positional URLs and `--url` select REST/GraphQL recognition separately
+from data, header and file option values (including attached/bundled short
+options). Comment endpoints do not become merges because their payload mentions
+a merge route or mutation. Multiple literal URLs are checked; referenced files
+and dynamically constructed URLs remain outside this bounded recognizer.
 Shell program arguments, command substitutions and recognized interpreter/API
 mutation payloads remain executable data; compound and wrapped real merges must
 still use the standalone literal form above. This lexical distinction does not
