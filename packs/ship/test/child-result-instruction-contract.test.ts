@@ -7,5 +7,5 @@ it.each(["dogfood", "ship", "topic"])("%s requires typed handoff, independent ch
 
 it.each(["dogfood", "ship", "topic"])("%s binds session provenance to runtime identity, not host environment", name => {
   const text = readSkillText(`.agentrig/skills/${name}/SKILL.md`);
-  for (const expected of ["AgentRig session id:", "never `CLAUDE_CODE_SESSION_ID`", "`AGENTRIG_SESSION_ID`", "runtime context is absent", "report provenance unavailable", "`CLAUDECODE` and all `CLAUDE_CODE_*`", "preserving reviewer-home selection"]) expect(text).toContain(expected);
+  for (const expected of ["AgentRig session id:", "never a session id from any inherited host variable", "runtime context is absent", "report provenance unavailable", "scrub host CLI nesting/session markers", "preserving reviewer-home selection"]) expect(text).toContain(expected);
 });
