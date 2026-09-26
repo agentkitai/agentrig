@@ -1,3 +1,18 @@
+## Verdict prompt shows blocking as a boolean (#617)
+
+Current roadmap row: issue #617, “Verdict prompt shows blocking as a boolean”;
+next: independent conductor review and authorized landing. R19 order is unchanged.
+
+The rendered finding shape now uses an unquoted `<true|false>` placeholder,
+matching its boolean guidance and the existing strict verdict schema. Rendered
+prompt tests fill the shape with both boolean values and validate the resulting
+findings; string booleans and other non-boolean values remain refused. Fail-first
+and named quoted-placeholder/schema-widening mutants pin both sides. No schema,
+parser, reviewer routing, or gate changes. Rejected: coercing strings to booleans
+or broadening the schema to accommodate the incorrect example. The placeholder
+is deliberately not valid JSON until filled, as the existing prompt explains.
+LOW wording observations are advisories, not residuals without a real defect.
+
 ## Session provenance belongs to AgentRig (#614)
 
 Current roadmap row: issue #614, “Session provenance comes from AgentRig, not the host”;

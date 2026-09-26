@@ -16,7 +16,7 @@ it("C-F1 exact generated prompt echo fails schema", () => {
 });
 it("the verdict prompt shows the exact finding object shape once and states blocking is a boolean", () => {
   const prompt = verdictPrompt(binding);
-  const shape = '{"severity":"<CRITICAL|HIGH|MEDIUM|LOW>","heading":"<exact verbatim heading>","location":"<file:line>","blocking":"<true or false>","scenario":"<concrete failure scenario>"}';
+  const shape = '{"severity":"<CRITICAL|HIGH|MEDIUM|LOW>","heading":"<exact verbatim heading>","location":"<file:line>","blocking":<true|false>,"scenario":"<concrete failure scenario>"}';
   expect(prompt.split(shape)).toHaveLength(2);
   expect(prompt).toContain(`Use this exact finding object shape once per finding, with no other keys: ${shape}.`);
   expect(prompt).toContain("The `blocking` field is a boolean.");
