@@ -19,8 +19,7 @@ export function mergeIntent(command) {
     // Wrapper prefixes still expose their command to this conservative backstop.
     // Once an executable is found, its arguments cannot select another executable.
     let start = 0;
-    while (/^[A-Za-z_][A-Za-z_0-9]*=/u.test(segment[start] ?? "")) start++;
-    if (/^(?:.*\/)?(?:env|sudo|command|exec|timeout|nice|nohup)$/u.test(segment[start] ?? "")) {
+    if (!/^(?:.*\/)?(?:gh|curl|sh|bash|dash|zsh|ksh|csh|tcsh|fish|eval|python[\d.]*|node|ruby|perl|echo|printf)$/u.test(segment[start] ?? "")) {
       const next = segment.findIndex((arg, i) => i > start && /^(?:.*\/)?(?:gh|curl|sh|bash|dash|zsh|ksh|csh|tcsh|fish|eval|python[\d.]*|node|ruby|perl)$/u.test(arg));
       if (next !== -1) start = next;
     }
@@ -32,7 +31,15 @@ export function mergeIntent(command) {
     if (isGh && ["--repo", "-R"].includes(args[0])) args.splice(0, 2);
     else if (isGh && /^(?:--repo=|-R.)/u.test(args[0] ?? "")) args.shift();
     const isApi = isGh && args[0] === "api";
-    const endpoint = isApi ? args.find(arg => /^(?:\/?repos\/|https?:\/\/|graphql$)/u.test(arg)) : undefined;
+    let endpoint;
+    if (isApi) {
+      // Options may precede the endpoint; their values are not routes/programs.
+      const valued = new Set(["-f", "-F", "--field", "--raw-field", "--input", "--hostname", "-X", "--method", "-H", "--header", "--cache", "-q", "--jq", "-t", "--template"]);
+      for (let i = 1; i < args.length; i++) {
+        if (valued.has(args[i])) { i++; continue; }
+        if (!args[i].startsWith("-")) { endpoint = args[i]; break; }
+      }
+    }
     for (let i = 0; i < args.length; i++) {
       if (isGh && i === 0 && args[i] === "pr" && args[i + 1] === "merge") {
         // Only this invocation's literal help flag exempts it. A flag after
@@ -56,7 +63,7 @@ export function mergeIntent(command) {
       // literal recognition without claiming to interpret those languages.
       if (args.some(arg => /\bpr\s+merge\b|\bpulls\/[^\s/]+\/merge\b|\bmergePullRequest\b/u.test(arg))) return true;
     }
-    return ((isApi && endpoint === "graphql") || isCurl) && args.some(arg => /\bmergePullRequest\b/u.test(arg));
+    return ((isApi && /^(?:https?:\/\/\S+\/)?graphql$/u.test(endpoint ?? "")) || isCurl) && args.some(arg => /\bmergePullRequest\b/u.test(arg));
   });
 }
 

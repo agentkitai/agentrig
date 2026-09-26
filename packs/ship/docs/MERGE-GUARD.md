@@ -64,9 +64,12 @@ body-file name or file contents (#619). Payload words such as `bash`, `node`,
 `api` or `mergePullRequest` cannot reclassify that invocation. PR body edits
 still undergo independent append-only ledger/source validation. Shell segments
 and substitutions are checked separately, so a merge chained after an edit
-remains refused. Leading assignments and recognized env/sudo/command/exec/
-timeout/nice/nohup prefixes do not hide a merge; they are not accepted literal
-merge forms. This does not interpret arbitrary wrapper programs.
+remains refused. Leading assignments and wrapper prefixes do not hide a literal
+recognized executable (including env/sudo, xargs and shell control prefixes);
+these are not accepted literal merge forms. Unknown prefixes conservatively
+retain that literal-command backstop, not an interpretation of arbitrary wrapper
+programs. API option values are not endpoints; literal REST merges and relative
+or absolute GraphQL endpoints remain recognized with options before the route.
 Shell program arguments, command substitutions and recognized interpreter/API
 mutation payloads remain executable data; compound and wrapped real merges must
 still use the standalone literal form above. This lexical distinction does not

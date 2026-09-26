@@ -28,6 +28,10 @@ describe("merge classification by executable verb #619", () => {
     `\r\n\r\ngh pr comment 52 --body 'gh pr merge 7'\r\n`,
     `gh -R o/r pr comment 52 --body 'gh pr merge 7'`,
     `gh pr comment 52 --body '$(gh pr merge 7)'`,
+    `gh api --silent -f 'body=mergePullRequest' repos/o/r/issues/52/comments`,
+    `gh api repos/o/r/issues/52/comments --input repos/o/r/pulls/7/merge`,
+    `gh api --input repos/o/r/pulls/7/merge repos/o/r/issues/52/comments`,
+    `gh api repos/o/r/pulls/comments/52 -X PATCH -f 'body=mergePullRequest'`,
   ])("data boundaries continue: %s", async command => {
     expect(mergeIntent(command)).toBe(false);
     expect(await check(command)).toEqual({ action: "continue" });
@@ -53,6 +57,14 @@ describe("merge classification by executable verb #619", () => {
     `curl https://api.github.com/repos/o/r/pulls/52/merge -X PUT`,
     `node -e 'execSync("gh pr merge 52")'`,
     `gh pr merge`, `gh pr merge 52 --body 'unterminated`,
+    `xargs gh pr merge 52`, `docker run image gh pr merge 52`,
+    `if true; then gh pr merge 52; fi`, `! gh pr merge 52`,
+    `gh api https://api.github.com/graphql -f 'query=mutation { mergePullRequest(input:{}) {clientMutationId}}'`,
+    `gh api --input repos/payload.json repos/o/r/pulls/52/merge -X PUT`,
+    `gh api --silent --input=payload.json repos/o/r/pulls/52/merge -X PUT`,
+    `gh api repos/o/r/pulls/52/merge extraneous -X PUT`,
+    `gh api -H repos/header repos/o/r/pulls/52/merge -X PUT`,
+    `gh api -f query=mutation graphql --input repos/payload.json -f 'x=mergePullRequest'`,
   ])("actual merges remain refused: %s", async command => {
     expect(mergeIntent(command)).toBe(true);
     expect((await check(command)).action).toBe("deny");
