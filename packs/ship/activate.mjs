@@ -23,7 +23,7 @@ export async function activateShip({ project, declaration, home = homedir() }) {
   const skills = await discoverSkills({ roots: [join(pack, "skills")], onError: error => { throw error; } });
   if (skills.length !== 6) throw new Error("incomplete ship skill installation");
   const paths = [
-    ...["post-review-comment", "review-finding-index", "review-provenance", "review-verdict", "reviewer-adapters", "child-result"].map(name => [`scripts/${name}.mjs`, join(pack, "scripts", `${name}.mjs`)]),
+    ...["post-review-comment", "review-finding-index", "review-provenance", "review-verdict", "reviewer-adapters", "child-result"].flatMap(name => ["scripts", "packs/ship/scripts"].map(prefix => [`${prefix}/${name}.mjs`, join(pack, "scripts", `${name}.mjs`)])),
     ["packages/cli/dist/project-checks.js", join(pack, "public-api.mjs")],
     ["docs/SHIPPING-WORKFLOW.md", join(pack, "docs/SHIPPING-WORKFLOW.md")],
     ["docs/MERGE-GUARD.md", join(pack, "docs/MERGE-GUARD.md")],

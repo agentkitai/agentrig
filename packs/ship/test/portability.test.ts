@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile, realpath, rm, access } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, writeFile, realpath, rm, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -39,6 +39,37 @@ it("activates ship outside a real foreign git repository and exercises skills, s
  for(const entry of canonical) {
    expect(skills.find(s=>s.name===entry.name)?.body).toContain(entry.body);
    expect(skills.find(s=>s.name===entry.name)?.flags).toEqual(entry.flags);
+ }
+ // Audit exact resource spellings in every composed policy, not only the cited skill.
+ const owned = new Set<string>();
+ for (const directory of ["scripts", "docs"]) {
+   for (const name of await readdir(resolve("packs/ship", directory))) owned.add(`${directory}/${name}`);
+ }
+ for (const entry of canonical) {
+   const body = skills.find(s=>s.name===entry.name)!.body;
+   const addresses = new Map(body.split("\n").filter(line=>line.startsWith('- "') && line.includes(" → ")).map(line=> {
+     const [from,to] = line.slice(2).split(" → ");
+     return [JSON.parse(from!), JSON.parse(to!)] as [string,string];
+   }));
+   const references = entry.body.match(/(?:packs\/ship\/)?(?:scripts|docs)\/[A-Za-z0-9_.-]+\.(?:mjs|md)/g) ?? [];
+   for (const reference of references) {
+     const relative = reference.replace(/^packs\/ship\//, "");
+     if (owned.has(relative)) expect(addresses.get(reference), `${entry.name}: ${reference}`).toBe(resolve("packs/ship", relative));
+   }
+   if (!["ship", "topic", "dogfood"].includes(entry.name)) continue;
+   const helper = addresses.get("packs/ship/scripts/child-result.mjs");
+   expect(helper).toBe(resolve("packs/ship/scripts/child-result.mjs"));
+   const run = (...args:string[])=>spawnSync(process.execPath,[helper!,...args],{cwd:project,encoding:"utf8"});
+   const schema = run("schema"); expect(schema.status).toBe(0);
+   expect(JSON.parse(schema.stdout)).toHaveProperty("properties.status.enum", ["pr","blocked"]);
+   const observations = join(root, `${entry.name}-observations.json`), head = "a".repeat(40);
+   const receipt = {result:{status:"pr",pr:7,head},attempt:1,previousNotes:[],scope:["src"],observedPr:{pr:7,head}};
+   await writeFile(observations,JSON.stringify(receipt));
+   const valid = run("assess",observations); expect(valid.status).toBe(0);
+   expect(JSON.parse(valid.stdout)).toHaveProperty("action","pr");
+   await writeFile(observations,JSON.stringify({...receipt,result:{}}));
+   const refused = run("assess",observations); expect(refused.status).toBe(2);
+   expect(JSON.parse(refused.stdout)).toMatchObject({action:"retry",attempt:2});
  }
  expect(skills.find(s=>s.name==="ship")?.body).toContain(activated.config);
  expect(skills.find(s=>s.name==="land")?.body).toContain(resolve("packs/ship/scripts/review-verdict.mjs"));

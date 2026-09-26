@@ -24,6 +24,11 @@ Fail-first and targeted named mutation evidence, declared-check receipts and the
 foreign Git/fake-gh composition proof travel in the PR. LOW wording/polish
 followups under R19 are advisories, not residual issues.
 
+C1 repair: activation now maps both legacy and canonical pack script spellings,
+including `packs/ship/scripts/child-result.mjs`. A composed-skill resource audit
+and foreign-checkout schema/valid-and-invalid assessment regression preserve the
+mandatory typed handoff gate. No instruction policy or gate changed.
+
 ## Initial builds are not repairs (#610) — implementation; review/landing pending
 
 Current roadmap row: issue #610, "Initial builds are not repairs";

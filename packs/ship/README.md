@@ -145,7 +145,12 @@ human authorization and exact-head/post-merge CI all remain unchanged.
 
 The six resolved skills retain their complete policy text and append explicit
 absolute addresses for pack scripts, policy, merge-guard docs, checks API and the
-per-repository declaration. Scripts retain source-install public-API wiring; no
+per-repository declaration. Both `scripts/<helper>.mjs` and the canonical
+`packs/ship/scripts/<helper>.mjs` spellings resolve to that installation, including
+the mandatory child-result `schema` and `assess` commands. The foreign fixture
+audits pack-owned script/doc references in every composed skill and executes
+child-result assessment without copying resources into the foreign checkout.
+Scripts retain source-install public-API wiring; no
 private CLI import is added. The canonical lander manifest now lives in
 `packs/ship/agents/lander.md`; `ship:sync` maintains the repository compatibility
 copy. `agentRoleRoots` supplies explicit absolute trusted-host role directories;
