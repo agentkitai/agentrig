@@ -69,7 +69,15 @@ recognized executable (including env/sudo, xargs and shell control prefixes);
 these are not accepted literal merge forms. Unknown prefixes conservatively
 retain that literal-command backstop, not an interpretation of arbitrary wrapper
 programs. API option values are not endpoints; literal REST merges and relative
-or absolute GraphQL endpoints remain recognized with options before the route.
+or absolute GraphQL endpoints remain recognized with options before the route,
+including `-p`/`--preview` values. Repository selectors before `pr` or between
+`pr` and `merge` do not hide the verb. `eval` joins its operands into one shell
+program; quoting an operand does not make that program ordinary comment data.
+For curl, positional URLs and `--url` select REST/GraphQL recognition separately
+from data, header and file option values (including attached/bundled short
+options). Comment endpoints do not become merges because their payload mentions
+a merge route or mutation. Multiple literal URLs are checked; referenced files
+and dynamically constructed URLs remain outside this bounded recognizer.
 Shell program arguments, command substitutions and recognized interpreter/API
 mutation payloads remain executable data; compound and wrapped real merges must
 still use the standalone literal form above. This lexical distinction does not

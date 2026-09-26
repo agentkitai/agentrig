@@ -16,6 +16,13 @@ and interpreting body files as executable shell. This remains a bounded lexical
 backstop, not an arbitrary program interpreter; branch protection stays required.
 LOW wording observations are advisories unless they demonstrate a real defect.
 
+Repair round 1 restores multi-operand `eval` recognition, consumes API preview
+option values, recognizes persistent repo selectors on either side of `pr`, and
+separates curl URLs from data/header/file operands. Comment payloads remain data;
+actual REST/GraphQL URLs and eval programs retain refusal. Rejected: recursively
+inspecting each eval operand independently or treating every curl argument as a
+route. No new shell interpreter, file inspection, or merge authority is added.
+
 ## Verdict prompt shows blocking as a boolean (#617)
 
 Current roadmap row: issue #617, “Verdict prompt shows blocking as a boolean”;

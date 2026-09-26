@@ -17,6 +17,18 @@ describe("merge classification by executable verb #619", () => {
     expect(await check(command)).toEqual({ action: "continue" });
   });
   it.each([
+    ...["issues/52/comments", "pulls/52/comments", "pulls/comments/52"].flatMap(route =>
+      ["body=repos/o/r/pulls/7/merge", "body=mergePullRequest", "body=gh pr merge 7", ""].flatMap(body =>
+        ["-d", "--data", "--data-ascii", "--data-raw", "--data-binary", "--data-urlencode", "--url-query", "--json", "-F", "--form", "--form-string", "-H", "--header", "--proxy-header", "--upload-file", "--config", "--output"].map(flag =>
+          `curl -X POST ${flag} '${body}' https://api.github.com/repos/o/r/${route}`))),
+    `curl --url=https://api.github.com/repos/o/r/issues/52/comments -dmergePullRequest`,
+    `curl --url https://api.github.com/repos/o/r/issues/52/comments -Hrepos/o/r/pulls/7/merge`,
+    `curl -sd 'mergePullRequest' https://api.github.com/repos/o/r/issues/52/comments`,
+    `curl --data='repos/o/r/pulls/7/merge' https://api.github.com/repos/o/r/issues/52/comments`,
+    `eval echo 'gh pr merge 52'`,
+    `eval 'printf "%s" "gh pr merge 52"'`,
+    ...["-R o/r", "--repo o/r", "-Ro/r", "--repo=o/r"].map(flag => `gh pr ${flag} comment 52 --body 'gh pr merge 7'`),
+    `gh api --preview mercy repos/o/r/issues/52/comments -f body=mergePullRequest`,
     `gh pr edit 52 --body 'gh pr merge 7' --title bash`,
     `gh pr comment 52 --body 'mergePullRequest' --repo api`,
     `gh api repos/o/r/issues/52/comments -f 'body=mergePullRequest'`,
@@ -37,6 +49,30 @@ describe("merge classification by executable verb #619", () => {
     expect(await check(command)).toEqual({ action: "continue" });
   });
   it.each([
+    `eval gh pr merge 52`,
+    `eval gh api repos/o/r/pulls/52/merge -X PUT -f sha=abc`,
+    `eval curl -X PUT https://api.github.com/repos/o/r/pulls/52/merge`,
+    `eval 'gh' 'pr' 'merge' 52`,
+    `eval echo safe '&&' gh pr merge 52`,
+    `eval -- gh pr merge 52`,
+    `eval 'gh pr merge' 52`,
+    `eval eval gh pr merge 52`,
+    ...["-p mercy", "--preview mercy", "-pmercy", "--preview=mercy"].flatMap(flag => [
+      `gh api ${flag} repos/o/r/pulls/52/merge -X PUT -f sha=abc`,
+      `gh api ${flag} graphql -f 'query=mutation { mergePullRequest(input:{}) {clientMutationId}}'`,
+    ]),
+    ...["-R o/r", "--repo o/r", "-Ro/r", "--repo=o/r"].map(flag => `gh pr ${flag} merge 52`),
+    `gh --repo o/r pr -R o/r merge 52`,
+    `curl --url https://api.github.com/repos/o/r/pulls/52/merge -X PUT`,
+    `curl --url=https://api.github.com/repos/o/r/pulls/52/merge -X PUT`,
+    `curl -sd safe https://api.github.com/repos/o/r/pulls/52/merge -X PUT`,
+    `curl -- https://api.github.com/repos/o/r/pulls/52/merge`,
+    `curl -- --data https://api.github.com/repos/o/r/pulls/52/merge`,
+    `curl -sdmergePullRequest https://api.github.com/graphql`,
+    `curl --data=mergePullRequest https://api.github.com/graphql`,
+
+    `curl --url=https://api.github.com/graphql -dmergePullRequest`,
+    `curl https://api.github.com/repos/o/r/issues/52/comments https://api.github.com/repos/o/r/pulls/52/merge -X PUT`,
     `gh pr edit 52 --body 'gh pr merge 7' && gh pr merge 52`,
     `gh pr comment 52 --body safe; gh pr merge 52`,
     `gh api repos/o/r/issues/52/comments -f body=safe\r\ngh pr merge 52`,

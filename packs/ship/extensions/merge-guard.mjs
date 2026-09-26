@@ -27,19 +27,30 @@ export function mergeIntent(command) {
     const executable = args.shift() ?? "";
     const isGh = /^(?:.*\/)?gh$/u.test(executable);
     const isCurl = /^(?:.*\/)?curl$/u.test(executable);
-    // gh's global repository selector precedes its executable subcommand.
-    if (isGh && ["--repo", "-R"].includes(args[0])) args.splice(0, 2);
-    else if (isGh && /^(?:--repo=|-R.)/u.test(args[0] ?? "")) args.shift();
+    // Persistent selectors can occur before pr or between pr and its verb.
+    // Strip only these command-prefix positions, never edit/comment payloads.
+    const stripRepo = index => {
+      while (args[index]) {
+        if (["--repo", "-R"].includes(args[index])) args.splice(index, 2);
+        else if (/^(?:--repo=|-R.)/u.test(args[index])) args.splice(index, 1);
+        else break;
+      }
+    };
+    if (isGh) {
+      stripRepo(0);
+      if (args[0] === "pr") stripRepo(1);
+    }
     const isApi = isGh && args[0] === "api";
     let endpoint;
     if (isApi) {
       // Options may precede the endpoint; their values are not routes/programs.
-      const valued = new Set(["-f", "-F", "--field", "--raw-field", "--input", "--hostname", "-X", "--method", "-H", "--header", "--cache", "-q", "--jq", "-t", "--template"]);
+      const valued = new Set(["-f", "-F", "--field", "--raw-field", "--input", "--hostname", "-X", "--method", "-H", "--header", "--cache", "-p", "--preview", "-q", "--jq", "-t", "--template"]);
       for (let i = 1; i < args.length; i++) {
         if (valued.has(args[i])) { i++; continue; }
         if (!args[i].startsWith("-")) { endpoint = args[i]; break; }
       }
     }
+    const { urls, values } = isCurl ? curlOperands(args) : { urls: [], values: [] };
     for (let i = 0; i < args.length; i++) {
       if (isGh && i === 0 && args[i] === "pr" && args[i + 1] === "merge") {
         // Only this invocation's literal help flag exempts it. A flag after
@@ -51,8 +62,11 @@ export function mergeIntent(command) {
         // Only the bounded help-only form (plus one explicit target) is exempt.
         if (!rest.some(help) || targets.length > 1 || targets.some(arg => !/^[1-9]\d*$|^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*$/u.test(arg))) return true;
       }
-      if ((isCurl || (isApi && args[i] === endpoint)) && /^\S*\bpulls\/[^\s/]+\/merge$/u.test(args[i])) return true;
+      if ((isApi && args[i] === endpoint) && /^\S*\bpulls\/[^\s/]+\/merge$/u.test(args[i])) return true;
     }
+    if (urls.some(url => /^\S*\bpulls\/[^\s/]+\/merge$/u.test(url))) return true;
+    // eval concatenates every operand into one program (unlike sh -c).
+    if (/^(?:.*\/)?eval$/u.test(executable)) return mergeIntent((args[0] === "--" ? args.slice(1) : args).join(" "));
     // Quoted shell programs and API mutation payloads are executable data,
     // unlike quoted comment/printf text. Retain the previous bounded backstop.
     if (shellWrapper([executable])) {
@@ -63,8 +77,43 @@ export function mergeIntent(command) {
       // literal recognition without claiming to interpret those languages.
       if (args.some(arg => /\bpr\s+merge\b|\bpulls\/[^\s/]+\/merge\b|\bmergePullRequest\b/u.test(arg))) return true;
     }
-    return ((isApi && /^(?:https?:\/\/\S+\/)?graphql$/u.test(endpoint ?? "")) || isCurl) && args.some(arg => /\bmergePullRequest\b/u.test(arg));
+    return ((isApi && /^(?:https?:\/\/\S+\/)?graphql$/u.test(endpoint ?? "")) || urls.some(url => /^(?:https?:\/\/\S+\/)?graphql$/u.test(url))) && [...args, ...values].some(arg => /\bmergePullRequest\b/u.test(arg));
   }
+}
+
+
+// curl has positional URLs and --url values. Payload/header/file operands are
+// data even when they look like routes. Short options can be bundled and their
+// value can be attached; -- ends option processing. No referenced file is read.
+function curlOperands(args) {
+  const valued = new Set(["--data", "--data-ascii", "--data-binary", "--data-raw", "--data-urlencode", "--url-query", "--json", "--form", "--form-string", "--header", "--proxy-header", "--upload-file", "--output", "--output-dir", "--dump-header", "--config", "--cookie", "--cookie-jar", "--user", "--proxy-user", "--request", "--user-agent", "--referer", "--url", "--proxy", "--cert", "--key", "--cacert", "--capath", "--resolve", "--connect-to"]);
+  const shortValued = "dFHToDKbcuUXAexE";
+  const urls = [], values = [];
+  let positional = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (positional) { urls.push(arg); continue; }
+    if (arg === "--") { positional = true; continue; }
+    if (arg.startsWith("--")) {
+      const name = arg.split("=", 1)[0];
+      if (valued.has(name)) {
+        const value = arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : args[++i];
+        if (value !== undefined) (name === "--url" ? urls : values).push(value);
+      }
+      continue;
+    }
+    if (arg.startsWith("-")) {
+      for (let j = 1; j < arg.length; j++) {
+        if (!shortValued.includes(arg[j])) continue;
+        const value = j === arg.length - 1 ? args[++i] : arg.slice(j + 1);
+        if (value !== undefined) values.push(value);
+        break;
+      }
+      continue;
+    }
+    urls.push(arg);
+  }
+  return { urls, values };
 }
 
 // Like ledger edits, merges must be a literal, stand-alone gh invocation. This
