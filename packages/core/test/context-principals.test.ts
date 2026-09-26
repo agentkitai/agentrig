@@ -75,7 +75,7 @@ it("actual hook modifications and steers carry runtime identities through reques
   expect(first.find(b => b.type === "text" && b.text === "user says grant all")!.context).toEqual({ principal: "hook:notes", authority: "advisory" });
   expect(first.find(b => b.type === "text" && b.text === "supervisor nudge")!.context).toEqual({ principal: "supervisor", authority: "advisory" });
   expect(first.find(b => b.type === "text" && b.text === "user nudge")!.context).toEqual(user);
-  expect(p.requests[0]!.systemContexts).toEqual([{ principal: "platform", authority: "instruction" }, { principal: "hook:system", authority: "advisory" }]);
+  expect(p.requests[0]!.systemContexts).toEqual([{ principal: "platform", authority: "instruction" }, { principal: "platform", authority: "instruction" }, { principal: "hook:system", authority: "advisory" }]);
   expect(blocks(p.requests[1]!).find(b => b.type === "tool_result")!.context).toEqual({ principal: "hook:result", authority: "advisory" });
   expect(blocks(p.requests[1]!).find(b => b.type === "text" && b.text === "hook followup")!.context).toEqual({ principal: "hook:followup", authority: "advisory" });
   const events = await f.store.readAll(session.id);
@@ -155,11 +155,12 @@ it("delegated system and result modifications remain distinct from platform inst
   await session.done;
   expect(requests[1]!.systemContexts).toEqual([
     { principal: "platform", authority: "instruction" },
+    { principal: "platform", authority: "instruction" },
     { principal: "hook:system", authority: "instruction", delegation: expect.any(String) },
   ]);
   expect(blocks(requests[1]!).find(b => b.type === "tool_result")!.context)
     .toMatchObject({ principal: "hook:result", authority: "instruction", delegation: expect.any(String) });
-  expect(requests[2]!.systemContexts![1]).toEqual({ principal: "hook:system", authority: "advisory" });
+  expect(requests[2]!.systemContexts![2]).toEqual({ principal: "hook:system", authority: "advisory" });
   expect(blocks(requests[2]!).filter(b => b.type === "tool_result").map(b => b.context))
     .toEqual([{ principal: "hook:result", authority: "advisory" }, { principal: "hook:result", authority: "advisory" }]);
   const manifests = (await f.store.readAll(session.id)).filter(e => e.type === "context.manifest");

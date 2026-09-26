@@ -177,7 +177,7 @@ export function createTrain(runtime: TrainRuntime, stages: TrainStages) {
           if (row.resume !== undefined) state.sessionIds.push(row.resume.session);
           const env = row.environment;
           let childEnv = await options.childEnvironment?.(env.checkout, env.profile, row.builderProvider);
-          const checkEnv = { ...(options.launcherEnvironment ?? process.env) };
+          const checkEnv = rowEnvironment(options.launcherEnvironment);
           for (const key of ["CODEX_HOME", "CLAUDE_CONFIG_DIR"]) {
             if (childEnv?.[key] !== undefined) checkEnv[key] = childEnv[key];
           }
@@ -221,7 +221,7 @@ export function createTrain(runtime: TrainRuntime, stages: TrainStages) {
           if (row.builderProvider !== undefined) argv.push("--builder-provider", row.builderProvider);
           argv.push(prompt);
           let sessionWrites = Promise.resolve();
-          const result = await command({ executable: process.execPath, argv: options.cli === undefined ? argv : [options.cli, ...argv], cwd: env.checkout, ...(childEnv === undefined ? {} : { env: childEnv }), log, resultPath,
+          const result = await command({ executable: process.execPath, argv: options.cli === undefined ? argv : [options.cli, ...argv], cwd: env.checkout, env: rowEnvironment(childEnv), log, resultPath,
             onSession: id => {
               if (!state.sessionIds.includes(id)) {
                 state.sessionIds.push(id);
@@ -329,4 +329,11 @@ export function createTrain(runtime: TrainRuntime, stages: TrainStages) {
   }
 
   return { runTrain, trainStatus, trainUsage, trainCommand };
+}
+
+/** Host CLI session markers are not identities or nesting state for AgentRig rows.
+ * Copy rather than mutate the launcher/profile snapshot, including refreshes. */
+function rowEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(source).filter(([key]) =>
+    key !== "CLAUDECODE" && !key.startsWith("CLAUDE_CODE_")));
 }

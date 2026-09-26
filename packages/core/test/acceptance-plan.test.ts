@@ -27,7 +27,8 @@ it("the first real request asks for acceptance without replacing custom or hook 
   f.config.hooks = [{ point: "pre_model", handler: context => ({ action: "modify", patch: { system: `${context.request!.system}\n\nHOOK NOTE` } }) }];
   const session = createAgent(f.config).run("test task", { cwd: f.root }); await session.done;
   expect(f.requests).toHaveLength(2);
-  expect(f.requests[0]!.system).toContain("CUSTOM SYSTEM\n\nHOOK NOTE\n\nAcceptance planning:");
+  expect(f.requests[0]!.system).toContain(`CUSTOM SYSTEM\n\nAgentRig session id: ${session.id}`);
+  expect(f.requests[0]!.system).toContain("\n\nHOOK NOTE\n\nAcceptance planning:");
   expect(f.requests[0]!.system).toContain("Include an accept field for every item");
   expect(f.requests[1]!.system).not.toContain("Acceptance planning:");
   expect(f.requests[0]!.systemContexts?.at(-1)).toEqual({ principal: "platform", authority: "instruction" });
