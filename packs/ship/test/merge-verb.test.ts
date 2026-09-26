@@ -58,6 +58,7 @@ describe("merge classification by executable verb #619", () => {
     `node -e 'execSync("gh pr merge 52")'`,
     `gh pr merge`, `gh pr merge 52 --body 'unterminated`,
     `xargs gh pr merge 52`, `docker run image gh pr merge 52`,
+    `sudo -u node gh pr merge 52`, `sudo -u gh gh pr merge 52`,
     `if true; then gh pr merge 52; fi`, `! gh pr merge 52`,
     `gh api https://api.github.com/graphql -f 'query=mutation { mergePullRequest(input:{}) {clientMutationId}}'`,
     `gh api --input repos/payload.json repos/o/r/pulls/52/merge -X PUT`,

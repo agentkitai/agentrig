@@ -15,15 +15,15 @@ export function mergeIntent(command) {
   if (typeof command !== "string") return false;
   const { segments, substitutions } = shellIntentParts(command);
   if (substitutions.some(mergeIntent)) return true;
-  return segments.some(segment => {
-    // Wrapper prefixes still expose their command to this conservative backstop.
-    // Once an executable is found, its arguments cannot select another executable.
-    let start = 0;
-    if (!/^(?:.*\/)?(?:gh|curl|sh|bash|dash|zsh|ksh|csh|tcsh|fish|eval|python[\d.]*|node|ruby|perl|echo|printf)$/u.test(segment[start] ?? "")) {
-      const next = segment.findIndex((arg, i) => i > start && /^(?:.*\/)?(?:gh|curl|sh|bash|dash|zsh|ksh|csh|tcsh|fish|eval|python[\d.]*|node|ruby|perl)$/u.test(arg));
-      if (next !== -1) start = next;
+  return segments.some(inspect);
+  function inspect(segment) {
+    // Unknown prefixes retain the conservative literal-wrapper backstop. Try
+    // every candidate: a wrapper option value named node/gh is not authority to
+    // ignore the following executable. Known commands own their data arguments.
+    if (!/^(?:.*\/)?(?:gh|curl|sh|bash|dash|zsh|ksh|csh|tcsh|fish|eval|python[\d.]*|node|ruby|perl|echo|printf)$/u.test(segment[0] ?? "")) {
+      return segment.some((arg, i) => i > 0 && /^(?:.*\/)?(?:gh|curl|sh|bash|dash|zsh|ksh|csh|tcsh|fish|eval|python[\d.]*|node|ruby|perl)$/u.test(arg) && inspect(segment.slice(i)));
     }
-    const args = segment.slice(start);
+    const args = segment.slice();
     const executable = args.shift() ?? "";
     const isGh = /^(?:.*\/)?gh$/u.test(executable);
     const isCurl = /^(?:.*\/)?curl$/u.test(executable);
@@ -64,7 +64,7 @@ export function mergeIntent(command) {
       if (args.some(arg => /\bpr\s+merge\b|\bpulls\/[^\s/]+\/merge\b|\bmergePullRequest\b/u.test(arg))) return true;
     }
     return ((isApi && /^(?:https?:\/\/\S+\/)?graphql$/u.test(endpoint ?? "")) || isCurl) && args.some(arg => /\bmergePullRequest\b/u.test(arg));
-  });
+  }
 }
 
 // Like ledger edits, merges must be a literal, stand-alone gh invocation. This
