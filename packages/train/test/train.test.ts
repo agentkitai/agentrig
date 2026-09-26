@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promis
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createAgent, RulePolicy, SessionStore, type ModelProvider } from "@agentkitai/agentrig-core";
 import { TrainRowSchema, type TrainCommand } from "@agentkitai/agentrig-train";
 
 import { trainPaths } from "../../../test/train-paths.ts";
@@ -36,6 +37,68 @@ async function fixture(count = 1) {
   return { root, command, calls };
 }
 describe("train", () => {
+  it("a row builder records its assigned AgentRig session with a conflicting launcher id", async () => {
+    vi.stubEnv("CLAUDE_CODE_SESSION_ID", "launching-host-session");
+    const f = await fixture();
+    let builderId: string | undefined;
+    let recorded: string | undefined;
+    const provider: ModelProvider = {
+      id: "fixture", model: "fixture", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 10000 },
+      async *stream(request) {
+        recorded = request.system.match(/^AgentRig session id: (.+)$/mu)?.[1];
+        yield { type: "text_delta", text: `Session provenance: ${recorded}` };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    expect(await runTrain(f.root, { command: async request => {
+      if (request.argv[0] === "run" && request.argv[1] !== "list") {
+        const builder = createAgent({ provider, tools: [], permissions: new RulePolicy([]),
+          systemPrompt: "Record your builder session provenance.", repoMap: false,
+          store: new SessionStore({ root: join(f.root, "builder-sessions") }),
+        }).run("Record provenance", { cwd: f.root });
+        builderId = builder.id;
+        expect((await builder.done).reason).toBe("done");
+        const events = await new SessionStore({ root: join(f.root, "builder-sessions") }).readAll(builder.id);
+        expect(events).toContainEqual(expect.objectContaining({ type: "message.append", message: expect.objectContaining({
+          role: "assistant", content: expect.arrayContaining([expect.objectContaining({ type: "text", text: `Session provenance: ${builder.id}` })]),
+        }) }));
+      }
+      return f.command(request);
+    } })).toBe("empty");
+    expect(builderId).toBeTruthy();
+    expect(recorded).toBe(builderId);
+    expect(recorded).not.toBe(process.env.CLAUDE_CODE_SESSION_ID);
+  });
+
+  it.each([false, true])("scrubs host session markers from every row process (configured=%s)", async configured => {
+    vi.stubEnv("CLAUDECODE", "1");
+    vi.stubEnv("CLAUDE_CODE_SESSION_ID", "host-session-not-agentrig");
+    vi.stubEnv("CLAUDE_CODE_OTHER", "host-other");
+    vi.stubEnv("CLAUDE_CODE_", "");
+    vi.stubEnv("CLAUDECODE_EXTRA", "preserve unrelated key");
+    vi.stubEnv("CLAUDE_CONFIG_DIR", "/operator/home");
+    const f = await fixture();
+    const environments: NodeJS.ProcessEnv[] = [];
+    const original = { ...process.env };
+    const result = await runTrain(f.root, {
+      launcherEnvironment: original,
+      ...(configured ? { childEnvironment: async () => ({ ...original }) } : {}),
+      command: async request => {
+        environments.push(request.env ?? process.env);
+        return f.command(request);
+      },
+    });
+    expect(result).toBe("empty");
+    expect(environments.length).toBeGreaterThan(3);
+    for (const env of environments) {
+      expect(env.CLAUDECODE).toBeUndefined();
+      expect(Object.keys(env).filter(key => key.startsWith("CLAUDE_CODE_"))).toEqual([]);
+      expect(env.CLAUDE_CONFIG_DIR).toBe("/operator/home");
+      expect(env.CLAUDECODE_EXTRA).toBe("preserve unrelated key");
+    }
+    expect(original.CLAUDE_CODE_SESSION_ID).toBe("host-session-not-agentrig");
+    expect(process.env.CLAUDECODE).toBe("1");
+  });
   it("builderProvider accepts named entries, refuses malformed values and reaches child argv", async () => {
     expect(TrainRowSchema.parse({ ...row, builderProvider: "sol" })).toHaveProperty("builderProvider", "sol");
     for (const builderProvider of ["", "  ", 7, null]) expect(TrainRowSchema.safeParse({ ...row, builderProvider }).success).toBe(false);

@@ -120,7 +120,34 @@ async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promis
   return out;
 }
 
+function runtimeIdentity(id: string): string {
+  return `AgentRig session id: ${id}\nSession provenance is this runtime-assigned AgentRig id, never an inherited host environment variable.`;
+}
+
 describe("agent loop", () => {
+  it.each([false, true])("records builder provenance from the runtime session, never host variables (child=%s)", async child => {
+    vi.stubEnv("CLAUDE_CODE_SESSION_ID", "host-session-not-agentrig");
+    vi.stubEnv("AGENTRIG_SESSION_ID", "also-not-runtime");
+    try {
+      const provider = new FakeProvider([[stop("end_turn")], [stop("end_turn")]]);
+      let recordedProvenance: string | undefined;
+      const stream = provider.stream.bind(provider);
+      provider.stream = async function* (request, signal) {
+        recordedProvenance = request.system.match(/^AgentRig session id: (.+)$/mu)?.[1];
+        yield* stream(request, signal);
+      };
+      const agent = createAgent(makeConfig(provider));
+      const session = agent.run("Record builder session provenance", { cwd: root, ...(child ? { id: "preallocated-child", parent: "parent-session" } : {}) });
+      await session.done;
+      expect(recordedProvenance).toBe(session.id);
+      const resumed = agent.run("Continue recording provenance", { resume: session.id });
+      await resumed.done;
+      expect(recordedProvenance).toBe(resumed.id);
+      expect(recordedProvenance).not.toBe("parent-session");
+      expect(provider.requests[0]!.system).not.toContain("host-session-not-agentrig");
+      expect(provider.requests[0]!.system).not.toContain("also-not-runtime");
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("persists provider slot waits while allowing the response to finish", async () => {
     const provider = new FakeProvider([[{ type: "wait", entry: "login", maxConcurrent: 1 }, { type: "text_delta", text: "ok" }, usage(5, 2), stop("end_turn")]]);
     const session = createAgent(makeConfig(provider)).run("go", { cwd: root });
@@ -214,7 +241,7 @@ describe("agent loop", () => {
       },
       { role: "user", content: [{ type: "tool_result", toolUseId: "t1", content: "echo: hi" }] },
     ]);
-    expect(provider.requests[0]!.system).toBe("test system");
+    expect(provider.requests[0]!.system).toBe("test system\n\n" + runtimeIdentity("sess1"));
     expect(events.some((e) => e.type === "context.loaded")).toBe(false);
   });
 
@@ -641,7 +668,7 @@ describe("agent loop", () => {
     const events = await collect(session);
     await session.done;
 
-    expect(provider.requests[0]?.system).toBe("test system");
+    expect(provider.requests[0]?.system).toBe("test system\n\n" + runtimeIdentity("sess1"));
     expect(events.some((event) => event.type === "context.repo_map")).toBe(false);
   });
 
@@ -654,7 +681,7 @@ describe("agent loop", () => {
     const events = await collect(session);
     await session.done;
 
-    expect(provider.requests[0]?.system).toBe("test system");
+    expect(provider.requests[0]?.system).toBe("test system\n\n" + runtimeIdentity("sess1"));
     expect(provider.requests[0]?.system).not.toContain(malicious);
     expect(events.some((event) => event.type === "context.loaded")).toBe(false);
     expect(events.some((event) => event.type === "context.repo_map")).toBe(false);
@@ -673,7 +700,7 @@ describe("agent loop", () => {
     await session.done;
 
     expect(provider.requests[0]!.system).toBe(
-      `base system\n\n===== BEGIN PROJECT INSTRUCTIONS (${instructionsPath}) =====\n${instructions}\n===== END PROJECT INSTRUCTIONS =====`,
+      `base system\n\n${runtimeIdentity(session.id)}\n\n===== BEGIN PROJECT INSTRUCTIONS (${instructionsPath}) =====\n${instructions}\n===== END PROJECT INSTRUCTIONS =====`,
     );
     expect(JSON.stringify(provider.requests[0]!.messages)).not.toContain("Keep leading space");
     expect(JSON.stringify(events)).not.toContain("Keep leading space");

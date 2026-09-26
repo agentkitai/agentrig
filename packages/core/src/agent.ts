@@ -649,6 +649,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
             reason: "base agent instructions",
           }]
         : configuredPrompt.map((block) => ({ ...block }));
+      systemBlocks.push({
+        content: `AgentRig session id: ${id}\nSession provenance is this runtime-assigned AgentRig id, never an inherited host environment variable.`,
+        source: "system_prompt",
+        origin: "agentrig.runtime.session",
+        authority: "instruction",
+        reason: "runtime session identity",
+      });
       system = renderSystemBlocks(systemBlocks);
       // This gate is deliberately adjacent to the read. A caller-provided boolean would be easy to
       // reuse for another cwd; canonical containment keeps aliases within one trusted project.

@@ -10,6 +10,12 @@ BUILDER and FIXER children return exactly one JSON object, not a prose success c
   Unfinished execution is not an environment blocker.
 Persist supporting receipts, session IDs, owned paths, cleanup and findings in the PR ledger
 before returning the small typed PR object. A blocker never authorizes wider scope.
+Session provenance comes from the runtime's `AgentRig session id:` system context.
+Record that exact id, never `CLAUDE_CODE_SESSION_ID`, `AGENTRIG_SESSION_ID`, or any
+other inherited host variable. Conductors obtain child ids from `subagent.spawn`
+events/tool results, not the launcher's environment. If the runtime context is absent,
+report provenance unavailable rather than guessing a host id. Train row processes
+scrub `CLAUDECODE` and all `CLAUDE_CODE_*` keys, preserving reviewer-home selection.
 
 CONDUCTOR: for every builder/fixer spawn, obtain the transport schema with
 `node packs/ship/scripts/child-result.mjs schema` (after the pack build), and pass that

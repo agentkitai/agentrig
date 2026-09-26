@@ -1,3 +1,20 @@
+## Session provenance belongs to AgentRig (#614)
+
+Current roadmap row: issue #614, “Session provenance comes from AgentRig, not the host”;
+next: independent conductor review and authorized landing. R19 order is unchanged.
+
+The runtime supplies its actual session id in model system context (including child
+sessions and resume), independent of host environment. Ship handoff instructions use
+that identity and explicitly refuse inherited host ids. Train row command environments
+now remove CLAUDECODE and every CLAUDE_CODE_* key, both with and without a profile
+resolver and after checkout refresh; reviewer homes and unrelated variables survive.
+This is an exception to TRAIN-OPERATIONS' general inherited-variable retention rule.
+No event schema, permissions, provider selection, or workflow gate changes. Rejected:
+assigning provenance from a replacement environment variable or a launcher id.
+Fail-first coverage records the builder-visible runtime id with a conflicting host id;
+train coverage exercises both compositions and profile/fallback environments. LOW
+wording observations remain advisory, not residual defects without a real failure.
+
 ## Ship workflow in other repositories — portability first slice
 
 Current roadmap row: user task “Ship workflow in other repositories (portability,

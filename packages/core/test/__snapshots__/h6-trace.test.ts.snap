@@ -42,6 +42,20 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
         },
         {
           "authority": "instruction",
+          "bytes": 129,
+          "context": {
+            "authority": "instruction",
+            "principal": "platform",
+          },
+          "disposition": "kept",
+          "hash": "a63fe859828e4e86",
+          "origin": "agentrig.runtime.session",
+          "reason": "runtime session identity",
+          "source": "system_prompt",
+          "tokens": 33,
+        },
+        {
+          "authority": "instruction",
           "bytes": 11,
           "context": {
             "authority": "instruction",
@@ -65,7 +79,7 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
           "tokens": 246,
         },
       ],
-      "requestHash": "603a9b94aefb6be8",
+      "requestHash": "cf7bc61aa0efe5ce",
       "seq": 2,
       "sessionId": "trace",
       "ts": 42,
@@ -75,7 +89,7 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
     {
       "seq": 3,
       "sessionId": "trace",
-      "tokensIn": 20,
+      "tokensIn": 53,
       "ts": 42,
       "type": "model.request",
     },
@@ -207,7 +221,7 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
     {
       "cacheHints": {
         "systemPrefix": true,
-        "systemPrefixChars": 12,
+        "systemPrefixChars": 143,
       },
       "maxTokens": 8192,
       "messages": [
@@ -225,8 +239,15 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
           "role": "user",
         },
       ],
-      "system": "trace system",
+      "system": "trace system
+
+AgentRig session id: trace
+Session provenance is this runtime-assigned AgentRig id, never an inherited host environment variable.",
       "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
         {
           "authority": "instruction",
           "principal": "platform",
@@ -323,6 +344,20 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
           },
           {
             "authority": "instruction",
+            "bytes": 129,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
+            "disposition": "kept",
+            "hash": "a63fe859828e4e86",
+            "origin": "agentrig.runtime.session",
+            "reason": "runtime session identity",
+            "source": "system_prompt",
+            "tokens": 33,
+          },
+          {
+            "authority": "instruction",
             "bytes": 11,
             "context": {
               "authority": "instruction",
@@ -346,7 +381,7 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
             "tokens": 246,
           },
         ],
-        "requestHash": "603a9b94aefb6be8",
+        "requestHash": "cf7bc61aa0efe5ce",
         "seq": 2,
         "sessionId": "trace",
         "ts": 42,
@@ -356,7 +391,7 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
       {
         "seq": 3,
         "sessionId": "trace",
-        "tokensIn": 20,
+        "tokensIn": 53,
         "ts": 42,
         "type": "model.request",
       },
@@ -592,6 +627,20 @@ exports[`preserves complete sequential permission/hook/tool and resumed traces 1
           },
           {
             "authority": "instruction",
+            "bytes": 129,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
+            "disposition": "kept",
+            "hash": "a63fe859828e4e86",
+            "origin": "agentrig.runtime.session",
+            "reason": "runtime session identity",
+            "source": "system_prompt",
+            "tokens": 33,
+          },
+          {
+            "authority": "instruction",
             "bytes": 10,
             "context": {
               "authority": "instruction",
@@ -615,7 +664,7 @@ exports[`preserves complete sequential permission/hook/tool and resumed traces 1
             "tokens": 275,
           },
         ],
-        "requestHash": "ec070693f1528122",
+        "requestHash": "3c0ec863d070d120",
         "seq": 2,
         "sessionId": "trace",
         "ts": 42,
@@ -625,7 +674,7 @@ exports[`preserves complete sequential permission/hook/tool and resumed traces 1
       {
         "seq": 3,
         "sessionId": "trace",
-        "tokensIn": 20,
+        "tokensIn": 52,
         "ts": 42,
         "type": "model.request",
       },
@@ -874,6 +923,20 @@ guidance",
           },
           {
             "authority": "instruction",
+            "bytes": 129,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
+            "disposition": "kept",
+            "hash": "a63fe859828e4e86",
+            "origin": "agentrig.runtime.session",
+            "reason": "runtime session identity",
+            "source": "system_prompt",
+            "tokens": 33,
+          },
+          {
+            "authority": "instruction",
             "bytes": 10,
             "context": {
               "authority": "instruction",
@@ -961,7 +1024,7 @@ guidance",
             "tokens": 275,
           },
         ],
-        "requestHash": "f10ee851553babe2",
+        "requestHash": "d11cc00df22e3605",
         "seq": 20,
         "sessionId": "trace",
         "ts": 42,
@@ -971,7 +1034,7 @@ guidance",
       {
         "seq": 21,
         "sessionId": "trace",
-        "tokensIn": 163,
+        "tokensIn": 196,
         "ts": 42,
         "type": "model.request",
       },
@@ -1045,7 +1108,7 @@ guidance",
     {
       "cacheHints": {
         "systemPrefix": true,
-        "systemPrefixChars": 12,
+        "systemPrefixChars": 143,
       },
       "maxTokens": 8192,
       "messages": [
@@ -1063,8 +1126,15 @@ guidance",
           "role": "user",
         },
       ],
-      "system": "trace system",
+      "system": "trace system
+
+AgentRig session id: trace
+Session provenance is this runtime-assigned AgentRig id, never an inherited host environment variable.",
       "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
         {
           "authority": "instruction",
           "principal": "platform",
@@ -1131,7 +1201,7 @@ guidance",
     {
       "cacheHints": {
         "systemPrefix": true,
-        "systemPrefixChars": 12,
+        "systemPrefixChars": 143,
       },
       "maxTokens": 8192,
       "messages": [
@@ -1204,8 +1274,15 @@ guidance",
           "role": "user",
         },
       ],
-      "system": "trace system",
+      "system": "trace system
+
+AgentRig session id: trace
+Session provenance is this runtime-assigned AgentRig id, never an inherited host environment variable.",
       "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
         {
           "authority": "instruction",
           "principal": "platform",
@@ -1272,7 +1349,7 @@ guidance",
     {
       "cacheHints": {
         "systemPrefix": true,
-        "systemPrefixChars": 12,
+        "systemPrefixChars": 143,
       },
       "maxTokens": 8192,
       "messages": [
@@ -1367,8 +1444,15 @@ guidance",
           "role": "user",
         },
       ],
-      "system": "trace system",
+      "system": "trace system
+
+AgentRig session id: trace
+Session provenance is this runtime-assigned AgentRig id, never an inherited host environment variable.",
       "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
         {
           "authority": "instruction",
           "principal": "platform",
@@ -1472,6 +1556,20 @@ guidance",
             "reason": "base agent instructions",
             "source": "system_prompt",
             "tokens": 3,
+          },
+          {
+            "authority": "instruction",
+            "bytes": 129,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
+            "disposition": "kept",
+            "hash": "a63fe859828e4e86",
+            "origin": "agentrig.runtime.session",
+            "reason": "runtime session identity",
+            "source": "system_prompt",
+            "tokens": 33,
           },
           {
             "authority": "instruction",
@@ -1586,7 +1684,7 @@ guidance",
             "tokens": 275,
           },
         ],
-        "requestHash": "8637b7299b98e5fc",
+        "requestHash": "dcee1448865bf072",
         "seq": 30,
         "sessionId": "trace",
         "ts": 42,
@@ -1596,7 +1694,7 @@ guidance",
       {
         "seq": 31,
         "sessionId": "trace",
-        "tokensIn": 196,
+        "tokensIn": 228,
         "ts": 42,
         "type": "model.request",
       },
@@ -1789,7 +1887,7 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
     {
       "cacheHints": {
         "systemPrefix": true,
-        "systemPrefixChars": 12,
+        "systemPrefixChars": 143,
       },
       "maxTokens": 8192,
       "messages": [
@@ -1807,8 +1905,15 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
           "role": "user",
         },
       ],
-      "system": "trace system",
+      "system": "trace system
+
+AgentRig session id: trace
+Session provenance is this runtime-assigned AgentRig id, never an inherited host environment variable.",
       "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
         {
           "authority": "instruction",
           "principal": "platform",
@@ -1866,7 +1971,7 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
     {
       "cacheHints": {
         "systemPrefix": true,
-        "systemPrefixChars": 12,
+        "systemPrefixChars": 143,
       },
       "maxTokens": 8192,
       "messages": [
@@ -1908,8 +2013,15 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
           "role": "user",
         },
       ],
-      "system": "trace system",
+      "system": "trace system
+
+AgentRig session id: trace
+Session provenance is this runtime-assigned AgentRig id, never an inherited host environment variable.",
       "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
         {
           "authority": "instruction",
           "principal": "platform",
@@ -2006,6 +2118,20 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
           },
           {
             "authority": "instruction",
+            "bytes": 129,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
+            "disposition": "kept",
+            "hash": "a63fe859828e4e86",
+            "origin": "agentrig.runtime.session",
+            "reason": "runtime session identity",
+            "source": "system_prompt",
+            "tokens": 33,
+          },
+          {
+            "authority": "instruction",
             "bytes": 15,
             "context": {
               "authority": "instruction",
@@ -2029,7 +2155,7 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
             "tokens": 246,
           },
         ],
-        "requestHash": "180ed4d68e4eecad",
+        "requestHash": "265f65a2f90103b6",
         "seq": 2,
         "sessionId": "trace",
         "ts": 42,
@@ -2039,7 +2165,7 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
       {
         "seq": 3,
         "sessionId": "trace",
-        "tokensIn": 21,
+        "tokensIn": 54,
         "ts": 42,
         "type": "model.request",
       },
@@ -2202,6 +2328,20 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
           },
           {
             "authority": "instruction",
+            "bytes": 129,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
+            "disposition": "kept",
+            "hash": "a63fe859828e4e86",
+            "origin": "agentrig.runtime.session",
+            "reason": "runtime session identity",
+            "source": "system_prompt",
+            "tokens": 33,
+          },
+          {
+            "authority": "instruction",
             "bytes": 15,
             "context": {
               "authority": "instruction",
@@ -2245,7 +2385,7 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
             "tokens": 246,
           },
         ],
-        "requestHash": "aedb8680db3ae635",
+        "requestHash": "da1178fc2ade7df0",
         "seq": 16,
         "sessionId": "trace",
         "ts": 42,
@@ -2255,7 +2395,7 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
       {
         "seq": 17,
         "sessionId": "trace",
-        "tokensIn": 73,
+        "tokensIn": 105,
         "ts": 42,
         "type": "model.request",
       },
