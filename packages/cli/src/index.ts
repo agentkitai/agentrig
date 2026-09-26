@@ -22,3 +22,5 @@ if (invoked === realpathSync(fileURLToPath(import.meta.url))) {
     process.exitCode = error instanceof Error && error.name === "AbortError" ? 130 : 1;
   });
 }
+
+export { readProjectConfig, projectConfigPath } from "./project-config.js";

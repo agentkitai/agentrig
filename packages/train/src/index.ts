@@ -68,6 +68,8 @@ export interface TrainRequest {
 export type TrainCommand = (request: TrainRequest) => Promise<{ code: number; stdout: string; stderr: string }>;
 export interface TrainStatus { invalidEntries: string[]; queue: number; active: number; done: number; halted: number; usage?: Array<RowUsage & { coverageWarnings: string[] }> | null; usageError?: string; pricingNote?: string }
 export interface TrainOptions {
+  /** Host-resolved declaration; absence is an error, empty steps executes nothing. */
+  projectChecks?: (checkout: string, profile?: string) => Promise<{ bootstrap: string; preflight?: string | undefined; steps: Array<{ name: string; command: string }> } | undefined>;
   /** CLI entrypoint to re-enter the existing headless run path. */
   cli?: string;
   /** Snapshot before CLI profile overlays are applied. */

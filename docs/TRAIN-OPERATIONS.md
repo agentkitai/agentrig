@@ -201,33 +201,34 @@ different checkouts, rather than combining or overwriting their totals. Atomic m
 exclusive-create temporary names, so an interrupted stale `.tmp` cannot prevent a
 recovery halt record. Stale evidence is left intact.
 
-After each fast-forward, train resolves the checkout's project checks using the row's
-optional profile. A declared `testTimeout` on its bare `pnpm test` entry supplies the
-bounded higher per-test Vitest budget (AgentRig: 15000ms; zod range 1–120000ms).
-The effective argv is `pnpm test --testTimeout=15000`; its validation command log
-records both argv and numeric `testTimeout`. Without that declaration, argv and log
-shape stay unchanged. Duplicate budgeted `pnpm test` entries are ambiguous and halt;
-invalid project config also halts before validation runs. This configures the fixed
-train validation suite, not arbitrary project commands or a shell execution timeout.
-Budgeted/composite/otherwise argument-bearing suites are **not** eligible for the
-exact-command isolated retry below, preserving #501's conservative gate.
+After each fast-forward, the CLI resolves the explicit checkout's declared checks
+and selected profile (including the user-level per-repository fallback). It runs
+bootstrap, optional preflight and ordered named steps through the platform shell,
+stopping on nonzero. Missing declarations refuse; explicit empty steps run nothing.
+The resolver expands declared testTimeout metadata into the effective command; it
+does not rewrite arbitrary shell syntax or infer commands from a package manager.
 
 Before **each** row, including resumes, validate repository root, clean checkout,
 base branch and exact GitHub origin; fetch, fast-forward only, and refuse a locally
-advanced base. Then run `pnpm install --frozen-lockfile`, `pnpm build`,
-`pnpm typecheck`, `pnpm test`. Each step gets at most one retry for narrowly
-classified network infrastructure errors (ECONNRESET/EAI_AGAIN/ETIMEDOUT, DNS or
-remote disconnect), not assertions/compiler failures. A failed `pnpm test` with a
-complete Vitest default report containing **only** `Test timed out in 5000ms.`
-failures qualifies separately: rerun each reported test file, sequentially and once,
-using `pnpm exec vitest run --no-file-parallelism <file>`. Never rerun the whole
-suite for these timeouts or rerun passed files. A failed isolated retry halts in
-checkout; mixed assertions, malformed/incomplete reports, unsafe file names,
-unhandled errors and other timeout budgets fail closed. Original output and each
-isolated argv remain in the row log. Never retry the row itself.
-Git and pnpm must be available; landing verification uses authenticated `gh`.
+advanced base. Git and the declared command dependencies must be available;
+landing verification uses authenticated `gh`.
+
+**Legacy injected SDK composition only (no projectChecks callback):** the fixed
+precheck sequence remains `pnpm install --frozen-lockfile`, `pnpm build`,
+`pnpm typecheck`, `pnpm test`. Its declared bare `pnpm test` testTimeout budget,
+ambiguous-budget refusal, infrastructure retry and isolated default-timeout retry
+remain unchanged. Each step gets at most one retry for narrowly classified network
+infrastructure errors (ECONNRESET/EAI_AGAIN/ETIMEDOUT, DNS or remote disconnect),
+not assertions/compiler failures. A failed `pnpm test` with a complete Vitest
+default report containing **only** `Test timed out in 5000ms.` failures qualifies
+separately: rerun each reported file sequentially once with
+`pnpm exec vitest run --no-file-parallelism <file>`. A failed isolated retry halts;
+mixed assertions, malformed reports, unsafe filenames, unhandled errors and other
+timeout budgets fail closed. Original output and isolated argv remain logged.
+Never retry a row itself. CLI declared-check failures do not take this SDK fallback.
 Children inherit the operator's environment, without git-ai PATH injection and with
-`GIT_TRACE2_EVENT=0`. The command uses argv spawning, not shell interpolation.
+`GIT_TRACE2_EVENT=0`. Host Git/gh commands and child launch use argv spawning;
+only explicitly declared check commands use the platform shell.
 
 Train resolves named profiles against safely loaded user config and trusted project
 config, like `run --profile`; profiles need not be duplicated in project config.
@@ -320,3 +321,18 @@ this version only between rows; do not replace a live conductor's binary or stat
 #568 was the compatibility first slice; the final slice removes its temporary
 core → train/ship dependencies. R19d completion is recorded only after independent
 review disposition resolves (see SHIPPING-WORKFLOW completion-marker timing).
+
+## Foreign checkout activation (portability first slice)
+
+Use `packs/ship/README.md`'s explicit external source-install activation for a trusted
+foreign clone. User-level per-repository config supplies checks and reviewer slots
+without a committed `.agentrig`; the generic CLI and read-only check resolver share
+that fallback. Activation prints optional `packs.ship.ciWorkflows`; copy those exact
+names into the existing required `environment.ciWorkflows` row field. Configure the
+foreign `checkout`, GitHub `repository`, and `baseBranch` explicitly; all origin,
+clean-base, authorization, review, merge and exact post-merge CI gates are unchanged.
+CLI train runs declared bootstrap/preflight/named steps, not inferred pnpm commands.
+A missing declaration refuses; empty steps run none. Legacy injected SDK hosts
+without the checks callback retain their old fixed sequence. This paragraph
+supersedes older fixed-pnpm CLI examples only, not any landing gate.
+Adopt-existing-PR automation is a next slice, not part of this activation.

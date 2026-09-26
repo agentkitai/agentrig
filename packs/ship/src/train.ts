@@ -26,6 +26,16 @@ const env = row.environment;
         const startingBase = sha.parse(await exec("git", ["rev-parse", "HEAD"]));
         if (startingBase !== await exec("git", ["rev-parse", `origin/${env.baseBranch}`])) throw new Error("checkout is ahead of origin base");
         await refreshEnvironment();
+        if (options.projectChecks) {
+          const checks = await options.projectChecks(env.checkout, env.profile);
+          if (!checks) throw new Error("missing declared project checks; declare checks before running train");
+          if (checks.steps.length > 0) {
+            const commands = [checks.bootstrap, ...(checks.preflight === undefined ? [] : [checks.preflight]), ...checks.steps.map(step => step.command)];
+            for (const command of commands) await exec(process.platform === "win32" ? "cmd.exe" : "/bin/sh",
+              process.platform === "win32" ? ["/d", "/s", "/c", command] : ["-c", command]);
+          }
+          return startingBase;
+        }
         const declaredBudget = await options.testTimeout?.(env.checkout, env.profile);
         const testTimeout = z.number().int().min(1).max(120_000).optional().parse(declaredBudget);
         for (const argv of [["install", "--frozen-lockfile"], ["build"], ["typecheck"]]) await exec("pnpm", argv, true);

@@ -1,3 +1,4 @@
+import { readProjectConfig } from "./project-config.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readConfigFile, resolveConfig, type ConfigFile, type ConfigReadOptions, type ReviewerSlot } from "./config.js";
@@ -20,7 +21,7 @@ export async function resolveChildEnvironment(options: ConfigReadOptions & { cwd
     // Reuse normal built-in/unknown-profile validation; trusted project declarations
     // may name profiles, but never contribute environment authority.
     const trust = options.project === undefined ? await resolveProjectTrust(cwd, { home, interactive: false, ...(options.explicitTrust === undefined ? {} : { explicitTrust: options.explicitTrust }) }) : undefined;
-    const project = options.project ?? (trust?.trusted ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json"), options) : undefined);
+    const project = options.project ?? (trust?.trusted ? (await readProjectConfig(trust.projectRoot, { ...options, home }))?.config : undefined);
     resolveConfig({ defaults: {}, cli: {}, env: {}, ...(user === undefined ? {} : { user }), ...(project === undefined ? {} : { project }), profile });
   }
   Object.assign(env, profile === undefined ? {} : user?.profiles?.[profile]?.childEnv);
@@ -30,7 +31,7 @@ export async function resolveChildEnvironment(options: ConfigReadOptions & { cwd
 /** Resolve trusted child configuration; train policy and reviewer checks live in the ship pack. */
 export async function resolveConfiguredChildEnvironment(cwd: string, profile?: string): Promise<{ env: NodeJS.ProcessEnv; reviewers: Record<string, ReviewerSlot> | undefined; providerEntries(): string[] }> {
   const trust = await resolveProjectTrust(cwd, { home: homedir(), interactive: false });
-  const config = trust.trusted ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json")) : undefined;
+  const config = trust.trusted ? (await readProjectConfig(trust.projectRoot))?.config : undefined;
   const user = await loadChildUserConfig(cwd);
   const env = await resolveChildEnvironment({ cwd, ...(user === undefined ? {} : { user }), validateProfile: true, ...(config === undefined ? {} : { project: config }), ...(profile === undefined ? {} : { profile }) });
   function providerEntries(): string[] {

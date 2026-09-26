@@ -17,13 +17,15 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-it.each([undefined, "2", "2.0"])("actual trusted CLI role discovery reaches the child request and blocks bash despite YOLO (turns=%s)", async turns => {
+it.each([{turns: undefined, external:false}, {turns:"2",external:false}, {turns:"2.0",external:false}, {turns:undefined,external:true}])("actual trusted CLI role discovery reaches the child request and blocks bash despite YOLO (%j)", async ({turns,external}) => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-cli-roles-"))); roots.push(root);
   const cwd = join(root, "project"), home = join(root, "home"), logs = join(root, "logs");
   await mkdir(join(cwd, ".agentrig", "agents"), { recursive: true }); await mkdir(home);
-  await writeFile(join(cwd, ".agentrig", "agents", "reader.md"), '---\ntools: ["read_file"]\nmax-turns: 2\n---\nROLE FIXTURE: inspect only.');
+  const roleDirectory = external ? join(root, "external-roles") : join(cwd, ".agentrig", "agents");
+  await mkdir(roleDirectory, { recursive: true });
+  await writeFile(join(roleDirectory, "reader.md"), '---\ntools: ["read_file"]\nmax-turns: 2\n---\nROLE FIXTURE: inspect only.');
   await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ ingestOnEnd: false, root: logs, repoMap: false,
-    packages: false, extensionDiscovery: false, skillDiscovery: false, subagents: true }));
+    packages: false, extensionDiscovery: false, skillDiscovery: false, subagents: true, ...(external ? {agentRoleRoots:[roleDirectory]} : {}) }));
   vi.spyOn(process, "cwd").mockReturnValue(cwd);
   vi.stubEnv("OPENAI_API_KEY", "fixture-not-a-credential"); vi.stubEnv("LORE_API_URL", ""); vi.stubEnv("LORE_API_KEY", "");
   vi.spyOn(console, "log").mockImplementation(() => {}); vi.spyOn(console, "error").mockImplementation(() => {});

@@ -1,3 +1,4 @@
+import { projectConfigPath } from "./project-config.js";
 import { reviewerHome } from "./child-env.js";
 import { execFile } from "node:child_process";
 import { formatFeelBudgets } from "./feel-budgets.js";
@@ -35,6 +36,7 @@ export interface DoctorFileInfo {
 }
 
 export interface DoctorProbes {
+  projectConfigPath(root: string, home: string): Promise<string>;
   run(command: string, args: string[], cwd?: string, env?: NodeJS.ProcessEnv): Promise<{ code: number; stdout: string; stderr: string }>;
   readFile(path: string): Promise<string>;
   access(path: string, mode: number): Promise<void>;
@@ -144,6 +146,7 @@ function defaultProbes(): DoctorProbes {
       try { const result = await execFileAsync(command, args, { cwd, env, timeout: 15_000, maxBuffer: 64 * 1024 }); return { code: 0, ...result }; }
       catch { return { code: 1, stdout: "", stderr: "" }; }
     },
+    projectConfigPath,
     readFile: (path) => readFile(path, "utf8"),
     access,
     stat,
@@ -380,7 +383,14 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
   } else if (!trust.trusted) {
     checks.push(line("skip", "config:project", `skipped (untrusted) — trust state is ${trust.status}; file was not opened`));
   } else {
-    const loaded = await readOptionalConfig(projectPath, probes);
+    let loaded = await readOptionalConfig(projectPath, probes);
+    if (loaded.check.status === "skip" && boundary.userStateSafe) {
+      try {
+        const source = await probes.projectConfigPath(boundary.projectRoot, home);
+        const fallback = await readOptionalConfig(source, probes);
+        if (fallback.check.status !== "skip") loaded = { ...fallback, check: { ...fallback.check, detail: `${fallback.check.detail}; source ${display(source)}` } };
+      } catch { loaded = { check: line("fail", projectPath, "cannot resolve per-repository user config; inspect Git metadata and user-state permissions") }; }
+    }
     project = loaded.file;
     configInvalid ||= loaded.check.status === "fail";
     checks.push({ ...loaded.check, label: "config:project" });

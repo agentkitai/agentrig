@@ -24,5 +24,8 @@
   ],
   "docs": [
     "docs/SHIPPING-WORKFLOW.md"
+  ],
+  "agents": [
+    "agents/lander.md"
   ]
 }

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { lstat, open, opendir, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { z } from "zod";
 import { AgentRoleFrontmatterV1, AgentRoleName, parseAgentRoleFrontmatter, resolveManifestNames } from "./manifests.js";
 
@@ -27,6 +27,13 @@ export async function discoverAgentRoles(projectRoot: string, onError?: (error: 
     try { const stat = await lstat(path); if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("agent role directory must be a regular directory; symlinked .agentrig/agents paths are not supported"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
   }
+  return discoverAgentRoleDirectory(directory, onError);
+}
+
+/** Explicit trusted-host directory; no automatic home discovery or permissions. */
+export async function discoverAgentRoleDirectory(input: string, onError?: (error: Error) => void): Promise<readonly AgentRole[]> {
+  const directory = resolve(input);
+  if ((await lstat(input)).isSymbolicLink()) throw new Error("agent role directory cannot be a symlink");
   const entries: string[] = []; let count = 0;
   for await (const entry of await opendir(directory)) {
     if (++count > 128) throw new Error("agent role directory exceeds entry bound");

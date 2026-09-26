@@ -1,3 +1,4 @@
+import { readProjectConfig } from "./project-config.js";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -181,6 +182,7 @@ const ConfigValuesSchema = z
     subagentMaxTurns: SubagentTurnLimitSchema.optional(),
     subagentMaxChildren: positiveSetting.optional(),
     skills: stringList.optional(),
+    agentRoleRoots: z.array(z.string().min(1).max(4096).refine(value => isAbsolute(value) && !/[\x00-\x1f\x7f]/u.test(value), "agent role roots must be absolute plain paths")).max(32).optional(),
     extension: stringList.max(32).optional(),
     extensionDiscovery: z.boolean().optional(),
     packages: z.boolean().optional(),
@@ -232,6 +234,8 @@ export type ConfigFile = z.output<typeof ConfigFileSchema>;
 /** Schemas are explicit trusted-host registrations, never paths loaded from config. */
 export interface PackConfigRegistration { name: string; configSchema?: z.AnyZodObject | undefined }
 export interface ConfigReadOptions {
+  /** Safe user-state root for read-only per-project fallback lookup. */
+  home?: string;
   packs?: readonly PackConfigRegistration[];
   onWarning?: (message: string) => void;
 }
@@ -245,7 +249,7 @@ export function isStrictPackConfigSchema(value: unknown): value is z.AnyZodObjec
 function packSchema(options: ConfigReadOptions, profile: boolean): z.AnyZodObject {
   const shape: z.ZodRawShape = {
     ship: (profile ? z.object({ checks: ProjectChecksSchema.optional() })
-      : z.object({ checks: ProjectChecksSchema.optional(), reviewers: ReviewersSchema.optional() })).strict().optional(),
+      : z.object({ checks: ProjectChecksSchema.optional(), reviewers: ReviewersSchema.optional(), ciWorkflows: z.array(z.string().min(1).max(200).refine(value => value.trim().length > 0 && !/[\x00-\x1f\x7f]/u.test(value), "workflow names must be plain strings")).min(1).max(50).optional() })).strict().optional(),
   };
   const names = new Set<string>();
   for (const pack of options.packs ?? []) {
@@ -492,7 +496,7 @@ export async function loadRunConfig(
     ...(options.notice === undefined ? {} : { notice: options.notice }),
   }, boundary);
   const project = trust.trusted
-    ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json"), options)
+    ? (await readProjectConfig(trust.projectRoot, { ...options, home }))?.config
     : undefined;
   const selected = (file: ConfigFile | undefined): ConfigValues | undefined =>
     profile === undefined ? undefined : file?.profiles?.[profile];
