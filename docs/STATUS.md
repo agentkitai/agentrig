@@ -1,3 +1,21 @@
+## Merge guard classifies by verb, not quoted payload (#619)
+
+Current roadmap row: issue #619, “Merge guard classifies by verb, not quoted text”;
+next: independent conductor review and authorized landing. R19 order is unchanged.
+
+The merge-intent recognizer selects the executable and gh subcommand before
+examining command arguments. Edit/comment bodies, file names and comment REST
+payloads cannot become shell/interpreter/API merge programs merely by naming
+those executables. Shell segments, substitutions, recognized wrappers, literal
+REST merges and GraphQL mutation programs remain guarded/refused. Append-only
+ledger validation, authorization, dispatch and exact-head CI gates are unchanged.
+Fail-first and named deletion/reclassification mutants pin both directions,
+including composed pre-tool ledger behavior. Rejected: blanket exemptions for
+commands starting with an edit (which would hide chained/substituted merges),
+and interpreting body files as executable shell. This remains a bounded lexical
+backstop, not an arbitrary program interpreter; branch protection stays required.
+LOW wording observations are advisories unless they demonstrate a real defect.
+
 ## Verdict prompt shows blocking as a boolean (#617)
 
 Current roadmap row: issue #617, “Verdict prompt shows blocking as a boolean”;

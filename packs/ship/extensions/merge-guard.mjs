@@ -15,9 +15,26 @@ export function mergeIntent(command) {
   if (typeof command !== "string") return false;
   const { segments, substitutions } = shellIntentParts(command);
   if (substitutions.some(mergeIntent)) return true;
-  return segments.some(args => {
+  return segments.some(segment => {
+    // Wrapper prefixes still expose their command to this conservative backstop.
+    // Once an executable is found, its arguments cannot select another executable.
+    let start = 0;
+    while (/^[A-Za-z_][A-Za-z_0-9]*=/u.test(segment[start] ?? "")) start++;
+    if (/^(?:.*\/)?(?:env|sudo|command|exec|timeout|nice|nohup)$/u.test(segment[start] ?? "")) {
+      const next = segment.findIndex((arg, i) => i > start && /^(?:.*\/)?(?:gh|curl|sh|bash|dash|zsh|ksh|csh|tcsh|fish|eval|python[\d.]*|node|ruby|perl)$/u.test(arg));
+      if (next !== -1) start = next;
+    }
+    const args = segment.slice(start);
+    const executable = args.shift() ?? "";
+    const isGh = /^(?:.*\/)?gh$/u.test(executable);
+    const isCurl = /^(?:.*\/)?curl$/u.test(executable);
+    // gh's global repository selector precedes its executable subcommand.
+    if (isGh && ["--repo", "-R"].includes(args[0])) args.splice(0, 2);
+    else if (isGh && /^(?:--repo=|-R.)/u.test(args[0] ?? "")) args.shift();
+    const isApi = isGh && args[0] === "api";
+    const endpoint = isApi ? args.find(arg => /^(?:\/?repos\/|https?:\/\/|graphql$)/u.test(arg)) : undefined;
     for (let i = 0; i < args.length; i++) {
-      if (args[i] === "pr" && args[i + 1] === "merge") {
+      if (isGh && i === 0 && args[i] === "pr" && args[i + 1] === "merge") {
         // Only this invocation's literal help flag exempts it. A flag after
         // -- is positional data; another shell segment never exempts a merge.
         const rest = args.slice(i + 2);
@@ -27,19 +44,19 @@ export function mergeIntent(command) {
         // Only the bounded help-only form (plus one explicit target) is exempt.
         if (!rest.some(help) || targets.length > 1 || targets.some(arg => !/^[1-9]\d*$|^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*$/u.test(arg))) return true;
       }
-      if ((args.includes("api") || args.some(arg => /^(?:.*\/)?curl$/u.test(arg))) && /^\S*\bpulls\/[^\s/]+\/merge$/u.test(args[i])) return true;
+      if ((isCurl || (isApi && args[i] === endpoint)) && /^\S*\bpulls\/[^\s/]+\/merge$/u.test(args[i])) return true;
     }
     // Quoted shell programs and API mutation payloads are executable data,
     // unlike quoted comment/printf text. Retain the previous bounded backstop.
-    if (shellWrapper(args)) {
+    if (shellWrapper([executable])) {
       if (args.some(arg => /\s/u.test(arg) && mergeIntent(arg))) return true;
     }
-    if (args.some(arg => /^(?:.*\/)?(?:python[\d.]*|node|ruby|perl)$/u.test(arg))) {
+    if (/^(?:.*\/)?(?:python[\d.]*|node|ruby|perl)$/u.test(executable)) {
       // These payloads are programs, not shell words. Retain conservative
       // literal recognition without claiming to interpret those languages.
       if (args.some(arg => /\bpr\s+merge\b|\bpulls\/[^\s/]+\/merge\b|\bmergePullRequest\b/u.test(arg))) return true;
     }
-    return (args.includes("api") || args.some(arg => /^(?:.*\/)?curl$/u.test(arg))) && args.some(arg => /\bmergePullRequest\b/u.test(arg));
+    return ((isApi && endpoint === "graphql") || isCurl) && args.some(arg => /\bmergePullRequest\b/u.test(arg));
   });
 }
 

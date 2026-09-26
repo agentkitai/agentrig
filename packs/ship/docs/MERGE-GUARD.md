@@ -58,6 +58,15 @@ Literal `gh pr merge --help` and `-h` are reads, including in compound commands.
 Help belongs to that invocation only: a later real merge is still guarded, and a
 flag after `--` is not a help option. Quoted comment/printf text is data, not a
 merge command. Quoting individual executable words does not hide a real merge.
+The executable/subcommand selects the rule: `gh pr edit`, `gh pr comment`,
+and issue/PR comment REST calls are not merges because of their quoted body,
+body-file name or file contents (#619). Payload words such as `bash`, `node`,
+`api` or `mergePullRequest` cannot reclassify that invocation. PR body edits
+still undergo independent append-only ledger/source validation. Shell segments
+and substitutions are checked separately, so a merge chained after an edit
+remains refused. Leading assignments and recognized env/sudo/command/exec/
+timeout/nice/nohup prefixes do not hide a merge; they are not accepted literal
+merge forms. This does not interpret arbitrary wrapper programs.
 Shell program arguments, command substitutions and recognized interpreter/API
 mutation payloads remain executable data; compound and wrapped real merges must
 still use the standalone literal form above. This lexical distinction does not

@@ -73,6 +73,18 @@ else {console.error('unexpected '+JSON.stringify(a));process.exit(2);}
 }
 
 describe("minimal merge guard", () => {
+  it("#619 composed hook allows append-only edit payloads but still rejects a chained merge", async () => {
+    const f = await fixture();
+    const body = `${row}\n${authorization}\nQuoted authorization: gh pr merge <n> --squash --match-head-commit <verified SHA>`;
+    expect(await f.merge(`gh pr edit 7 --body '${body}' --title bash`)).toEqual({ action: "continue" });
+    // File contents remain ledger data, not executable merge intent.
+    await writeFile(join(f.root, "body.md"), body);
+    expect(await f.merge("gh pr edit 7 --body-file body.md")).toEqual({ action: "continue" });
+    expect(await f.merge("gh pr comment 7 --body 'gh pr merge <n> --squash --match-head-commit <verified SHA>'")).toEqual({ action: "continue" });
+    expect((await f.merge("gh pr edit 7 --body-file body.md && gh pr merge 7")).action).toBe("deny");
+    // Quoting a merge never exempts a destructive ledger replacement.
+    expect((await f.merge("gh pr edit 7 --body 'gh pr merge 7'")).reason).toContain("ledger integrity");
+  });
   it.each([
     "gh pr merge --help", "gh pr merge -h",
     "pwd && gh pr merge --help | cat", "gh pr merge 7 -h; pwd",
