@@ -1161,8 +1161,9 @@ The public root also exports these existing helpers without changing their seman
   to validate profile names but never supplies environment authority. Explicit profile
   beats inherited `AGENTRIG_CHILD_PROFILE`; home/project trust boundaries remain unchanged.
 - `resolveProjectChecks(projectRoot, profile?, user?)`: validates/returns project `checks`
-  (including profile selection and declared test-timeout expansion) or `undefined`. User
-  config may validate profile names, never supply commands. Does not execute commands,
+  (including profile selection and declared test-timeout expansion) or `undefined`. Global user
+  config may validate profile names, never supply commands. Explicit per-repository
+  fallback declarations are described in the portability section below. Does not execute commands,
   grant trust or load plugins.
 - Types: `ProgramDependencies`, `CliPack`, `CliPackCommand`, `ProviderOptions`,
   `ProviderHooks`, `ProviderSet`, `ConfigFile`, `ProjectChecks`, `Role`, `ProviderEntry`, `Roles`.
@@ -1259,3 +1260,32 @@ fix. Same standing as AgentLens in §7: recorded so it is a decision rather than
 
 F1, F2 and F3 are built. The table is kept as the record of why each was deferred and what closed
 it.
+
+
+### Foreign-project source-install portability (first slice)
+
+Explicit operator activation of the external built ship source installation writes
+resolved skills and a strict per-repository declaration under safe user state,
+never into the target repository. Public `projectConfigPath` and
+`readProjectConfig` expose canonical-repository-identity fallback lookup with a source path;
+linked worktrees use Git's common directory and discard inherited GIT_* overrides.
+Committed project config wins as a whole. Generic runtime loading remains gated
+on normal project trust, while read-only check inspection grants no authority.
+Global home config still cannot supply project check commands or reviewer slots.
+
+Generic `agentRoleRoots` permits at most 32 explicit absolute directories. The
+builder loads them only with subagents enabled and trusted project identity;
+core's bounded role parser/snapshot admission remains authoritative, including
+symlink-file, malformed-role and duplicate-name refusals. No permissions are
+conferred. Ship activation supplies its canonical nondelegable lander and existing
+extension. Extension sandbox refusal and all ship predicates remain unchanged.
+
+The ship namespace also admits bounded exact `ciWorkflows` names for operator row
+construction; the train row's existing required workflows remain authoritative.
+CLI train precheck consumes the host's declared checks callback: bootstrap, optional
+preflight, then named steps, stopping on nonzero. Explicit empty steps run nothing;
+missing declarations refuse. Legacy injected SDK compositions without this callback
+retain their old precheck sequence. Ship scripts remain source-install resources,
+with absolute addresses appended to complete, unchanged effective skill policy.
+See `packs/ship/README.md` for source-install activation and reactivation. This is
+not an npm publication or adopt-existing-PR implementation.

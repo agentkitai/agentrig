@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { cliEnv } from "./cli-env.js";
+import { projectConfigPath } from "../src/project-config.js";
 
 const exec = promisify(execFile);
 const cli = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -30,6 +31,11 @@ it("built train CLI runs a real child, captures usage, finishes one row and halt
     for (const dir of [join(checkout, ".git"), join(queue, "queue"), join(home, ".agentrig"), bin]) await mkdir(dir, { recursive: true });
     await writeFile(join(home, ".agentrig/trust.json"), JSON.stringify({ projects: { [checkout]: true } }));
     await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ provider: "openai", model: "fixture", baseUrl: `http://127.0.0.1:${address.port}/v1`, ingestOnEnd: false, toolSummaries: false, repoMap: false, skillDiscovery: false, extensionDiscovery: false }));
+    const declaration = await projectConfigPath(checkout, home);
+    await mkdir(join(declaration, ".."), { recursive: true });
+    await writeFile(declaration, JSON.stringify({ packs: { ship: { checks: { bootstrap: "pnpm install --frozen-lockfile", steps: [
+      { name: "build", command: "pnpm build" }, { name: "typecheck", command: "pnpm typecheck" }, { name: "test", command: "pnpm test" }
+    ] } } } }));
     // Only external executables are fakes. Both train and its child use the built CLI.
     const script = `#!${process.execPath}\nconst fs = require('node:fs'); const a = process.argv.slice(2); const root = ${JSON.stringify(root)}; const name = require('node:path').basename(process.argv[1]); const sha = 'a'.repeat(40), merge = 'b'.repeat(40); fs.appendFileSync(root+'/calls', JSON.stringify([name,...a])+'\\n');
 if(name==='pnpm') process.exit(0);

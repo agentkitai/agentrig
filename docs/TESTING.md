@@ -184,9 +184,11 @@ Read-only module boundary for skills/supervisor integrations: import `resolvePro
 from `packages/cli/dist/project-checks.js` after building AgentRig (source:
 `packages/cli/src/project-checks.ts`), then call `await resolveProjectChecks(projectRoot, profile?)`.
 The explicit root may be any repository, including outside this monorepo. This only reads and
-validates project config and safely loads user config for profile-name validation only;
-it does not take commands from home config, infer commands, spawn a shell, or implement a workflow. A missing declaration returns undefined (stop/request declaration),
-not an empty success. A missing file returns undefined even with a selected profile; an existing file with an unknown profile rejects. User-only profiles are valid names under the same safe-home boundary as `run --profile`, but never supply check commands; without project checks the resolver returns `undefined`. The built-in `recommended` name is accepted without an explicit profile, matching `run`; explicit user/project definitions retain precedence. Paired run/check/train coverage lives in `packages/cli/test/project-checks-user-profile.test.ts`. Invalid config rejects. The returned object is declaration data,
+validates project config (or the explicit canonical-repository fallback under
+`~/.agentrig/projects/<hash>/config.json`) and safely loads global user config for
+profile-name validation only; it does not take commands from global home config, infer commands, spawn a shell, or implement a workflow. A missing declaration returns undefined (stop/request declaration),
+not an empty success. When neither the project file nor its per-repository fallback exists, the resolver
+returns undefined even with a selected profile; an existing file with an unknown profile rejects. User-only profiles are valid names under the same safe-home boundary as `run --profile`, but never supply check commands; without project checks the resolver returns `undefined`. The built-in `recommended` name is accepted without an explicit profile, matching `run`; explicit user/project definitions retain precedence. Paired run/check/train coverage lives in `packages/cli/test/project-checks-user-profile.test.ts`. Invalid config rejects. The returned object is declaration data,
 not permission to execute it: display source/root, selected profile and commands and retain
 normal project trust, permission prompts and sandbox checks.
 
@@ -274,3 +276,16 @@ or external model access. Fixture homes/checkouts live under canonical TMPDIR,
 never below a Git ancestor. `train/runtime` boundary tests prevent core dependency
 or train-export reintroduction. Continue to run `pnpm test:ship:crlf` beside the
 normal declared trio before each push involving instruction-contract tests.
+
+
+## Foreign-project source-install proof
+
+`packs/ship/test/portability.test.ts` activates the built external source pack
+against a real foreign Git fixture and uses fake gh. It resolves all six skills,
+absolute script addresses, dispatch/merge hooks and the nondelegable lander,
+exercises initial dispatch versus repair refusal, refuses unbound merge, and
+executes the declared-check preflight seam without a target `.agentrig` directory.
+`packages/cli/test/project-local-config.test.ts` pins trusted-only fallback,
+source precedence, strict declarations, cross-root isolation and linked worktrees.
+The built CLI train fixture now declares checks in operator per-repository state.
+See `packs/ship/README.md` for activation and its source-install-only boundary.

@@ -31,6 +31,8 @@ import {
   skillTool,
   subagentTool,
   discoverAgentRoles,
+  discoverAgentRoleDirectory,
+  snapshotAgentRoles,
   type AgentRole,
   type Agent,
   type AnyTool,
@@ -213,6 +215,7 @@ export interface AgentBuildOptions extends ProviderOptions {
   subagentMaxChildren?: string;
   /** Directories to discover markdown skills in (repeatable). */
   skills?: string[];
+  agentRoleRoots?: string[];
   /**
    * Whether config resolution appends the conventional `.agentrig/skills` directories (trusted
    * project root, then home) after the explicit ones. Consumed by `loadRunConfig`, which folds
@@ -787,8 +790,14 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const observeSession = (session: import("@agentkitai/agentrig-core").Session) => telemetry?.observe(session);
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(catalogue));
-  const discoveredRoles = opts.subagents !== true || opts.trustedProjectRoot === undefined ? [] : await discoverAgentRoles(opts.trustedProjectRoot,
-    error => extras.onHookError?.(error.message));
+  const discoveredRoles = opts.subagents !== true || opts.trustedProjectRoot === undefined ? [] : [...await discoverAgentRoles(opts.trustedProjectRoot,
+    error => extras.onHookError?.(error.message))];
+  if (opts.subagents === true && opts.trustedProjectRoot !== undefined) {
+    for (const directory of opts.agentRoleRoots ?? []) {
+      discoveredRoles.push(...await discoverAgentRoleDirectory(directory, error => { throw error; }));
+    }
+    snapshotAgentRoles(discoveredRoles);
+  }
   // Core injects read_output per session, after this initial tool catalogue.
   const builderCompatibility = shipBuilderCompatibility(opts.builderProvider,
     [...tools.map(tool => tool.name), "read_output"], discoveredRoles);

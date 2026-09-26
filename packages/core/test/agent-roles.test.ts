@@ -1,9 +1,9 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createAgent, subagentTool, builtinTools, SessionStore, RulePolicy, PermissionGrantRegistry, discoverAgentRoles,
+import { createAgent, subagentTool, builtinTools, SessionStore, RulePolicy, PermissionGrantRegistry, discoverAgentRoles, discoverAgentRoleDirectory,
   parseAgentRoleFrontmatter, snapshotAgentRoles, type AgentRole, type AgentConfig, type AnyTool,
   type HarnessEvent, type ModelEvent, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 
@@ -268,4 +268,14 @@ it.each([undefined, { names: ["other"], default: "other", main: "other" }])("ref
   expect(childConfig).not.toHaveBeenCalled();
   expect(events.find(e => e.type === "tool.result" && !e.ok)).toMatchObject({ display: expect.stringContaining("unavailable provider entry missing") });
   expect(events.some(e => e.type === "subagent.spawn")).toBe(false);
+});
+
+it("explicit host role roots retain symlink and manifest refusals", async () => {
+ const directory=await realpath(await root()); const target=join(directory,"roles"); await mkdir(target);
+ await writeFile(join(target,"reader.md"),'---\ntools: ["read_file"]\n---\nInspect only.');
+ expect((await discoverAgentRoleDirectory(target)).map(role=>role.name)).toEqual(["reader"]);
+ const linked=join(directory,"linked"); await symlink(target,linked,"dir");
+ await expect(discoverAgentRoleDirectory(linked)).rejects.toThrow("symlink");
+ await writeFile(join(target,"reader.md"),'---\ntools: []\nunknown: true\n---\nInspect only.');
+ await expect(discoverAgentRoleDirectory(target,error=>{throw error;})).rejects.toThrow("invalid manifest");
 });

@@ -43,7 +43,13 @@ constructs a new root using current trusted configuration, not the historical
 child actor. Stored role receipts never recreate authority. Existing conservative
 external-input state is not cleared by role text or historical receipts.
 
-Only the trusted project directory is searched: no home, packages or remote roles.
+Automatic discovery searches only the trusted project directory: no implicit home,
+package or remote roles. An explicitly trusted configuration may additionally set
+`agentRoleRoots` to at most 32 absolute role directories. Those roots load only
+when subagents and project trust are enabled, use the same bounded role parser,
+and cannot shadow a project role: duplicate names refuse the combined catalogue.
+The ship source-install activation uses this generic seam for its lander without
+copying role files into a foreign project (see `packs/ship/README.md`).
 Bounds: 32 roles, 128 directory entries, 64 KiB per file, 1 MiB aggregate, 8 KiB
 header, 32 KiB body, 64-character lowercase names and 64 tool names of up to 128
 characters. Max-turns is 1–1000. Symlink/junction role directories and linked files

@@ -31,7 +31,10 @@ try {
   const [pr, reviewer, modelFile, bodyFile, head, main, outputFile, proofFile] = args;
   if (!/^[1-9][0-9]*$/.test(pr)) throw new Error("invalid PR number");
   if (!reviewer) throw new Error("invalid reviewer");
-  const config = JSON.parse(readFileSync(configFile, "utf8"));
+  const config = configFlag === -1 && !existsSync(configFile)
+    ? (await (await import("../public-api.mjs")).readProjectConfig(process.cwd()))?.config
+    : JSON.parse(readFileSync(configFile, "utf8"));
+  if (!config) throw new Error("missing project reviewer declaration");
   const slots = config.packs?.ship?.reviewers ?? config.reviewers ?? {};
   if (Object.keys(slots).length > 2 || !Object.hasOwn(slots, reviewer) || !/^[A-Za-z][A-Za-z0-9 _-]{0,63}$/.test(reviewer)) throw new Error("undeclared reviewer slot");
   const model = readFileSync(modelFile, "utf8").trim();

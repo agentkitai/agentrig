@@ -34,6 +34,7 @@ function fixture(): Fixture {
   const reads: string[] = [];
   const accesses: string[] = [];
   const probes: DoctorProbes = {
+    async projectConfigPath() { return join(HOME, ".agentrig/projects/fixture/config.json"); },
     async run() { return { code: 0, stdout: "", stderr: "" }; },
     async readFile(path) {
       reads.push(path);
@@ -674,4 +675,12 @@ it.each([true, false])("M-C2-doctor-invalid-profile: refuses login-status despit
   expect(find(result.lines, "config:profile")).toContain("does not exist");
   expect(find(result.lines, "reviewers:Primary")).toContain("configuration is invalid");
   expect(calls).toBe(0);
+});
+
+it("doctor reports the same operator-owned repository fallback without global reviewer inference", async () => {
+ const f=fixture();
+ f.files.set(join(HOME,".agentrig/projects/fixture/config.json"),JSON.stringify({packs:{ship:{reviewers:{},checks:{bootstrap:"true",steps:[]}}}}));
+ const result=await diagnose(f.options);
+ expect(find(result.lines,"config:project")).toContain("pass");
+ expect(f.reads).toContain(join(HOME,".agentrig/projects/fixture/config.json"));
 });

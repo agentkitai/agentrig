@@ -1,3 +1,34 @@
+## Ship workflow in other repositories — portability first slice
+
+Current roadmap row: user task “Ship workflow in other repositories (portability,
+first slice)”; next: independent conductor review and authorized landing, then
+adopt-existing-PR as a separately authorized slice. R19 completion is unchanged.
+
+Implementation: explicit external built-source pack activation writes a canonical
+per-repository declaration and skill snapshots in safe user state, not the target
+repository. Skills append absolute resource addresses without rewriting gate text.
+The canonical lander is pack-owned; explicit trusted role directories load through
+the existing core role parser. Project files retain whole-file precedence; linked
+worktrees share the primary repository fallback. Global home check/reviewer
+preferences do not become project declarations. Train CLI uses ordered declared
+checks, including missing/empty semantics; CI workflow names remain exact row data.
+
+Decisions: source-install activation, not npm publication or automatic discovery;
+no overwrite of existing activation/config; no new merge/review/permission gate.
+Existing extension sandbox refusals and ship hook predicates are unchanged.
+Rejected: copying the pack into foreign repositories, guessing toolchains, using
+global reviewer defaults, or weakening any existing landing check. Caveat: keep
+the external source installation and generated snapshot paths stable; activation
+is not trust and operator declarations are not claimed as PR-committed files.
+Fail-first and targeted named mutation evidence, declared-check receipts and the
+foreign Git/fake-gh composition proof travel in the PR. LOW wording/polish
+followups under R19 are advisories, not residual issues.
+
+C1 repair: activation now maps both legacy and canonical pack script spellings,
+including `packs/ship/scripts/child-result.mjs`. A composed-skill resource audit
+and foreign-checkout schema/valid-and-invalid assessment regression preserve the
+mandatory typed handoff gate. No instruction policy or gate changed.
+
 ## Initial builds are not repairs (#610) — implementation; review/landing pending
 
 Current roadmap row: issue #610, "Initial builds are not repairs";

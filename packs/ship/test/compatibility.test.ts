@@ -8,7 +8,8 @@ it("M-compatibility-drift: checks without rewriting; regeneration restores each 
   const root = await mkdtemp(join(tmpdir(), "ship-copies-"));
   try {
     const copies = await compatibilityCopies();
-    expect(copies.size).toBe(7);
+    expect(copies.size).toBe(8);
+    expect(copies.has(".agentrig/agents/lander.md")).toBe(true);
     await syncCompatibility(root, true);
     expect(await syncCompatibility(root)).toEqual([]);
     for (const [path, text] of copies) {
